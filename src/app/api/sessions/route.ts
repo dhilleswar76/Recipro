@@ -3,6 +3,7 @@ import { getDb } from '@/lib/db';
 import { requireAuth } from '@/lib/auth';
 import { BookSessionSchema } from '@/lib/validations';
 import { reserveEscrowCredits } from '@/lib/state-machine';
+import { checkSlotHardConstraints } from '@/lib/scheduling';
 
 export async function GET(req: NextRequest) {
   const authRes = requireAuth(req);
@@ -54,8 +55,8 @@ export async function POST(req: NextRequest) {
 
     // Verify teacher exists and teaches this skill
     const teacherSkill = db.prepare(`
-      SELECT us.id FROM user_skills us WHERE us.user_id = ? AND us.skill_id = ?
-    `).get(teacherId, skillId);
+      SELECT us.id, us.verification_status FROM user_skills us WHERE us.user_id = ? AND us.skill_id = ?
+    `).get(teacherId, skillId) as { id: string; verification_status: string } | undefined;
 
     if (!teacherSkill) {
       return NextResponse.json({ error: 'The selected mentor does not teach this skill' }, { status: 400 });
@@ -64,43 +65,78 @@ export async function POST(req: NextRequest) {
     const sessionId = `sess-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     const idempotencyKey = `book-${sessionId}`;
 
-    // 1. Reserve Learner Escrow Credits
-    const escrowRes = reserveEscrowCredits(user.userId, creditsAmount, sessionId, idempotencyKey);
-    if (!escrowRes.success) {
-      return NextResponse.json({ error: escrowRes.message }, { status: 402 }); // Payment/Credit Required
+    // Execute atomic booking transaction with hard scheduling constraint check
+    let conflictResult: { hasConflict: boolean; reason?: string; nextAvailableSlot?: string } = { hasConflict: false };
+
+    const bookingTx = db.transaction(() => {
+      // 1. Check Hard Constraints atomically inside transaction
+      conflictResult = checkSlotHardConstraints(db, {
+        teacherId,
+        learnerId: user.userId,
+        scheduledStart,
+        scheduledEnd,
+        bufferMinutes: 15,
+      });
+
+      if (conflictResult.hasConflict) {
+        return; // Abort booking transaction
+      }
+
+      // 2. Reserve Learner Escrow Credits
+      const escrowRes = reserveEscrowCredits(user.userId, creditsAmount, sessionId, idempotencyKey);
+      if (!escrowRes.success) {
+        throw new Error(`INSUFFICIENT_CREDITS:${escrowRes.message}`);
+      }
+
+      // 3. Insert Session Record
+      const meetingUrl = `https://meet.skillswap.internal/room/${sessionId}`;
+      db.prepare(`
+        INSERT INTO sessions (
+          id, title, skill_id, teacher_id, learner_id, status, scheduled_start, scheduled_end, duration_hours, credits_amount, mode, location_or_url, idempotency_key, notes
+        ) VALUES (?, ?, ?, ?, ?, 'REQUESTED', ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        sessionId,
+        title,
+        skillId,
+        teacherId,
+        user.userId,
+        scheduledStart,
+        scheduledEnd,
+        durationHours,
+        creditsAmount,
+        mode,
+        meetingUrl,
+        idempotencyKey,
+        notes || ''
+      );
+
+      // 4. Notify Teacher
+      db.prepare(`
+        INSERT INTO notifications (id, user_id, title, message, type, link)
+        VALUES (?, ?, 'New Session Request!', ?, 'SESSION_REQUEST', '/sessions')
+      `).run(
+        `notif-${Date.now()}`,
+        teacherId,
+        `A student requested a ${durationHours}h session for your skill: "${title}"`
+      );
+    });
+
+    try {
+      bookingTx();
+    } catch (txErr: any) {
+      if (txErr.message.startsWith('INSUFFICIENT_CREDITS:')) {
+        return NextResponse.json({ error: txErr.message.replace('INSUFFICIENT_CREDITS:', '') }, { status: 402 });
+      }
+      throw txErr;
     }
 
-    // 2. Insert Session Record
-    const meetingUrl = `https://meet.skillswap.internal/room/${sessionId}`;
-    db.prepare(`
-      INSERT INTO sessions (
-        id, title, skill_id, teacher_id, learner_id, status, scheduled_start, scheduled_end, duration_hours, credits_amount, mode, location_or_url, idempotency_key, notes
-      ) VALUES (?, ?, ?, ?, ?, 'REQUESTED', ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      sessionId,
-      title,
-      skillId,
-      teacherId,
-      user.userId,
-      scheduledStart,
-      scheduledEnd,
-      durationHours,
-      creditsAmount,
-      mode,
-      meetingUrl,
-      idempotencyKey,
-      notes || ''
-    );
-
-    // 3. Notify Teacher
-    db.prepare(`
-      INSERT INTO notifications (id, user_id, title, message, type, link)
-      VALUES (?, ?, 'New Session Request!', ?, 'SESSION_REQUEST', '/sessions')
-    `).run(
-      `notif-${Date.now()}`,
-      teacherId,
-      `A student requested a ${durationHours}h session for your skill: "${title}"`
-    );
+    if (conflictResult.hasConflict) {
+      return NextResponse.json({
+        error: conflictResult.reason || 'Scheduling conflict: that slot is unavailable.',
+        code: 'SLOT_CONFLICT',
+        nextAvailableSlot: conflictResult.nextAvailableSlot,
+      }, { status: 409 });
+    }
 
     return NextResponse.json({
       success: true,
@@ -109,7 +145,7 @@ export async function POST(req: NextRequest) {
         id: sessionId,
         status: 'REQUESTED',
         creditsAmount,
-        meetingUrl,
+        meetingUrl: `https://meet.skillswap.internal/room/${sessionId}`,
       }
     }, { status: 201 });
   } catch (err: any) {
@@ -117,3 +153,4 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Failed to create session request' }, { status: 500 });
   }
 }
+

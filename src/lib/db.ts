@@ -397,6 +397,69 @@ export function initDatabase(db: Database.Database) {
       expires_at DATETIME NOT NULL
     );
 
+    -- 15. Skill Assessments & Verification
+    CREATE TABLE IF NOT EXISTS skill_assessments (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      skill_id TEXT NOT NULL,
+      score REAL NOT NULL,
+      max_score REAL NOT NULL,
+      percentage REAL NOT NULL,
+      passed INTEGER NOT NULL DEFAULT 0,
+      target_level TEXT NOT NULL DEFAULT 'Beginner', -- 'Beginner', 'Intermediate', 'Advanced', 'Expert'
+      verified_level TEXT,
+      version TEXT NOT NULL DEFAULT 'v1.0',
+      answers_json TEXT,
+      attempts INTEGER NOT NULL DEFAULT 1,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (skill_id) REFERENCES skills(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS skill_evidence (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      skill_id TEXT NOT NULL,
+      evidence_type TEXT NOT NULL, -- 'PORTFOLIO_LINK', 'GITHUB_REPO', 'CERTIFICATE', 'PROJECT_DEMO', 'ACADEMIC_TRANSCRIPT'
+      title TEXT NOT NULL,
+      url TEXT,
+      description TEXT,
+      status TEXT NOT NULL DEFAULT 'PENDING', -- 'PENDING', 'APPROVED', 'REJECTED'
+      reviewed_by TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (skill_id) REFERENCES skills(id) ON DELETE CASCADE
+    );
+
+    -- 16. Skill Gap & Demand Aggregation
+    CREATE TABLE IF NOT EXISTS skill_requests (
+      id TEXT PRIMARY KEY,
+      learner_id TEXT NOT NULL,
+      skill_id TEXT NOT NULL,
+      requested_proficiency TEXT NOT NULL DEFAULT 'Beginner',
+      current_proficiency TEXT NOT NULL DEFAULT 'Beginner',
+      learning_goal TEXT,
+      preferred_schedule TEXT,
+      preferred_session_mode TEXT NOT NULL DEFAULT 'ONLINE', -- 'ONLINE', 'CAMPUS_IN_PERSON'
+      urgency TEXT NOT NULL DEFAULT 'MEDIUM', -- 'LOW', 'MEDIUM', 'HIGH'
+      status TEXT NOT NULL DEFAULT 'OPEN', -- 'OPEN', 'MATCHED', 'FULFILLED', 'CANCELLED', 'EXPIRED'
+      matched_teacher_id TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (learner_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (skill_id) REFERENCES skills(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS skill_subscriptions (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      skill_id TEXT NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(user_id, skill_id),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (skill_id) REFERENCES skills(id) ON DELETE CASCADE
+    );
+
     -- Indexes for High Performance Querying
     CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
     CREATE INDEX IF NOT EXISTS idx_profiles_user_id ON profiles(user_id);
@@ -412,5 +475,63 @@ export function initDatabase(db: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_credit_tx_user ON credit_transactions(sender_id, receiver_id);
     CREATE INDEX IF NOT EXISTS idx_fraud_alerts_user ON fraud_alerts(user_id);
     CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);
+    CREATE INDEX IF NOT EXISTS idx_skill_assessments_user ON skill_assessments(user_id);
+    CREATE INDEX IF NOT EXISTS idx_skill_assessments_skill ON skill_assessments(skill_id);
+    CREATE INDEX IF NOT EXISTS idx_skill_evidence_user ON skill_evidence(user_id);
+    CREATE INDEX IF NOT EXISTS idx_skill_requests_skill ON skill_requests(skill_id);
+    CREATE INDEX IF NOT EXISTS idx_skill_requests_learner ON skill_requests(learner_id);
+    CREATE INDEX IF NOT EXISTS idx_skill_subs_user_skill ON skill_subscriptions(user_id, skill_id);
   `);
+
+  // Safe runtime column migrations for existing DB
+  safeAddColumn(db, 'users', 'user_type', "TEXT NOT NULL DEFAULT 'TEACHER_LEARNER'");
+  safeAddColumn(db, 'profiles', 'teaching_preference', "TEXT DEFAULT 'Anyone'");
+  safeAddColumn(db, 'profiles', 'portfolio_url', 'TEXT');
+  safeAddColumn(db, 'profiles', 'skill_visibility', "TEXT DEFAULT 'PUBLIC'");
+  safeAddColumn(db, 'profiles', 'availability_visibility', "TEXT DEFAULT 'PUBLIC'");
+  safeAddColumn(db, 'profiles', 'portfolio_visibility', "TEXT DEFAULT 'PUBLIC'");
+  safeAddColumn(db, 'profiles', 'learning_goal_visibility', "TEXT DEFAULT 'PUBLIC'");
+  safeAddColumn(db, 'profiles', 'daily_session_limit', 'INTEGER DEFAULT 3');
+  safeAddColumn(db, 'user_skills', 'assessment_score', 'REAL');
+  safeAddColumn(db, 'user_skills', 'verified_at', 'DATETIME');
+  safeAddColumn(db, 'user_skills', 'verified_by', 'TEXT');
+  safeAddColumn(db, 'user_skills', 'reassessment_required', 'INTEGER DEFAULT 0');
+  
+  // Smart Slot Finder: Teacher Skill Specific Availability & Preferences
+  safeAddColumn(db, 'user_skills', 'teaching_days', "TEXT DEFAULT '[\"Monday\",\"Wednesday\",\"Friday\"]'");
+  safeAddColumn(db, 'user_skills', 'available_start_time', "TEXT DEFAULT '17:00'");
+  safeAddColumn(db, 'user_skills', 'available_end_time', "TEXT DEFAULT '20:00'");
+  safeAddColumn(db, 'user_skills', 'preferred_start_time', "TEXT DEFAULT '18:00'");
+  safeAddColumn(db, 'user_skills', 'preferred_end_time', "TEXT DEFAULT '20:00'");
+  safeAddColumn(db, 'user_skills', 'session_duration_minutes', 'INTEGER DEFAULT 60');
+  safeAddColumn(db, 'user_skills', 'timezone', "TEXT DEFAULT 'Asia/Kolkata'");
+  safeAddColumn(db, 'user_skills', 'is_flexible', 'INTEGER DEFAULT 1');
+
+  // Smart Slot Finder: Learner Goal Specific Availability & Preferences
+  safeAddColumn(db, 'learning_goals', 'learning_days', "TEXT DEFAULT '[\"Tuesday\",\"Thursday\",\"Saturday\"]'");
+  safeAddColumn(db, 'learning_goals', 'available_start_time', "TEXT DEFAULT '18:00'");
+  safeAddColumn(db, 'learning_goals', 'available_end_time', "TEXT DEFAULT '21:00'");
+  safeAddColumn(db, 'learning_goals', 'preferred_start_time', "TEXT DEFAULT '19:00'");
+  safeAddColumn(db, 'learning_goals', 'preferred_end_time', "TEXT DEFAULT '21:00'");
+  safeAddColumn(db, 'learning_goals', 'session_duration_minutes', 'INTEGER DEFAULT 60');
+  safeAddColumn(db, 'learning_goals', 'timezone', "TEXT DEFAULT 'Asia/Kolkata'");
+  safeAddColumn(db, 'learning_goals', 'is_flexible', 'INTEGER DEFAULT 1');
+
+  // Smart Slot Finder: Multiple Availability Windows & Preference Flag
+  safeAddColumn(db, 'availability_slots', 'buffer_minutes', 'INTEGER DEFAULT 15');
+  safeAddColumn(db, 'availability_slots', 'is_preferred', 'INTEGER DEFAULT 0');
+  safeAddColumn(db, 'availability_slots', 'skill_id', 'TEXT');
+  safeAddColumn(db, 'availability_slots', 'window_label', "TEXT DEFAULT 'General'");
+}
+
+function safeAddColumn(db: Database.Database, table: string, column: string, definition: string) {
+  try {
+    const columns = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+    const exists = columns.some(c => c.name.toLowerCase() === column.toLowerCase());
+    if (!exists) {
+      db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+    }
+  } catch (err) {
+    // Ignore if column already added or table missing during initial bootstrap
+  }
 }

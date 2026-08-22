@@ -15,7 +15,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { email, password, displayName, college, major, year, role } = parsed.data;
+    const { email, password, displayName, college, major, year } = parsed.data;
+    const userType = parsed.data.userType || 'TEACHER_LEARNER';
     const db = getDb();
 
     // Check if user already exists
@@ -29,21 +30,22 @@ export async function POST(req: NextRequest) {
 
     const userId = `usr-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     const passwordHash = await hashPassword(password);
-    const userRole = role || 'STUDENT';
+    // Strict security rule: Public registration CANNOT grant ADMIN or MODERATOR role
+    const userRole = 'STUDENT';
     const campusId = `STU-${Math.floor(100000 + Math.random() * 900000)}`;
 
     const tx = db.transaction(() => {
-      // 1. Insert User
+      // 1. Insert User with user_type
       db.prepare(`
-        INSERT INTO users (id, email, password_hash, role, status, campus_id)
-        VALUES (?, ?, ?, ?, 'ACTIVE', ?)
-      `).run(userId, email, passwordHash, userRole, campusId);
+        INSERT INTO users (id, email, password_hash, role, status, campus_id, user_type)
+        VALUES (?, ?, ?, ?, 'ACTIVE', ?, ?)
+      `).run(userId, email, passwordHash, userRole, campusId, userType);
 
-      // 2. Insert Profile
+      // 2. Insert Profile with default teaching_preference
       db.prepare(`
         INSERT INTO profiles (
-          id, user_id, display_name, college, major, year, is_verified_student, trust_score
-        ) VALUES (?, ?, ?, ?, ?, ?, 1, 75.0)
+          id, user_id, display_name, college, major, year, is_verified_student, trust_score, teaching_preference
+        ) VALUES (?, ?, ?, ?, ?, ?, 1, 75.0, 'Anyone')
       `).run(`prof-${userId}`, userId, displayName, college, major, year);
 
       // 3. Insert Skill Credit Account with 3 starter credits

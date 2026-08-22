@@ -210,20 +210,37 @@ export function Navbar() {
 
           {/* User Profile / Logout */}
           {user ? (
-            <Link 
-              href="/profile" 
-              className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-xs shadow-md hover:scale-105 transition-transform"
-              title="View Profile & Manage Skills"
-            >
-              {user.display_name?.substring(0, 2).toUpperCase() || 'U'}
-            </Link>
+            <div className="flex items-center gap-2">
+              <Link 
+                href="/profile" 
+                className="w-9 h-9 rounded-xl bg-gradient-to-br from-brand-500 to-accent-600 flex items-center justify-center text-dark-bg font-extrabold text-xs shadow-md hover:scale-105 transition-transform"
+                title={`${user.display_name} • View Profile`}
+              >
+                {user.display_name?.substring(0, 2).toUpperCase() || 'U'}
+              </Link>
+              <button
+                onClick={() => logout()}
+                className="text-slate-400 hover:text-rose-400 p-1.5 rounded-lg hover:bg-slate-800 transition-colors"
+                title="Log Out"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
           ) : (
-            <Link 
-              href="/explore" 
-              className="px-4 py-1.5 rounded-lg bg-brand-500 hover:bg-brand-400 text-dark-bg font-bold text-xs transition-colors"
-            >
-              Get Started
-            </Link>
+            <div className="flex items-center gap-2">
+              <Link 
+                href="/login" 
+                className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-semibold text-xs transition-colors border border-slate-700"
+              >
+                Log In
+              </Link>
+              <Link 
+                href="/login?tab=register" 
+                className="px-3.5 py-1.5 rounded-lg bg-brand-500 hover:bg-brand-400 text-dark-bg font-bold text-xs transition-colors shadow-glow-brand"
+              >
+                Sign Up
+              </Link>
+            </div>
           )}
 
         </div>

@@ -55,28 +55,22 @@ export async function POST(req: NextRequest) {
 
     const { skillId, targetLevel, answers } = parsed.data;
 
-    // Check attempt limits (Max 3 attempts per skill)
-    const attemptsCount = (db.prepare(`
-      SELECT COUNT(*) as count FROM skill_assessments
+    // Check attempt limits (Max 3 attempts per skill within a 24-hour rolling window)
+    const recentAttempts = db.prepare(`
+      SELECT created_at FROM skill_assessments
       WHERE user_id = ? AND skill_id = ?
-    `).get(user.userId, skillId) as any)?.count || 0;
+      ORDER BY created_at DESC LIMIT 3
+    `).all(user.userId, skillId) as any[];
 
-    if (attemptsCount >= 3) {
-      const lastAttempt = db.prepare(`
-        SELECT created_at FROM skill_assessments
-        WHERE user_id = ? AND skill_id = ?
-        ORDER BY created_at DESC LIMIT 1
-      `).get(user.userId, skillId) as any;
-
-      if (lastAttempt) {
-        const lastTime = new Date(lastAttempt.created_at).getTime();
-        const now = Date.now();
-        const hoursPassed = (now - lastTime) / (1000 * 60 * 60);
-        if (hoursPassed < 24) {
-          return NextResponse.json({
-            error: `Maximum attempts reached (3/3). Please wait ${Math.ceil(24 - hoursPassed)} hours for cooldown before retaking.`
-          }, { status: 429 });
-        }
+    if (recentAttempts.length >= 3) {
+      const thirdRecent = recentAttempts[2];
+      const thirdTime = new Date(thirdRecent.created_at).getTime();
+      const now = Date.now();
+      const hoursPassed = (now - thirdTime) / (1000 * 60 * 60);
+      if (hoursPassed < 24) {
+        return NextResponse.json({
+          error: `Maximum attempts reached (3 attempts per 24 hours). Please wait ${Math.ceil(24 - hoursPassed)} hours for cooldown before retaking.`
+        }, { status: 429 });
       }
     }
 

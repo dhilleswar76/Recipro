@@ -265,8 +265,11 @@ export default function ProfilePage() {
     setAssessmentLoading(true);
     setAssessmentModalOpen(true);
 
+    const skillName = skill.skill_name || skill.name || 'Python';
+    const proficiency = skill.proficiency || 'Intermediate';
+
     try {
-      const res = await fetch(`/api/skill-assessments?skillName=${encodeURIComponent(skill.skill_name)}`);
+      const res = await fetch(`/api/skill-assessments?skillName=${encodeURIComponent(skillName)}&proficiency=${encodeURIComponent(proficiency)}`);
       if (res.ok) {
         const data = await res.json();
         setAssessmentQuestions(data.questions || []);
@@ -302,10 +305,11 @@ export default function ProfilePage() {
 
       const data = await res.json();
       if (res.ok) {
-        setAssessmentResult(data.result);
+        setAssessmentResult(data.result || data);
         await refreshUser();
       } else {
-        alert(data.error || 'Assessment evaluation failed');
+        const errMsg = typeof data.error === 'object' ? data.error.message : data.error;
+        alert(errMsg || 'Assessment evaluation failed');
       }
     } catch (err) {
       console.error('Assessment submit error:', err);

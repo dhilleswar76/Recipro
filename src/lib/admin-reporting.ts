@@ -72,8 +72,9 @@ export function logAdminAction(params: {
 export function getDailyReport(dateStr: string) {
   const db = getDb();
 
-  // 1. Fetch all sessions scheduled or created on the selected date
-  const sessions = db.prepare(`
+  // 1. Fetch all sessions scheduled, created, or updated on the selected date (or all dates)
+  const isAll = dateStr === 'ALL';
+  const sessionsQuery = `
     SELECT 
       s.*,
       sk.name as skill_name, sk.category as skill_category,
@@ -87,12 +88,15 @@ export function getDailyReport(dateStr: string) {
     JOIN profiles lp ON s.learner_id = lp.user_id
     LEFT JOIN session_exchange_agreements sea ON s.id = sea.session_id
     LEFT JOIN disputes d ON s.id = d.session_id
-    WHERE DATE(s.scheduled_start) = DATE(?) OR DATE(s.created_at) = DATE(?)
-    ORDER BY s.scheduled_start ASC
-  `).all(dateStr, dateStr) as any[];
+    ${isAll ? '' : 'WHERE DATE(s.scheduled_start) = DATE(?) OR DATE(s.created_at) = DATE(?) OR DATE(s.updated_at) = DATE(?)'}
+    ORDER BY s.scheduled_start DESC, s.created_at DESC
+  `;
+  const sessions = isAll
+    ? (db.prepare(sessionsQuery).all() as any[])
+    : (db.prepare(sessionsQuery).all(dateStr, dateStr, dateStr) as any[]);
 
-  // 2. Fetch all credit transactions on this date
-  const creditTxs = db.prepare(`
+  // 2. Fetch all credit transactions on this date (or all dates)
+  const creditTxsQuery = `
     SELECT 
       ctx.*,
       sp.display_name as sender_name,
@@ -100,9 +104,12 @@ export function getDailyReport(dateStr: string) {
     FROM credit_transactions ctx
     LEFT JOIN profiles sp ON ctx.sender_id = sp.user_id
     LEFT JOIN profiles rp ON ctx.receiver_id = rp.user_id
-    WHERE DATE(ctx.created_at) = DATE(?)
+    ${isAll ? '' : 'WHERE DATE(ctx.created_at) = DATE(?)'}
     ORDER BY ctx.created_at DESC
-  `).all(dateStr) as any[];
+  `;
+  const creditTxs = isAll
+    ? (db.prepare(creditTxsQuery).all() as any[])
+    : (db.prepare(creditTxsQuery).all(dateStr) as any[]);
 
   // 3. Compute Session Metrics
   let totalScheduled = 0;

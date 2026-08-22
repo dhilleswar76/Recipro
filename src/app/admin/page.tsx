@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
@@ -26,7 +26,8 @@ import {
   Video,
   Sparkles,
   ShieldCheck,
-  Check
+  Check,
+  Globe
 } from 'lucide-react';
 
 export default function AdminDashboardPage() {
@@ -39,8 +40,9 @@ export default function AdminDashboardPage() {
   const [loginError, setLoginError] = useState<string | null>(null);
   const [loginLoading, setLoginLoading] = useState(false);
 
-  // Date selection state (Defaults to current date)
-  const [selectedDate, setSelectedDate] = useState<string>('2026-08-23');
+  // Date selection state (Defaults to today or ALL)
+  const todayStr = new Date().toISOString().substring(0, 10);
+  const [selectedDate, setSelectedDate] = useState<string>('ALL');
   const [dailyReport, setDailyReport] = useState<any | null>(null);
   const [reportLoading, setReportLoading] = useState(true);
 
@@ -61,7 +63,7 @@ export default function AdminDashboardPage() {
   const [sessionsLoading, setSessionsLoading] = useState(false);
 
   // Active View Tab
-  const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'USERS' | 'SESSIONS' | 'REQUESTS'>('OVERVIEW');
+  const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'SESSIONS' | 'USERS' | 'REQUESTS'>('OVERVIEW');
 
   // Fetch Daily Report & Platform Overview
   const fetchDailyReport = async (dateStr: string) => {
@@ -125,17 +127,44 @@ export default function AdminDashboardPage() {
     }
   };
 
+  // Refresh All Reports
+  const refreshAll = () => {
+    fetchDailyReport(selectedDate);
+    fetchSessions();
+    fetchUsers();
+  };
+
+  // Load and setup live polling
   useEffect(() => {
     if (user?.role === 'ADMIN') {
-      fetchDailyReport(selectedDate);
-      fetchSessions();
-      fetchUsers();
-    }
-  }, [user]);
+      refreshAll();
+      const interval = setInterval(() => {
+        // Background live refresh
+        fetch(`/api/admin/reports/daily?date=${selectedDate}`)
+          .then(r => r.ok ? r.json() : null)
+          .then(d => { if (d) setDailyReport(d); })
+          .catch(() => {});
+        
+        const query = new URLSearchParams({
+          search: sessionSearch,
+          status: sessionStatusFilter,
+          date: sessionDateFilter,
+          page: sessionPage.toString(),
+          limit: '15',
+        });
+        fetch(`/api/admin/reports/sessions?${query.toString()}`)
+          .then(r => r.ok ? r.json() : null)
+          .then(d => { if (d) setSessionsData(d); })
+          .catch(() => {});
+      }, 4000);
 
-  const handleGenerateReport = (e: React.FormEvent) => {
-    e.preventDefault();
-    fetchDailyReport(selectedDate);
+      return () => clearInterval(interval);
+    }
+  }, [user, selectedDate, sessionStatusFilter, sessionDateFilter, sessionPage]);
+
+  const handleDateChange = (newDate: string) => {
+    setSelectedDate(newDate);
+    fetchDailyReport(newDate);
   };
 
   const handleUserSearch = (e: React.FormEvent) => {
@@ -159,9 +188,7 @@ export default function AdminDashboardPage() {
       if (!ok) {
         setLoginError('Invalid administrator credentials.');
       } else {
-        fetchDailyReport(selectedDate);
-        fetchSessions();
-        fetchUsers();
+        refreshAll();
       }
     } catch (err: any) {
       setLoginError('Failed to sign in as Administrator');
@@ -285,35 +312,47 @@ export default function AdminDashboardPage() {
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-xl font-extrabold text-white">SkillSwap Campus Admin Dashboard</h1>
-              <span className="text-[10px] px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 font-bold border border-rose-500/30">
-                Authoritative Mode
+              <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Live Real-Time
               </span>
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
-              Real-time operational reporting, session state auditing, and credit flow visibility
+              Authoritative operational monitoring, state machine auditing, and real-time escrow flow
             </p>
           </div>
         </div>
 
-        {/* Date Filter Form & Export */}
-        <form onSubmit={handleGenerateReport} className="flex flex-wrap items-center gap-2">
+        {/* Date Filter & Mode Selector */}
+        <div className="flex flex-wrap items-center gap-2">
+          
+          <button
+            onClick={() => handleDateChange('ALL')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 border ${
+              selectedDate === 'ALL'
+                ? 'bg-brand-500 text-dark-bg border-brand-400 shadow-glow-brand'
+                : 'bg-slate-900 text-slate-300 border-slate-700 hover:text-white'
+            }`}
+          >
+            <Globe className="w-3.5 h-3.5" /> All Dates (Lifetime)
+          </button>
+
           <div className="flex items-center gap-2 bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5">
             <Calendar className="w-4 h-4 text-slate-400" />
             <input
               type="date"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
+              value={selectedDate === 'ALL' ? todayStr : selectedDate}
+              onChange={(e) => handleDateChange(e.target.value)}
               className="bg-transparent text-xs text-white focus:outline-none"
             />
           </div>
 
           <button
-            type="submit"
-            disabled={reportLoading}
-            className="px-4 py-2 rounded-xl bg-brand-500 hover:bg-brand-400 text-dark-bg font-bold text-xs shadow-glow-brand transition-all flex items-center gap-1.5"
+            onClick={refreshAll}
+            disabled={reportLoading || sessionsLoading}
+            className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors"
+            title="Refresh live data"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${reportLoading ? 'animate-spin' : ''}`} />
-            <span>Generate Day Report</span>
+            <RefreshCw className={`w-3.5 h-3.5 ${reportLoading || sessionsLoading ? 'animate-spin' : ''}`} />
           </button>
 
           <a
@@ -325,7 +364,7 @@ export default function AdminDashboardPage() {
             <Download className="w-3.5 h-3.5" />
             <span>Export CSV</span>
           </a>
-        </form>
+        </div>
       </div>
 
       {/* Platform-Wide Lifetime Stats Bar */}
@@ -371,7 +410,7 @@ export default function AdminDashboardPage() {
               : 'text-slate-400 hover:text-white hover:bg-slate-900'
           }`}
         >
-          Daily Overview ({selectedDate})
+          {selectedDate === 'ALL' ? 'Platform Overview (All-Time)' : `Day Overview (${selectedDate})`}
         </button>
         <button
           onClick={() => {
@@ -397,7 +436,7 @@ export default function AdminDashboardPage() {
               : 'text-slate-400 hover:text-white hover:bg-slate-900'
           }`}
         >
-          User Activity Reports
+          User Activity Reports ({usersData?.pagination?.totalUsers ?? (dailyReport?.platformLifetimeStats?.totalUsersCount || 0)})
         </button>
         <button
           onClick={() => setActiveTab('REQUESTS')}
@@ -411,14 +450,14 @@ export default function AdminDashboardPage() {
         </button>
       </div>
 
-      {/* TAB 1: DAILY OVERVIEW & METRICS */}
+      {/* TAB 1: OVERVIEW & BREAKDOWN */}
       {activeTab === 'OVERVIEW' && (
         <div className="space-y-6">
           
-          {/* Main Day Stat Counters Grid */}
+          {/* Main Stat Counters Grid */}
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
             <div className="glass-panel p-4 rounded-2xl border border-slate-800 space-y-1">
-              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Day Sessions</span>
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Report Sessions</span>
               <div className="text-2xl font-extrabold text-white">{dailyReport?.overview?.totalSessions ?? 0}</div>
             </div>
 
@@ -463,12 +502,12 @@ export default function AdminDashboardPage() {
                   <BookOpen className="w-4 h-4 text-brand-400" />
                   <span>Session Outcome &amp; Settlement Classification</span>
                 </h3>
-                <span className="text-xs text-slate-400">{selectedDate}</span>
+                <span className="text-xs text-slate-400">{selectedDate === 'ALL' ? 'All-Time' : selectedDate}</span>
               </div>
 
               <div className="space-y-2.5 text-xs">
                 <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/80 border border-slate-800">
-                  <span className="text-slate-300">Scheduled for this date</span>
+                  <span className="text-slate-300">Total Filtered Sessions</span>
                   <strong className="text-white font-mono text-sm">{dailyReport?.sessionStats?.totalScheduled ?? 0}</strong>
                 </div>
 
@@ -499,7 +538,7 @@ export default function AdminDashboardPage() {
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-bold text-white flex items-center gap-2">
                   <Coins className="w-4 h-4 text-brand-400" />
-                  <span>Daily Skill Credit Flows &amp; Escrow</span>
+                  <span>Skill Credit Flows &amp; Escrow</span>
                 </h3>
                 <span className="text-xs text-slate-400">{dailyReport?.creditActivity?.transactionCount ?? 0} Transactions</span>
               </div>
@@ -534,10 +573,10 @@ export default function AdminDashboardPage() {
 
           </div>
 
-          {/* Quick Day Sessions Table */}
+          {/* Quick Sessions Table */}
           <div className="glass-panel p-5 rounded-3xl border border-slate-800 space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-white">Daily Sessions Feed for {selectedDate} ({dailyReport?.sessions?.length || 0})</h3>
+              <h3 className="text-sm font-bold text-white">Recent Sessions ({dailyReport?.sessions?.length || 0})</h3>
               <button
                 onClick={() => {
                   setActiveTab('SESSIONS');
@@ -551,7 +590,7 @@ export default function AdminDashboardPage() {
 
             {(!dailyReport?.sessions || dailyReport.sessions.length === 0) ? (
               <div className="py-12 text-center text-xs text-slate-400">
-                No session activity recorded specifically for {selectedDate}. Use the Sessions Directory tab to view all campus sessions.
+                No session activity recorded for this period. Click "All Dates" above to view all campus sessions.
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -581,6 +620,7 @@ export default function AdminDashboardPage() {
                           <span className={`text-[10px] px-2 py-0.5 rounded font-bold border ${
                             sess.status === 'CREDIT_SETTLED' || sess.status === 'COMPLETED' ? 'bg-brand-500/20 text-brand-400 border-brand-500/30' :
                             sess.status === 'IN_PROGRESS' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 animate-pulse' :
+                            sess.status === 'SCHEDULED' ? 'bg-sky-500/20 text-sky-300 border-sky-500/40' :
                             sess.status === 'DISPUTED' ? 'bg-rose-500/20 text-rose-400 border-rose-500/30' :
                             'bg-slate-800 text-slate-300 border-slate-700'
                           }`}>
@@ -611,6 +651,35 @@ export default function AdminDashboardPage() {
       {activeTab === 'SESSIONS' && (
         <div className="space-y-6">
           
+          {/* Quick Filter Pills */}
+          <div className="flex flex-wrap items-center gap-2">
+            {[
+              { id: 'ALL', label: 'All Sessions' },
+              { id: 'IN_PROGRESS', label: '🟢 Live In-Progress' },
+              { id: 'SCHEDULED', label: '📅 Scheduled' },
+              { id: 'ACCEPTED', label: '🤝 Accepted' },
+              { id: 'COMPLETED', label: '✓ Completed' },
+              { id: 'CREDIT_SETTLED', label: '🪙 Credit Settled' },
+              { id: 'DISPUTED', label: '⚠️ Disputed' },
+              { id: 'CANCELLED', label: '❌ Cancelled' },
+            ].map(pill => (
+              <button
+                key={pill.id}
+                onClick={() => {
+                  setSessionStatusFilter(pill.id);
+                  setSessionPage(1);
+                }}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                  sessionStatusFilter === pill.id
+                    ? 'bg-brand-500 text-dark-bg shadow-glow-brand'
+                    : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800'
+                }`}
+              >
+                {pill.label}
+              </button>
+            ))}
+          </div>
+
           {/* Search & Status Filter Bar */}
           <form onSubmit={handleSessionSearch} className="glass-panel p-4 rounded-2xl border border-slate-800 flex flex-wrap items-center gap-3">
             <div className="flex-1 min-w-[240px] relative">
@@ -619,36 +688,19 @@ export default function AdminDashboardPage() {
                 type="text"
                 value={sessionSearch}
                 onChange={(e) => setSessionSearch(e.target.value)}
-                placeholder="Search skill name, teacher, learner, email, or session ID..."
+                placeholder="Search skill name, mentor, learner, email, or session ID..."
                 className="w-full bg-slate-900 border border-slate-700 rounded-xl pl-9 pr-3 py-2 text-xs text-white focus:outline-none focus:border-brand-500"
               />
             </div>
 
             <div className="flex items-center gap-2">
               <select
-                value={sessionStatusFilter}
-                onChange={(e) => setSessionStatusFilter(e.target.value)}
-                className="bg-slate-900 border border-slate-700 text-xs text-slate-300 rounded-xl px-3 py-2"
-              >
-                <option value="ALL">All Statuses</option>
-                <option value="REQUESTED">Requested</option>
-                <option value="ACCEPTED">Accepted</option>
-                <option value="SCHEDULED">Scheduled</option>
-                <option value="IN_PROGRESS">In Progress</option>
-                <option value="PENDING_CONFIRMATION">Pending Confirmation</option>
-                <option value="COMPLETED">Completed</option>
-                <option value="CREDIT_SETTLED">Credit Settled</option>
-                <option value="CANCELLED">Cancelled</option>
-                <option value="DISPUTED">Disputed</option>
-              </select>
-
-              <select
                 value={sessionDateFilter}
                 onChange={(e) => setSessionDateFilter(e.target.value)}
                 className="bg-slate-900 border border-slate-700 text-xs text-slate-300 rounded-xl px-3 py-2"
               >
                 <option value="ALL">All Dates (Lifetime)</option>
-                <option value={selectedDate}>Selected Date ({selectedDate})</option>
+                <option value={todayStr}>Today ({todayStr})</option>
               </select>
 
               <button

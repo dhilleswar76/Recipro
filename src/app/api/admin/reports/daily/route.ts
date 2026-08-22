@@ -10,9 +10,9 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const dateStr = searchParams.get('date') || new Date().toISOString().substring(0, 10);
 
-  // Validate date format (YYYY-MM-DD)
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-    return NextResponse.json({ error: 'Invalid date format. Expected YYYY-MM-DD' }, { status: 400 });
+  // Validate date format (YYYY-MM-DD or ALL)
+  if (dateStr !== 'ALL' && !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    return NextResponse.json({ error: 'Invalid date format. Expected YYYY-MM-DD or ALL' }, { status: 400 });
   }
 
   try {

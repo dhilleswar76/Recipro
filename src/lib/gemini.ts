@@ -370,6 +370,366 @@ export const LOCAL_PYTHON_QUIZ_BANK: Record<string, AssessmentQuestion[]> = {
 };
 
 export const LOCAL_SKILL_QUIZ_BANKS: Record<string, AssessmentQuestion[]> = {
+  'java': [
+    {
+      id: 'java-1',
+      question: 'In Java, what is the key difference between String, StringBuilder, and StringBuffer?',
+      options: [
+        { id: 'A', text: 'String is immutable; StringBuilder is mutable and not thread-safe; StringBuffer is mutable and thread-safe (synchronized)' },
+        { id: 'B', text: 'String is stored on stack only; StringBuilder is stored on heap' },
+        { id: 'C', text: 'StringBuilder cannot be converted back to String' },
+        { id: 'D', text: 'StringBuffer was deprecated in Java 8' },
+      ],
+      correctOption: 'A',
+      explanation: 'String objects are immutable in Java. StringBuilder provides mutable string operations without synchronization overhead, while StringBuffer uses synchronized methods for thread safety.',
+      hint: 'Immutability and thread synchronization.',
+      level: 'Beginner',
+    },
+    {
+      id: 'java-2',
+      question: 'How does Java’s `HashMap` resolve hash collisions internally in Java 8 and later?',
+      options: [
+        { id: 'A', text: 'Separate chaining with linked lists that convert to balanced Red-Black Trees when a bucket exceeds 8 nodes' },
+        { id: 'B', text: 'Open addressing with linear probing across array slots' },
+        { id: 'C', text: 'Rehashing the entire table immediately on every collision' },
+        { id: 'D', text: 'Discarding older key-value pairs automatically' },
+      ],
+      correctOption: 'A',
+      explanation: 'Java 8 optimizes HashMap buckets: when bucket collisions exceed TREEIFY_THRESHOLD (8 elements) and array capacity is at least 64, the bucket transforms from a LinkedList into a Red-Black Tree for O(log N) worst-case lookup.',
+      hint: 'LinkedList transforms to Red-Black Tree on bucket size >= 8.',
+      level: 'Intermediate',
+    },
+    {
+      id: 'java-3',
+      question: 'What is the structural difference between an `abstract class` and an `interface` in modern Java (Java 8+)?',
+      options: [
+        { id: 'A', text: 'Abstract classes can maintain instance state (fields) and constructors; interfaces cannot have instance fields, though they support default/static methods' },
+        { id: 'B', text: 'Interfaces can define non-static instance fields' },
+        { id: 'C', text: 'A class can extend multiple abstract classes' },
+        { id: 'D', text: 'Abstract classes cannot have concrete method implementations' },
+      ],
+      correctOption: 'A',
+      explanation: 'Abstract classes are designed for class inheritance hierarchies with state and constructors, whereas interfaces define behavioral contracts and support multiple implementation inheritance.',
+      hint: 'Instance state/fields vs behavioral contracts.',
+      level: 'Intermediate',
+    },
+    {
+      id: 'java-4',
+      question: 'What guarantee does the `volatile` keyword provide in Java concurrent programming?',
+      options: [
+        { id: 'A', text: 'Memory visibility across threads by reading and writing directly to main memory, establishing a happens-before relationship without mutual exclusion' },
+        { id: 'B', text: 'Atomic compound operations (like count++) without locking' },
+        { id: 'C', text: 'Prevents the JVM garbage collector from collecting the object' },
+        { id: 'D', text: 'Locks the object monitor like synchronized blocks' },
+      ],
+      correctOption: 'A',
+      explanation: '`volatile` ensures thread visibility and prevents instruction reordering around the variable, but does not make non-atomic compound operations like `i++` atomic.',
+      hint: 'Guarantees direct main memory visibility, not compound atomicity.',
+      level: 'Advanced',
+    },
+    {
+      id: 'java-5',
+      question: 'In JVM memory management, how does the generational garbage collection process work between Eden and Survivor spaces?',
+      options: [
+        { id: 'A', text: 'New objects are allocated in Eden; surviving objects from Minor GC are copied between Survivor spaces (S0/S1) and promoted to Old Generation after reaching an age threshold' },
+        { id: 'B', text: 'All objects are allocated directly into Old Generation and never moved' },
+        { id: 'C', text: 'Minor GC runs only when the JVM process is terminated' },
+        { id: 'D', text: 'Eden space is located exclusively in CPU L1 cache' },
+      ],
+      correctOption: 'A',
+      explanation: 'Young generation consists of Eden and two Survivor spaces (S0/S1). Minor GC collects short-lived objects and ages survivors before tenuring them to the Old Generation.',
+      hint: 'Eden -> Survivor spaces -> Tenured Old Gen.',
+      level: 'Advanced',
+    },
+  ],
+  'javascript': [
+    {
+      id: 'js-1',
+      question: 'What is a Closure in JavaScript?',
+      options: [
+        { id: 'A', text: 'A function bundled together with references to its lexical environment, allowing access to outer scope variables even after the outer function has returned' },
+        { id: 'B', text: 'A method to close browser tabs and clear DOM nodes' },
+        { id: 'C', text: 'An anonymous callback that takes no parameters' },
+        { id: 'D', text: 'A strict mode syntax error' },
+      ],
+      correctOption: 'A',
+      explanation: 'A closure is the combination of a function and the lexical scope within which that function was declared, enabling persistent private state.',
+      hint: 'Function retaining lexical scope access.',
+      level: 'Beginner',
+    },
+    {
+      id: 'js-2',
+      question: 'In the JavaScript Event Loop, what is the execution priority between Microtasks (Promises, queueMicrotask) and Macrotasks (setTimeout, setInterval)?',
+      options: [
+        { id: 'A', text: 'The microtask queue is completely drained after each current synchronous task and after every macrotask before the next macrotask runs' },
+        { id: 'B', text: 'Macrotasks always execute before microtasks' },
+        { id: 'C', text: 'They execute in random order based on CPU load' },
+        { id: 'D', text: 'Microtasks execute only on page reload' },
+      ],
+      correctOption: 'A',
+      explanation: 'Microtasks have higher priority than macrotasks: the engine drains the entire microtask queue before moving to the next task in the macrotask queue.',
+      hint: 'Microtask queue drains before next macrotask.',
+      level: 'Intermediate',
+    },
+    {
+      id: 'js-3',
+      question: 'What is the fundamental difference between `==` and `===` operators in JavaScript?',
+      options: [
+        { id: 'A', text: '`==` performs implicit type coercion before comparison; `===` performs strict equality checking without type conversion' },
+        { id: 'B', text: '`===` is used only for object pointer comparison' },
+        { id: 'C', text: '`==` checks data type only; `===` checks value only' },
+        { id: 'D', text: 'There is no difference in ES6+' },
+      ],
+      correctOption: 'A',
+      explanation: '`===` does not perform type coercion (e.g. `1 === "1"` is `false`, while `1 == "1"` is `true`).',
+      hint: 'Strict equality vs type coercion.',
+      level: 'Beginner',
+    },
+    {
+      id: 'js-4',
+      question: 'How does prototypal inheritance resolve property lookups on JavaScript objects?',
+      options: [
+        { id: 'A', text: 'Lookups search the object itself; if missing, traverse up the `__proto__` prototype chain until found or reaching `null`' },
+        { id: 'B', text: 'The engine clones all methods into every object instance upon creation' },
+        { id: 'C', text: 'JavaScript uses static C++ vtables compiled ahead of time' },
+        { id: 'D', text: 'Prototypes are only accessible in Node.js server environments' },
+      ],
+      correctOption: 'A',
+      explanation: 'JavaScript objects link to a prototype object. If a property is not found on the instance, the engine traverses the prototype chain up to `Object.prototype` (and finally `null`).',
+      hint: 'Prototype chain traversal up to null.',
+      level: 'Intermediate',
+    },
+    {
+      id: 'js-5',
+      question: 'What happens when `Promise.all([p1, p2, p3])` encounters a rejected promise?',
+      options: [
+        { id: 'A', text: 'It immediately rejects with the reason of the first promise that rejects (fail-fast behavior)' },
+        { id: 'B', text: 'It waits for all promises to resolve and ignores the rejection' },
+        { id: 'C', text: 'It retries the rejected promise automatically' },
+        { id: 'D', text: 'It resolves with an array containing undefined' },
+      ],
+      correctOption: 'A',
+      explanation: '`Promise.all` fails fast: if any promise in the iterable rejects, the returned promise immediately rejects with that rejection reason.',
+      hint: 'Fail-fast rejection behavior.',
+      level: 'Intermediate',
+    },
+  ],
+  'typescript': [
+    {
+      id: 'ts-1',
+      question: 'In TypeScript, what is the primary architectural difference between `interface` and `type` alias?',
+      options: [
+        { id: 'A', text: 'Interfaces support declaration merging and OOP polymorphism; type aliases can define unions, primitives, tuples, and mapped types' },
+        { id: 'B', text: 'Type aliases exist at runtime in JavaScript bytecode' },
+        { id: 'C', text: 'Interfaces cannot extend other interfaces' },
+        { id: 'D', text: 'Type aliases cannot define object shapes' },
+      ],
+      correctOption: 'A',
+      explanation: 'Interfaces can be merged across multiple declarations and are extendable via `extends`, while `type` is more flexible for unions, intersections, and primitives.',
+      hint: 'Declaration merging vs union/mapped types.',
+      level: 'Beginner',
+    },
+    {
+      id: 'ts-2',
+      question: 'What is the purpose of TypeScript Generics (`<T>`)?',
+      options: [
+        { id: 'A', text: 'To build reusable, type-safe abstractions where type parameters are provided at invocation time rather than hardcoded' },
+        { id: 'B', text: 'To disable strict type checking for specific functions' },
+        { id: 'C', text: 'To generate runtime reflection metadata' },
+        { id: 'D', text: 'To compile TypeScript to C++ binaries' },
+      ],
+      correctOption: 'A',
+      explanation: 'Generics allow creating components, classes, and functions that work over a variety of types while maintaining full compile-time type safety.',
+      hint: 'Type-safe parameterized reusable code.',
+      level: 'Intermediate',
+    },
+    {
+      id: 'ts-3',
+      question: 'What does the `unknown` type represent in TypeScript compared to `any`?',
+      options: [
+        { id: 'A', text: '`unknown` is the type-safe counterpart of `any`; it prevents property access and operations until the type is narrowed with type guards' },
+        { id: 'B', text: '`unknown` disables type checking completely' },
+        { id: 'C', text: '`unknown` can only hold null or undefined' },
+        { id: 'D', text: '`any` requires explicit casting while `unknown` does not' },
+      ],
+      correctOption: 'A',
+      explanation: '`unknown` forces the developer to perform type checking (e.g. `typeof`, `instanceof`, or custom type guards) before performing operations on the variable.',
+      hint: 'Type-safe top type requiring narrowing.',
+      level: 'Intermediate',
+    },
+    {
+      id: 'ts-4',
+      question: 'What does the `keyof` operator produce in TypeScript?',
+      options: [
+        { id: 'A', text: 'A union type of all string, number, or symbol literal keys of a given type' },
+        { id: 'B', text: 'An array of runtime object keys' },
+        { id: 'C', text: 'A boolean check if a property exists' },
+        { id: 'D', text: 'A cryptographic key hash' },
+      ],
+      correctOption: 'A',
+      explanation: '`keyof T` returns a union of public property names of type `T` (e.g. `keyof { id: number; name: string }` yields `id | name`).',
+      hint: 'Union of type property keys.',
+      level: 'Intermediate',
+    },
+    {
+      id: 'ts-5',
+      question: 'How do discriminated unions (tagged unions) enable pattern matching in TypeScript?',
+      options: [
+        { id: 'A', text: 'By sharing a common literal property (e.g. `type: "SUCCESS" | "ERROR"`), TypeScript narrows the specific object structure within conditional branches' },
+        { id: 'B', text: 'By using runtime reflection decorators' },
+        { id: 'C', text: 'By bypassing TypeScript compiler verification' },
+        { id: 'D', text: 'By converting union types into classes' },
+      ],
+      correctOption: 'A',
+      explanation: 'Discriminated unions use a singleton discriminator property to allow the compiler to exhaustively narrow union variants in switch/if statements.',
+      hint: 'Shared discriminator property for branch narrowing.',
+      level: 'Advanced',
+    },
+  ],
+  'cpp': [
+    {
+      id: 'cpp-1',
+      question: 'In C++, what is the core principle of RAII (Resource Acquisition Is Initialization)?',
+      options: [
+        { id: 'A', text: 'Binding resource lifecycle to object lifetime so destructors automatically release memory, file descriptors, and mutexes upon stack unwinding' },
+        { id: 'B', text: 'Initializing all pointers to NULL at program start' },
+        { id: 'C', text: 'Enforcing ahead-of-time memory compilation' },
+        { id: 'D', text: 'Disabling garbage collection on Linux' },
+      ],
+      correctOption: 'A',
+      explanation: 'RAII guarantees that resources are acquired during construction and released during destruction, ensuring exception safety and preventing leaks.',
+      hint: 'Automatic deterministic resource release in destructors.',
+      level: 'Intermediate',
+    },
+    {
+      id: 'cpp-2',
+      question: 'Why must base classes designed for polymorphic deletion declare a `virtual` destructor in C++?',
+      options: [
+        { id: 'A', text: 'To ensure that deleting a derived class object through a base class pointer invokes the derived destructor and cleans up derived resources' },
+        { id: 'B', text: 'Virtual destructors make class instantiation 10x faster' },
+        { id: 'C', text: 'C++ compilers reject base classes without virtual destructors' },
+        { id: 'D', text: 'It forces objects to be allocated in heap memory only' },
+      ],
+      correctOption: 'A',
+      explanation: 'If a base class destructor is non-virtual, deleting a derived object via a base pointer causes undefined behavior and resource leakage of the derived class fields.',
+      hint: 'Ensures derived class cleanup on polymorphic delete.',
+      level: 'Intermediate',
+    },
+    {
+      id: 'cpp-3',
+      question: 'In C++11 and later, what is the role of `std::move` and Move Semantics?',
+      options: [
+        { id: 'A', text: '`std::move` unconditionally casts an lvalue to an rvalue reference, enabling ownership transfer of underlying buffers without deep copying' },
+        { id: 'B', text: 'Moves thread execution to a different CPU core' },
+        { id: 'C', text: 'Copies memory blocks with memcpy' },
+        { id: 'D', text: 'Deallocates memory immediately' },
+      ],
+      correctOption: 'A',
+      explanation: '`std::move` converts an lvalue to an rvalue reference, allowing move constructors and move assignment operators to transfer ownership of resources in O(1) time.',
+      hint: 'Casts to rvalue reference to enable resource stealing.',
+      level: 'Advanced',
+    },
+    {
+      id: 'cpp-4',
+      question: 'What is the difference between `std::unique_ptr` and `std::shared_ptr` in C++ modern smart pointers?',
+      options: [
+        { id: 'A', text: '`std::unique_ptr` provides zero-overhead exclusive ownership; `std::shared_ptr` uses an atomic reference counter to support shared ownership' },
+        { id: 'B', text: '`std::unique_ptr` cannot be returned from functions' },
+        { id: 'C', text: '`std::shared_ptr` does not delete its managed pointer' },
+        { id: 'D', text: '`std::unique_ptr` uses garbage collection threads' },
+      ],
+      correctOption: 'A',
+      explanation: '`std::unique_ptr` cannot be copied (only moved) and has zero runtime overhead over a raw pointer. `std::shared_ptr` manages a control block with a reference count.',
+      hint: 'Exclusive ownership vs reference-counted shared ownership.',
+      level: 'Intermediate',
+    },
+    {
+      id: 'cpp-5',
+      question: 'What does marking a member function `const` (e.g. `int getValue() const;`) enforce in C++?',
+      options: [
+        { id: 'A', text: 'Guarantees that the function will not modify any non-mutable member variables of the calling object' },
+        { id: 'B', text: 'Makes the return value immutable' },
+        { id: 'C', text: 'Allows the function to be called only once' },
+        { id: 'D', text: 'Forces the function to be evaluated at compile time like constexpr' },
+      ],
+      correctOption: 'A',
+      explanation: 'A `const` member function cannot modify instance fields (unless marked `mutable`) and can be called on `const` instances of the class.',
+      hint: 'Non-modifying inspection of instance state.',
+      level: 'Beginner',
+    },
+  ],
+  'sql': [
+    {
+      id: 'sql-1',
+      question: 'What do the ACID properties guarantee in relational database transactions?',
+      options: [
+        { id: 'A', text: 'Atomicity (all-or-nothing), Consistency (rules/constraints), Isolation (concurrency control), Durability (persistence after commit)' },
+        { id: 'B', text: 'Asynchronous, Clustered, Indexed, Distributed' },
+        { id: 'C', text: 'Authorization, Compression, Integrity, Duplication' },
+        { id: 'D', text: 'Auto-increment, Cascading, Indexing, Decoupling' },
+      ],
+      correctOption: 'A',
+      explanation: 'ACID guarantees database transactions are processed reliably, preserving data integrity across concurrent sessions and system crashes.',
+      hint: 'Atomicity, Consistency, Isolation, Durability.',
+      level: 'Beginner',
+    },
+    {
+      id: 'sql-2',
+      question: 'What is the distinction between `WHERE` and `HAVING` clauses in SQL queries?',
+      options: [
+        { id: 'A', text: '`WHERE` filters individual rows before aggregation; `HAVING` filters aggregated group records after `GROUP BY`' },
+        { id: 'B', text: '`HAVING` filters rows before grouping occurs' },
+        { id: 'C', text: '`WHERE` can only be used with aggregate functions like COUNT()' },
+        { id: 'D', text: 'They are completely interchangeable in ANSI SQL' },
+      ],
+      correctOption: 'A',
+      explanation: '`WHERE` filters individual rows before grouping. `HAVING` filters aggregated results (e.g. `HAVING COUNT(*) > 5`) after grouping.',
+      hint: 'Row filtering vs aggregated group filtering.',
+      level: 'Intermediate',
+    },
+    {
+      id: 'sql-3',
+      question: 'What is the difference between `INNER JOIN` and `LEFT OUTER JOIN` in SQL?',
+      options: [
+        { id: 'A', text: '`INNER JOIN` returns only records with matching keys in both tables; `LEFT JOIN` returns all records from the left table with matching records or NULLs from the right table' },
+        { id: 'B', text: '`LEFT JOIN` discards unmatched rows from the left table' },
+        { id: 'C', text: '`INNER JOIN` always produces a Cartesian product' },
+        { id: 'D', text: '`LEFT JOIN` cannot be used with indexed foreign keys' },
+      ],
+      correctOption: 'A',
+      explanation: '`LEFT JOIN` preserves every row from the left table regardless of whether a matching record exists in the right table.',
+      hint: 'Matching rows only vs preserving all left rows.',
+      level: 'Beginner',
+    },
+    {
+      id: 'sql-4',
+      question: 'Why do B-Tree indexes provide logarithmic O(log N) search performance on database columns?',
+      options: [
+        { id: 'A', text: 'By organizing sorted keys into balanced multi-level nodes on disk, drastically reducing disk block I/O operations' },
+        { id: 'B', text: 'By compressing data tables into zero bytes' },
+        { id: 'C', text: 'By running multi-threaded parallel table scans' },
+        { id: 'D', text: 'By converting relational tables into NoSQL documents' },
+      ],
+      correctOption: 'A',
+      explanation: 'B-Trees keep data sorted and allow searches, sequential access, insertions, and deletions in logarithmic time while minimizing disk I/O.',
+      hint: 'Balanced multi-way search trees minimizing disk I/O.',
+      level: 'Intermediate',
+    },
+    {
+      id: 'sql-5',
+      question: 'What is the purpose of Third Normal Form (3NF) in relational schema design?',
+      options: [
+        { id: 'A', text: 'Ensuring the table is in 2NF and that all non-key attributes are non-transitively dependent on the primary key' },
+        { id: 'B', text: 'Merging all tables into a single denormalized table' },
+        { id: 'C', text: 'Removing all primary keys from the schema' },
+        { id: 'D', text: 'Creating duplicate columns for caching' },
+      ],
+      correctOption: 'A',
+      explanation: '3NF eliminates transitive functional dependencies, ensuring every non-key column depends on the key, the whole key, and nothing but the key.',
+      hint: 'Eliminates transitive dependencies on non-key attributes.',
+      level: 'Advanced',
+    },
+  ],
   'solidity': [
     {
       id: 'sol-1',
@@ -895,33 +1255,128 @@ export async function generateSkillAssessment(params: {
   const normalized = skillName.toLowerCase().replace(/[^a-z0-9]/g, '');
 
   const getLocalQuestions = (): AssessmentQuestion[] => {
-    if (normalized.includes('python')) {
+    // 1. Exact Python match
+    if (normalized.includes('python') || normalized === 'py') {
       return LOCAL_PYTHON_QUIZ_BANK[level] || LOCAL_PYTHON_QUIZ_BANK['Intermediate'];
     }
-    for (const [key, questions] of Object.entries(LOCAL_SKILL_QUIZ_BANKS)) {
-      if (normalized.includes(key) || key.includes(normalized)) {
-        return questions;
-      }
+    // 2. Exact Java match (not JavaScript)
+    if (normalized.includes('java') && !normalized.includes('javascript') && !normalized.includes('script')) {
+      return LOCAL_SKILL_QUIZ_BANKS['java'];
     }
-    if (normalized.includes('figma') || normalized.includes('design')) {
-      return LOCAL_SKILL_QUIZ_BANKS['ui-ux'];
+    // 3. Exact JavaScript match
+    if (normalized.includes('javascript') || normalized === 'js' || normalized.includes('vanillajs') || normalized.includes('ecmascript')) {
+      return LOCAL_SKILL_QUIZ_BANKS['javascript'];
     }
-    if (normalized.includes('pytorch') || normalized.includes('ml') || normalized.includes('ai') || normalized.includes('learning')) {
-      return LOCAL_SKILL_QUIZ_BANKS['ml'];
+    // 4. Exact TypeScript match
+    if (normalized.includes('typescript') || normalized === 'ts') {
+      return LOCAL_SKILL_QUIZ_BANKS['typescript'];
     }
-    if (normalized.includes('math') || normalized.includes('calculus') || normalized.includes('algebra')) {
-      return LOCAL_SKILL_QUIZ_BANKS['calculus'];
+    // 5. Exact C++ / C match
+    if (normalized.includes('cpp') || normalized.includes('cplusplus') || skillName.toLowerCase().includes('c++') || normalized === 'c') {
+      return LOCAL_SKILL_QUIZ_BANKS['cpp'];
     }
-    if (normalized.includes('data') || normalized.includes('algorithm') || normalized.includes('dsa') || normalized.includes('tree')) {
-      return LOCAL_SKILL_QUIZ_BANKS['dsa'];
+    // 6. Exact SQL / Database match
+    if (normalized.includes('sql') || normalized.includes('postgres') || normalized.includes('mysql') || normalized.includes('database')) {
+      return LOCAL_SKILL_QUIZ_BANKS['sql'];
     }
-    if (normalized.includes('solidity') || normalized.includes('contract') || normalized.includes('web3') || normalized.includes('blockchain')) {
-      return LOCAL_SKILL_QUIZ_BANKS['solidity'];
-    }
-    if (normalized.includes('react') || normalized.includes('next') || normalized.includes('frontend') || normalized.includes('javascript') || normalized.includes('typescript')) {
+    // 7. React / Next.js match
+    if (normalized.includes('react') || normalized.includes('nextjs') || normalized.includes('frontend')) {
       return LOCAL_SKILL_QUIZ_BANKS['react'];
     }
-    return LOCAL_SKILL_QUIZ_BANKS['general'];
+    // 8. Solidity / Web3 match
+    if (normalized.includes('solidity') || normalized.includes('web3') || normalized.includes('blockchain') || normalized.includes('contract')) {
+      return LOCAL_SKILL_QUIZ_BANKS['solidity'];
+    }
+    // 9. Machine Learning / PyTorch match
+    if (normalized.includes('pytorch') || normalized.includes('ml') || normalized.includes('ai') || normalized.includes('machinelearning') || normalized.includes('deeplearning')) {
+      return LOCAL_SKILL_QUIZ_BANKS['ml'];
+    }
+    // 10. Data Structures & Algorithms match
+    if (normalized.includes('dsa') || normalized.includes('datastructure') || normalized.includes('algorithm') || normalized.includes('tree') || normalized.includes('graph')) {
+      return LOCAL_SKILL_QUIZ_BANKS['dsa'];
+    }
+    // 11. UI/UX & Figma match
+    if (normalized.includes('figma') || normalized.includes('ui') || normalized.includes('ux') || normalized.includes('design')) {
+      return LOCAL_SKILL_QUIZ_BANKS['ui-ux'];
+    }
+    // 12. Calculus & Math match
+    if (normalized.includes('math') || normalized.includes('calculus') || normalized.includes('algebra') || normalized.includes('linearalgebra')) {
+      return LOCAL_SKILL_QUIZ_BANKS['calculus'];
+    }
+
+    // Dynamic specialized generation for any custom skill
+    return [
+      {
+        id: `dyn-${normalized}-1`,
+        question: `What represents a core foundational principle and best practice when architecting solutions in ${skillName}?`,
+        options: [
+          { id: 'A', text: `Adhering to modular separation of concerns and robust error boundaries in ${skillName}` },
+          { id: 'B', text: `Hardcoding global mutable state without access control` },
+          { id: 'C', text: `Disabling all logging and automated assertions` },
+          { id: 'D', text: `Avoiding any testing or code review procedures` },
+        ],
+        correctOption: 'A',
+        explanation: `In ${skillName}, modular architecture and well-defined interfaces prevent regression bugs and ensure maintainability.`,
+        hint: `Modularity and separation of concerns in ${skillName}.`,
+        level: level as any,
+      },
+      {
+        id: `dyn-${normalized}-2`,
+        question: `How do practitioners systematically diagnose and resolve performance bottlenecks in ${skillName}?`,
+        options: [
+          { id: 'A', text: `Profiling runtime metrics, analyzing computational complexity, and eliminating redundant operations` },
+          { id: 'B', text: `Restarting the workstation without inspecting logs` },
+          { id: 'C', text: `Adding arbitrary sleep delays throughout the codebase` },
+          { id: 'D', text: `Doubling the code size blindly` },
+        ],
+        correctOption: 'A',
+        explanation: `Systematic performance optimization requires profiling bottlenecks and reducing asymptotic algorithmic complexity.`,
+        hint: `Profiling metrics and eliminating redundant operations.`,
+        level: level as any,
+      },
+      {
+        id: `dyn-${normalized}-3`,
+        question: `When designing data flows and state lifecycle in ${skillName}, which pattern provides maximum reliability?`,
+        options: [
+          { id: 'A', text: `Deterministic unidirectional data flow with explicit state transitions` },
+          { id: 'B', text: `Random asynchronous mutations across uncoordinated background threads` },
+          { id: 'C', text: `Storing all transient state in unvalidated plain text files` },
+          { id: 'D', text: `Suppressing all error exceptions silently` },
+        ],
+        correctOption: 'A',
+        explanation: `Deterministic data flow ensures reproducible state transitions and eliminates race conditions in ${skillName}.`,
+        hint: `Unidirectional data flow and clear state transitions.`,
+        level: level as any,
+      },
+      {
+        id: `dyn-${normalized}-4`,
+        question: `What is the standard verification approach before deploying or verifying competence in ${skillName}?`,
+        options: [
+          { id: 'A', text: `Executing unit, integration, and regression test suites with rigorous boundary condition checks` },
+          { id: 'B', text: `Assuming code is bug-free if it compiles once without warnings` },
+          { id: 'C', text: `Deleting test files before running builds` },
+          { id: 'D', text: `Relying entirely on manual user complaints in production` },
+        ],
+        correctOption: 'A',
+        explanation: `Comprehensive verification in ${skillName} requires automated testing covering nominal paths and edge boundary cases.`,
+        hint: `Automated test coverage for normal and boundary conditions.`,
+        level: level as any,
+      },
+      {
+        id: `dyn-${normalized}-5`,
+        question: `How does effective peer mentoring in ${skillName} accelerate a novice student’s mastery?`,
+        options: [
+          { id: 'A', text: `By combining real-world code walkthroughs with active recall, deliberate practice, and conceptual questioning` },
+          { id: 'B', text: `By having the mentor write 100% of the student's code without discussion` },
+          { id: 'C', text: `By skipping fundamentals and assigning advanced production tickets immediately` },
+          { id: 'D', text: `By discouraging questions and limiting session time to 30 seconds` },
+        ],
+        correctOption: 'A',
+        explanation: `Deliberate practice and interactive problem solving are proven methods for mastering ${skillName}.`,
+        hint: `Active recall and hands-on deliberate practice.`,
+        level: level as any,
+      },
+    ];
   };
 
   // If no Gemini API key configured, use local curated question bank for this specific skill

@@ -332,6 +332,18 @@ export function evaluateSkillAssessment(
           }
         }
       }
+
+      // Check dynamic custom skill questions
+      if (!foundInLocal && userAns.questionId.startsWith('dyn-')) {
+        const userChoiceStr = String(userAns.selectedOption).toUpperCase();
+        const userChoiceNum = typeof userAns.selectedOption === 'number'
+          ? userAns.selectedOption
+          : (letterMap[userChoiceStr] ?? Number(userAns.selectedOption));
+        if (userChoiceStr === 'A' || userChoiceNum === 0) {
+          correctCount++;
+        }
+        foundInLocal = true;
+      }
     }
   }
 

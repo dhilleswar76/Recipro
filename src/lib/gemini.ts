@@ -427,6 +427,20 @@ export const LOCAL_SKILL_QUIZ_BANKS: Record<string, AssessmentQuestion[]> = {
       hint: 'tx.origin traces back to the original EOA, not the immediate caller.',
       level: 'Advanced',
     },
+    {
+      id: 'sol-5',
+      question: 'In upgradeable proxy contracts, why is storage layout collision a critical risk during delegatecall?',
+      options: [
+        { id: 'A', text: 'The proxy contract executes logic in its own storage context; mismatched variable declarations overwrite proxy variables' },
+        { id: 'B', text: 'Delegatecall increases gas consumption by 100x' },
+        { id: 'C', text: 'ERC-20 tokens cannot be held by proxy contracts' },
+        { id: 'D', text: 'Solidity compilers reject any contract with multiple storage slots' },
+      ],
+      correctOption: 'A',
+      explanation: '`delegatecall` executes the implementation contract logic inside the proxy storage context, so matching storage slot ordering is mandatory.',
+      hint: 'Execution occurs in the context of the calling proxy storage.',
+      level: 'Expert',
+    },
   ],
   'react': [
     {
@@ -484,6 +498,20 @@ export const LOCAL_SKILL_QUIZ_BANKS: Record<string, AssessmentQuestion[]> = {
       explanation: '`useLayoutEffect` fires synchronously after all DOM mutations, useful for reading layout measurements before the browser paints.',
       hint: 'One blocks visual browser paint to prevent flickering.',
       level: 'Advanced',
+    },
+    {
+      id: 'react-5',
+      question: 'What optimization does `React.memo` perform on a component?',
+      options: [
+        { id: 'A', text: 'Shallowly compares props and skips re-rendering if props are unchanged' },
+        { id: 'B', text: 'Deeply clones all state objects' },
+        { id: 'C', text: 'Stores component state in localStorage' },
+        { id: 'D', text: 'Executes component on a Web Worker thread' },
+      ],
+      correctOption: 'A',
+      explanation: '`React.memo` is a higher order component that skips rendering when incoming props are shallowly equal to previous props.',
+      hint: 'Memoizes rendered output based on shallow prop comparison.',
+      level: 'Intermediate',
     },
   ],
   'ml': [
@@ -543,6 +571,20 @@ export const LOCAL_SKILL_QUIZ_BANKS: Record<string, AssessmentQuestion[]> = {
       hint: 'Focus on precision and recall rather than overall accuracy.',
       level: 'Intermediate',
     },
+    {
+      id: 'ml-5',
+      question: 'In Transformer architectures, why is the Scaled Dot-Product Attention scaled by `1 / sqrt(d_k)`?',
+      options: [
+        { id: 'A', text: 'To prevent large dot product values from pushing the softmax function into regions with vanishingly small gradients' },
+        { id: 'B', text: 'To convert values into probabilities without softmax' },
+        { id: 'C', text: 'To reduce the matrix dimension size' },
+        { id: 'D', text: 'To enable recurrent backpropagation' },
+      ],
+      correctOption: 'A',
+      explanation: 'For large values of d_k, dot products grow large in magnitude, pushing softmax into regions with extremely small gradients. Scaling by 1/sqrt(d_k) counteracts this.',
+      hint: 'Prevents vanishing softmax gradients on large vector dimensions.',
+      level: 'Advanced',
+    },
   ],
   'dsa': [
     {
@@ -586,6 +628,34 @@ export const LOCAL_SKILL_QUIZ_BANKS: Record<string, AssessmentQuestion[]> = {
       explanation: 'Dynamic programming requires optimal substructure (optimal solution contains optimal sub-solutions) and overlapping subproblems (memoization reduces redundant computations).',
       hint: 'Optimal substructure & overlapping subproblems.',
       level: 'Intermediate',
+    },
+    {
+      id: 'dsa-4',
+      question: 'What is the time complexity of Dijkstra’s Algorithm using a Min-Heap (priority queue) for a graph with V vertices and E edges?',
+      options: [
+        { id: 'A', text: 'O((V + E) log V)' },
+        { id: 'B', text: 'O(V^3)' },
+        { id: 'C', text: 'O(E^2)' },
+        { id: 'D', text: 'O(V log E)' },
+      ],
+      correctOption: 'A',
+      explanation: 'Extract-min takes O(log V) per vertex (V log V) and decrease-key takes O(log V) per edge (E log V), giving O((V + E) log V).',
+      hint: 'V vertex extractions plus E edge relaxations in a binary heap.',
+      level: 'Advanced',
+    },
+    {
+      id: 'dsa-5',
+      question: 'What is the amortized insertion time complexity for a dynamic array (like Python list / C++ std::vector)?',
+      options: [
+        { id: 'A', text: 'O(1)' },
+        { id: 'B', text: 'O(n)' },
+        { id: 'C', text: 'O(log n)' },
+        { id: 'D', text: 'O(n log n)' },
+      ],
+      correctOption: 'A',
+      explanation: 'Although resizing takes O(n), it happens geometrically infrequently, averaging O(1) amortized work per insertion.',
+      hint: 'Geometric capacity doubling yields constant average time.',
+      level: 'Beginner',
     },
   ],
   'ui-ux': [
@@ -631,6 +701,34 @@ export const LOCAL_SKILL_QUIZ_BANKS: Record<string, AssessmentQuestion[]> = {
       hint: 'Atoms build into Molecules and Organisms.',
       level: 'Beginner',
     },
+    {
+      id: 'ui-4',
+      question: 'In Figma, what does Auto Layout enable UI designers to build?',
+      options: [
+        { id: 'A', text: 'Responsive frames that grow, shrink, and wrap dynamically with padding and gap controls' },
+        { id: 'B', text: '3D raytraced rendering models' },
+        { id: 'C', text: 'Rasterized bitmap icons' },
+        { id: 'D', text: 'SQL database schemas' },
+      ],
+      correctOption: 'A',
+      explanation: 'Auto Layout creates dynamic frames modeled after CSS Flexbox that automatically resize based on nested text and elements.',
+      hint: 'Dynamic responsive frames akin to CSS Flexbox.',
+      level: 'Intermediate',
+    },
+    {
+      id: 'ui-5',
+      question: 'What is the "Aesthetic-Usability Effect" discovered in human-computer interaction research?',
+      options: [
+        { id: 'A', text: 'Users perceive aesthetically pleasing designs as more usable and are more forgiving of minor usability issues' },
+        { id: 'B', text: 'Aesthetic designs cause higher user confusion' },
+        { id: 'C', text: 'Visual appeal has zero correlation with user retention' },
+        { id: 'D', text: 'Minimalist designs with no colors always score lowest' },
+      ],
+      correctOption: 'A',
+      explanation: 'Users form positive emotional responses to visually refined interfaces, making them perceive them as easier to operate.',
+      hint: 'Visual appeal fosters positive usability perception.',
+      level: 'Intermediate',
+    },
   ],
   'calculus': [
     {
@@ -675,6 +773,34 @@ export const LOCAL_SKILL_QUIZ_BANKS: Record<string, AssessmentQuestion[]> = {
       hint: 'Points in direction of maximum rate of increase.',
       level: 'Intermediate',
     },
+    {
+      id: 'math-4',
+      question: 'What is the determinant of a 2x2 matrix [[a, b], [c, d]]?',
+      options: [
+        { id: 'A', text: 'ad - bc' },
+        { id: 'B', text: 'ab - cd' },
+        { id: 'C', text: 'ac + bd' },
+        { id: 'D', text: 'a + d - b - c' },
+      ],
+      correctOption: 'A',
+      explanation: 'The determinant of a 2x2 matrix is computed by multiplying the main diagonal elements and subtracting the product of the off-diagonal elements (ad - bc).',
+      hint: 'Main diagonal minus anti-diagonal product.',
+      level: 'Beginner',
+    },
+    {
+      id: 'math-5',
+      question: 'What is the indefinite integral ∫ (1 / x) dx for x > 0?',
+      options: [
+        { id: 'A', text: 'ln(x) + C' },
+        { id: 'B', text: '-1 / x^2 + C' },
+        { id: 'C', text: 'e^x + C' },
+        { id: 'D', text: '1 / (2x^2) + C' },
+      ],
+      correctOption: 'A',
+      explanation: 'The antiderivative of 1/x for positive x is ln(x) + C.',
+      hint: 'The natural logarithm derivative is 1/x.',
+      level: 'Beginner',
+    },
   ],
   'general': [
     {
@@ -705,6 +831,48 @@ export const LOCAL_SKILL_QUIZ_BANKS: Record<string, AssessmentQuestion[]> = {
       hint: 'Build problem-solving autonomy through hypothesis testing.',
       level: 'Intermediate',
     },
+    {
+      id: 'gen-3',
+      question: 'In educational psychology, what is "Scaffolding" during skill acquisition?',
+      options: [
+        { id: 'A', text: 'Providing temporary structured support that is gradually removed as the learner gains autonomy' },
+        { id: 'B', text: 'Giving students exams every 10 minutes' },
+        { id: 'C', text: 'Refusing to answer student questions' },
+        { id: 'D', text: 'Automating all grading with scripts' },
+      ],
+      correctOption: 'A',
+      explanation: 'Scaffolding breaks learning into chunks and offers tools/structure, fading support as competence develops.',
+      hint: 'Temporary structured support faded over time.',
+      level: 'Intermediate',
+    },
+    {
+      id: 'gen-4',
+      question: 'What is the primary difference between Formative and Summative assessment in peer tutoring?',
+      options: [
+        { id: 'A', text: 'Formative is ongoing feedback to guide learning in real time; Summative evaluates cumulative achievement at the conclusion' },
+        { id: 'B', text: 'Formative only uses multiple choice; Summative uses essays' },
+        { id: 'C', text: 'Summative happens before learning begins' },
+        { id: 'D', text: 'They are completely synonymous' },
+      ],
+      correctOption: 'A',
+      explanation: 'Formative assessment monitors student learning to provide ongoing feedback, whereas summative assessment evaluates student learning at the end of an instructional unit.',
+      hint: 'Ongoing guidance vs final evaluation.',
+      level: 'Intermediate',
+    },
+    {
+      id: 'gen-5',
+      question: 'How should a mentor address "Cognitive Overload" when a learner is struggling with complex concepts?',
+      options: [
+        { id: 'A', text: 'Chunk information into smaller digestible units, eliminate extraneous details, and use worked examples' },
+        { id: 'B', text: 'Increase the speaking speed and double the reading assignment' },
+        { id: 'C', text: 'Introduce three new frameworks simultaneously' },
+        { id: 'D', text: 'End the session immediately without guidance' },
+      ],
+      correctOption: 'A',
+      explanation: 'Managing cognitive load requires chunking complex knowledge, utilizing dual coding, and providing clear step-by-step worked examples.',
+      hint: 'Chunk information and use worked examples.',
+      level: 'Intermediate',
+    },
   ],
 };
 
@@ -719,7 +887,7 @@ export async function generateSkillAssessment(params: {
 }): Promise<GeneratedQuiz> {
   const skillName = (params.skillName || 'Python').trim();
   const level = params.proficiency || 'Intermediate';
-  const count = params.questionCount || 5;
+  const count = Math.max(5, params.questionCount || 5);
 
   const apiKey = process.env.GEMINI_API_KEY || process.env.AI_API_KEY;
   const model = process.env.GEMINI_MODEL || process.env.AI_MODEL_NAME || 'gemini-1.5-flash';
@@ -765,7 +933,7 @@ export async function generateSkillAssessment(params: {
       skill: skillName,
       difficulty: level,
       provider: 'LOCAL_FALLBACK',
-      questions: bank.slice(0, count),
+      questions: bank.slice(0, Math.max(5, count)),
     };
   }
 
@@ -774,12 +942,12 @@ export async function generateSkillAssessment(params: {
 Generate an objective, strictly accurate multiple-choice skill assessment for the skill: "${skillName}".
 Rules:
 1. Target Difficulty Level: ${level}.
-2. Exactly ${count} questions testing real concepts in ${skillName}.
+2. Exactly ${count} questions (minimum 5 questions) testing real concepts in ${skillName}.
 3. Every question must have exactly 4 choices (labeled A, B, C, D) and exactly ONE correct answer.
 4. Provide a clear, technical explanation and a hint.
 5. Strict structured JSON output following the schema provided. No conversational preamble or code blocks.`;
 
-    const userPrompt = `Generate a ${count}-question assessment for "${skillName}" at the "${level}" proficiency tier. Output pure JSON adhering to the specified schema.`;
+    const userPrompt = `Generate a ${count}-question assessment (minimum 5 questions) for "${skillName}" at the "${level}" proficiency tier. Output pure JSON adhering to the specified schema.`;
 
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
       method: 'POST',
@@ -806,7 +974,7 @@ Rules:
         skill: skillName,
         difficulty: level,
         provider: 'LOCAL_FALLBACK',
-        questions: bank.slice(0, count),
+        questions: bank.slice(0, Math.max(5, count)),
       };
     }
 
@@ -817,21 +985,21 @@ Rules:
     const parsedJson = JSON.parse(rawText);
     const validated = GeneratedQuizSchema.safeParse(parsedJson);
 
-    if (validated.success) {
+    if (validated.success && validated.data.questions.length >= 5) {
       return {
         ...validated.data,
         skill: skillName,
         provider: 'GEMINI_AI',
       };
     } else {
-      console.warn(`[Gemini Schema Mismatch for ${skillName}] Falling back to curated bank:`, validated.error);
+      console.warn(`[Gemini Schema Mismatch or <5 questions for ${skillName}] Falling back to curated bank:`, validated.error);
       const bank = getLocalQuestions();
       return {
         assessmentVersion: 'v1.0-fallback',
         skill: skillName,
         difficulty: level,
         provider: 'LOCAL_FALLBACK',
-        questions: bank.slice(0, count),
+        questions: bank.slice(0, Math.max(5, count)),
       };
     }
   } catch (err) {
@@ -842,7 +1010,7 @@ Rules:
       skill: skillName,
       difficulty: level,
       provider: 'LOCAL_FALLBACK',
-      questions: bank.slice(0, count),
+      questions: bank.slice(0, Math.max(5, count)),
     };
   }
 }

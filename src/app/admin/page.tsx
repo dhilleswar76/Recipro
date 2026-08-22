@@ -26,8 +26,14 @@ import {
 } from 'lucide-react';
 
 export default function AdminDashboardPage() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, login } = useAuth();
   const router = useRouter();
+
+  // Admin login portal state
+  const [adminEmail, setAdminEmail] = useState('admin@skillswap.campus.edu');
+  const [adminPassword, setAdminPassword] = useState('Password123!');
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [loginLoading, setLoginLoading] = useState(false);
 
   // Date selection state (Defaults to canonical date 2026-08-23 or today)
   const [selectedDate, setSelectedDate] = useState<string>('2026-08-23');
@@ -53,8 +59,6 @@ export default function AdminDashboardPage() {
       if (res.ok) {
         const data = await res.json();
         setDailyReport(data);
-      } else if (res.status === 403) {
-        // Not admin
       }
     } catch (err) {
       console.error('Failed to load daily report:', err);
@@ -104,7 +108,26 @@ export default function AdminDashboardPage() {
     fetchUsers();
   };
 
-  // Authorization Guard
+  const handleAdminLogin = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setLoginLoading(true);
+    setLoginError(null);
+    try {
+      const ok = await login(adminEmail, adminPassword);
+      if (!ok) {
+        setLoginError('Invalid administrator credentials.');
+      } else {
+        fetchDailyReport(selectedDate);
+        fetchUsers();
+      }
+    } catch (err: any) {
+      setLoginError('Failed to sign in as Administrator');
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
+  // Authorization Guard & Inline Admin Login Portal
   if (authLoading) {
     return (
       <div className="min-h-[70vh] flex items-center justify-center text-xs text-slate-400">
@@ -115,21 +138,93 @@ export default function AdminDashboardPage() {
 
   if (!user || user.role !== 'ADMIN') {
     return (
-      <div className="max-w-xl mx-auto px-4 py-20 text-center space-y-4">
-        <div className="w-14 h-14 rounded-2xl bg-rose-500/20 text-rose-400 border border-rose-500/30 flex items-center justify-center mx-auto">
-          <Lock className="w-7 h-7" />
-        </div>
-        <h2 className="text-xl font-bold text-white">403 — Unauthorized Admin Route</h2>
-        <p className="text-xs text-slate-400 leading-relaxed">
-          Access to <code className="text-rose-400 bg-slate-900 px-1.5 py-0.5 rounded">/admin</code> is restricted strictly to authenticated administrative accounts. Your session does not possess backend-authoritative admin credentials.
-        </p>
-        <div className="pt-2">
-          <Link
-            href="/"
-            className="inline-flex px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs border border-slate-700 transition-colors"
-          >
-            Return to Campus Home
-          </Link>
+      <div className="max-w-lg mx-auto px-4 py-16 space-y-6">
+        <div className="glass-panel p-8 rounded-3xl border border-rose-500/30 bg-slate-950/80 shadow-2xl space-y-6 text-center">
+          
+          <div className="w-14 h-14 rounded-2xl bg-rose-500/20 text-rose-400 border border-rose-500/30 flex items-center justify-center mx-auto">
+            <Lock className="w-7 h-7" />
+          </div>
+
+          <div>
+            <h2 className="text-xl font-extrabold text-white">Campus Administrator Portal</h2>
+            <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+              Access to <code className="text-rose-400 bg-slate-900 px-1.5 py-0.5 rounded font-mono">/admin</code> requires authenticated Administrator credentials.
+            </p>
+          </div>
+
+          {user && (
+            <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-300 text-left space-y-1">
+              <div className="text-[11px] text-slate-500 uppercase tracking-wider font-bold">Currently Logged In As:</div>
+              <div className="font-bold text-white">{user.display_name} ({user.email})</div>
+              <div className="text-[11px] text-amber-400">Current Role: <span className="font-mono">{user.role}</span> (Non-Admin)</div>
+            </div>
+          )}
+
+          {loginError && (
+            <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-semibold text-left">
+              {loginError}
+            </div>
+          )}
+
+          {/* Inline Admin Login Form */}
+          <form onSubmit={handleAdminLogin} className="space-y-4 text-left">
+            <div>
+              <label className="text-[11px] font-bold text-slate-300 uppercase tracking-wider block mb-1">
+                Admin Email
+              </label>
+              <input
+                type="email"
+                value={adminEmail}
+                onChange={(e) => setAdminEmail(e.target.value)}
+                placeholder="admin@skillswap.campus.edu"
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-rose-500"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="text-[11px] font-bold text-slate-300 uppercase tracking-wider block mb-1">
+                Admin Password
+              </label>
+              <input
+                type="password"
+                value={adminPassword}
+                onChange={(e) => setAdminPassword(e.target.value)}
+                placeholder="••••••••••••"
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-rose-500"
+                required
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={loginLoading}
+              className="w-full py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-glow-rose transition-all flex items-center justify-center gap-2"
+            >
+              <Lock className={`w-3.5 h-3.5 ${loginLoading ? 'animate-spin' : ''}`} />
+              <span>{loginLoading ? 'Authenticating...' : 'Sign In as Campus Administrator'}</span>
+            </button>
+          </form>
+
+          {/* Quick Access Switch */}
+          <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-xs">
+            <button
+              type="button"
+              onClick={() => {
+                setAdminEmail('admin@skillswap.campus.edu');
+                setAdminPassword('Password123!');
+                handleAdminLogin();
+              }}
+              className="text-brand-400 hover:underline font-semibold text-[11px]"
+            >
+              1-Click Admin Authenticate
+            </button>
+
+            <Link href="/" className="text-slate-400 hover:text-white transition-colors text-[11px]">
+              Back to Campus Home &rarr;
+            </Link>
+          </div>
+
         </div>
       </div>
     );

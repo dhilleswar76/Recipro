@@ -116,6 +116,19 @@ export function Navbar() {
               <span>Moderation</span>
             </Link>
           )}
+
+          {/* Admin Access (Visible only to authenticated ADMIN role) */}
+          {user?.role === 'ADMIN' && (
+            <Link 
+              href="/admin" 
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                pathname === '/admin' ? 'bg-rose-600 text-white' : 'text-rose-400 hover:bg-rose-500/20'
+              }`}
+            >
+              <Activity className="w-3.5 h-3.5" />
+              <span>Admin</span>
+            </Link>
+          )}
         </nav>
 
         {/* Right Section: Balance & Auth */}

@@ -23,12 +23,23 @@ import {
   HelpCircle,
   AlertCircle
 } from 'lucide-react';
+import { useSearchParams, useRouter } from 'next/navigation';
+import MyLearningRequests from '@/components/MyLearningRequests';
 import { getSkillStatusDisplay } from '@/lib/skill-display';
 
 export default function ProfilePage() {
+  const router = useRouter();
   const { user, refreshUser } = useAuth();
+  const searchParams = useSearchParams();
 
-  const [activeTab, setActiveTab] = useState<'SKILLS' | 'GOALS' | 'AVAILABILITY' | 'PREFERENCES'>('SKILLS');
+  const [activeTab, setActiveTab] = useState<'SKILLS' | 'GOALS' | 'REQUESTS' | 'AVAILABILITY' | 'PREFERENCES'>('SKILLS');
+
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab === 'requests') {
+      setActiveTab('REQUESTS');
+    }
+  }, [searchParams]);
 
   // AI Extraction State
   const [extractModalOpen, setExtractModalOpen] = useState(false);
@@ -505,6 +516,14 @@ export default function ProfilePage() {
             <Target className="w-4 h-4" /> Skills I Want to Learn ({user.goals?.length || 0})
           </button>
           <button
+            onClick={() => setActiveTab('REQUESTS')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-colors ${
+              activeTab === 'REQUESTS' ? 'bg-amber-500 text-dark-bg' : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <BookOpen className="w-4 h-4" /> My Learning Requests
+          </button>
+          <button
             onClick={() => setActiveTab('AVAILABILITY')}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-colors ${
               activeTab === 'AVAILABILITY' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
@@ -647,6 +666,27 @@ export default function ProfilePage() {
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* ============================================================ */}
+        {/* TAB 2B: MY LEARNING REQUESTS & DEMAND ACTIVITY */}
+        {/* ============================================================ */}
+        {activeTab === 'REQUESTS' && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-bold text-white">My Learning Requests</h2>
+                <p className="text-xs text-slate-400">Track unfulfilled skill demand, mentor matches, and automated availability notifications.</p>
+              </div>
+              <button
+                onClick={() => router.push('/explore')}
+                className="px-3.5 py-1.5 rounded-xl bg-brand-500 hover:bg-brand-400 text-dark-bg font-bold text-xs shadow-glow-brand transition-colors"
+              >
+                + New Request
+              </button>
+            </div>
+            <MyLearningRequests />
           </div>
         )}
 

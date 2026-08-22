@@ -49,7 +49,7 @@ export default function AdminDashboardPage() {
   const [usersLoading, setUsersLoading] = useState(false);
 
   // Active View Tab
-  const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'USERS' | 'SESSIONS'>('OVERVIEW');
+  const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'USERS' | 'SESSIONS' | 'REQUESTS'>('OVERVIEW');
 
   // Fetch Daily Report
   const fetchDailyReport = async (dateStr: string) => {
@@ -319,6 +319,16 @@ export default function AdminDashboardPage() {
           }`}
         >
           Daily Sessions ({dailyReport?.sessions?.length || 0})
+        </button>
+        <button
+          onClick={() => setActiveTab('REQUESTS')}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors ${
+            activeTab === 'REQUESTS'
+              ? 'bg-slate-800 text-white border border-slate-700'
+              : 'text-slate-400 hover:text-white hover:bg-slate-900'
+          }`}
+        >
+          Learner Requests &amp; Matches ({dailyReport?.learningRequests?.length || 0})
         </button>
       </div>
 
@@ -715,6 +725,158 @@ export default function AdminDashboardPage() {
               </table>
             </div>
           )}
+        </div>
+      )}
+
+      {/* TAB 4: LEARNER REQUESTS & NOTIFICATION AUDIT */}
+      {activeTab === 'REQUESTS' && (
+        <div className="space-y-6">
+          {/* Summary Metric Counters */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="glass-panel p-4 rounded-2xl border border-slate-800 space-y-1">
+              <span className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider">Total Requests</span>
+              <div className="text-xl font-bold text-white">{dailyReport?.learningRequests?.length || 0}</div>
+            </div>
+            <div className="glass-panel p-4 rounded-2xl border border-amber-500/30 bg-amber-500/5 space-y-1">
+              <span className="text-[11px] text-amber-400 font-semibold uppercase tracking-wider">Waiting for Mentor</span>
+              <div className="text-xl font-bold text-amber-300">
+                {dailyReport?.learningRequests?.filter((r: any) => r.status === 'OPEN').length || 0}
+              </div>
+            </div>
+            <div className="glass-panel p-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/5 space-y-1">
+              <span className="text-[11px] text-emerald-400 font-semibold uppercase tracking-wider">Mentor Found</span>
+              <div className="text-xl font-bold text-emerald-300">
+                {dailyReport?.learningRequests?.filter((r: any) => r.status === 'MENTOR_FOUND' || r.status === 'NOTIFIED').length || 0}
+              </div>
+            </div>
+            <div className="glass-panel p-4 rounded-2xl border border-brand-500/30 bg-brand-500/5 space-y-1">
+              <span className="text-[11px] text-brand-400 font-semibold uppercase tracking-wider">Fulfilled</span>
+              <div className="text-xl font-bold text-brand-300">
+                {dailyReport?.learningRequests?.filter((r: any) => r.status === 'FULFILLED').length || 0}
+              </div>
+            </div>
+          </div>
+
+          {/* Requests Table */}
+          <div className="glass-panel p-5 rounded-3xl border border-slate-800 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-white">Learner Demand Requests &amp; Mentor Matches</h3>
+            </div>
+
+            {(!dailyReport?.learningRequests || dailyReport.learningRequests.length === 0) ? (
+              <div className="py-16 text-center text-xs text-slate-400">
+                No learning requests found.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="text-[11px] text-slate-400 uppercase border-b border-slate-800 bg-slate-900/40">
+                    <tr>
+                      <th className="py-2.5 px-3">Request ID</th>
+                      <th className="py-2.5 px-3">Learner &amp; College</th>
+                      <th className="py-2.5 px-3">Skill &amp; Proficiency</th>
+                      <th className="py-2.5 px-3">Preferred Window</th>
+                      <th className="py-2.5 px-3">Status</th>
+                      <th className="py-2.5 px-3">Matched Mentor</th>
+                      <th className="py-2.5 px-3">Created</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60">
+                    {dailyReport.learningRequests.map((req: any) => (
+                      <tr key={req.id} className="hover:bg-slate-900/30 transition-colors">
+                        <td className="py-3 px-3 font-mono text-[11px] text-slate-300">{req.id}</td>
+                        <td className="py-3 px-3">
+                          <div className="font-bold text-white">{req.learner_name || req.learner_id}</div>
+                          <div className="text-[11px] text-slate-400">{req.learner_college || 'Campus Member'}</div>
+                        </td>
+                        <td className="py-3 px-3">
+                          <div className="font-bold text-brand-400">{req.skill_name}</div>
+                          <div className="text-[11px] text-slate-400">{req.requested_proficiency}</div>
+                        </td>
+                        <td className="py-3 px-3 text-slate-300">
+                          {req.preferred_time_start} - {req.preferred_time_end}
+                        </td>
+                        <td className="py-3 px-3">
+                          <span className={`text-[10px] px-2 py-0.5 rounded font-bold border ${
+                            req.status === 'MENTOR_FOUND' || req.status === 'NOTIFIED' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' :
+                            req.status === 'FULFILLED' ? 'bg-brand-500/20 text-brand-400 border-brand-500/30' :
+                            req.status === 'OPEN' ? 'bg-amber-500/20 text-amber-400 border-amber-500/30' :
+                            'bg-slate-800 text-slate-400 border-slate-700'
+                          }`}>
+                            {req.status}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3">
+                          {req.mentor_name ? (
+                            <div>
+                              <div className="font-bold text-white">{req.mentor_name}</div>
+                              <div className="text-[11px] text-slate-400">{req.mentor_college}</div>
+                            </div>
+                          ) : (
+                            <span className="text-slate-500 text-[11px]">None yet</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-3 text-slate-400 text-[11px]">
+                          {new Date(req.created_at).toLocaleDateString([], { day: 'numeric', month: 'short' })}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Notification Deliveries Log */}
+          <div className="glass-panel p-5 rounded-3xl border border-slate-800 space-y-4">
+            <h3 className="text-sm font-bold text-white">Multi-Channel Notification Deliveries</h3>
+            {(!dailyReport?.notificationDeliveries || dailyReport.notificationDeliveries.length === 0) ? (
+              <div className="py-8 text-center text-xs text-slate-400">
+                No notification deliveries logged yet.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="text-[11px] text-slate-400 uppercase border-b border-slate-800 bg-slate-900/40">
+                    <tr>
+                      <th className="py-2.5 px-3">Channel</th>
+                      <th className="py-2.5 px-3">Recipient</th>
+                      <th className="py-2.5 px-3">Type</th>
+                      <th className="py-2.5 px-3">Subject / Preview</th>
+                      <th className="py-2.5 px-3">Status</th>
+                      <th className="py-2.5 px-3">Timestamp</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60">
+                    {dailyReport.notificationDeliveries.map((del: any) => (
+                      <tr key={del.id} className="hover:bg-slate-900/30 transition-colors">
+                        <td className="py-3 px-3">
+                          <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${
+                            del.channel === 'IN_APP' ? 'bg-indigo-500/20 text-indigo-300' :
+                            del.channel === 'EMAIL' ? 'bg-amber-500/20 text-amber-300' :
+                            'bg-sky-500/20 text-sky-300'
+                          }`}>
+                            {del.channel}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 font-semibold text-slate-200">{del.recipient}</td>
+                        <td className="py-3 px-3 text-slate-300">{del.type}</td>
+                        <td className="py-3 px-3 text-slate-400 truncate max-w-xs">{del.subject || del.content}</td>
+                        <td className="py-3 px-3">
+                          <span className="text-[10px] px-2 py-0.5 rounded font-bold bg-emerald-500/20 text-emerald-400">
+                            {del.status}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 text-slate-400 text-[11px]">
+                          {new Date(del.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

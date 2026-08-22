@@ -4,6 +4,7 @@ import { requireAuth } from '@/lib/auth';
 import { SubmitAssessmentSchema } from '@/lib/validations';
 import { evaluateSkillAssessment } from '@/lib/skill-verification';
 import { notifyLearnersOfNewMentor } from '@/lib/skill-gap';
+import { evaluateActiveLearningRequests } from '@/lib/learning-requests';
 import { generateSkillAssessment, sanitizeAssessmentForClient } from '@/lib/gemini';
 
 export async function GET(req: NextRequest) {
@@ -86,6 +87,7 @@ export async function POST(req: NextRequest) {
     // If verified, trigger automatic notifications to waiting learners
     if (evaluation.passed) {
       notifyLearnersOfNewMentor(user.userId, skillId);
+      evaluateActiveLearningRequests(db, { triggerSkillId: skillId });
     }
 
     return NextResponse.json({

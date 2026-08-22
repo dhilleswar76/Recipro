@@ -312,29 +312,31 @@ function ExploreComponent() {
     e.preventDefault();
     setRequestSubmitting(true);
     try {
-      const res = await fetch('/api/skill-requests', {
+      const chosenSkill = requestSkillName || query || 'Python';
+      const res = await fetch('/api/learning-requests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          skillName: requestSkillName || query || 'Requested Skill',
+          skillName: chosenSkill,
           category: requestCategory,
           requestedProficiency: requestProficiency,
-          currentProficiency: requestCurrentLevel,
-          learningGoal: requestGoal,
-          preferredSchedule: requestSchedule,
-          preferredSessionMode: slotMode,
-          urgency: requestUrgency,
+          preferredDays: ['Tuesday', 'Thursday'],
+          preferredTimeStart: '17:00',
+          preferredTimeEnd: '20:00',
+          durationHours: 1.0,
+          learningGoal: requestGoal || `Master ${chosenSkill} concepts and projects`,
+          searchScope: 'ALL',
         }),
       });
 
       const data = await res.json();
       if (res.ok) {
-        setRequestSuccessMsg(data.message || 'Learner request created! You will be automatically notified when a mentor joins.');
+        setRequestSuccessMsg("We'll notify you when a suitable mentor becomes available.");
         setTimeout(() => {
           setSkillRequestModalOpen(false);
           setRequestSuccessMsg(null);
           setRequestGoal('');
-        }, 2200);
+        }, 2500);
       } else {
         alert(data.error || 'Failed to submit skill request');
       }

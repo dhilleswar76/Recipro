@@ -208,6 +208,30 @@ export function settleSessionCredits(sessionId: string): { success: boolean; txH
       INSERT INTO audit_logs (id, actor_id, action, target_type, target_id, previous_state, new_state)
       VALUES (?, ?, 'SETTLE_CREDITS', 'SESSION', ?, 'COMPLETED', 'CREDIT_SETTLED')
     `).run(`audit-${Date.now()}`, session.teacher_id, sessionId);
+
+    // 8. Fulfill any linked learning requests for this learner and skill
+    try {
+      const linkedReq = db.prepare(`
+        SELECT id FROM learning_requests
+        WHERE learner_id = ? AND (skill_id = ? OR session_id = ?) AND status NOT IN ('FULFILLED', 'CANCELLED')
+        LIMIT 1
+      `).get(session.learner_id, session.skill_id, sessionId) as { id: string } | undefined;
+
+      if (linkedReq) {
+        db.prepare(`
+          UPDATE learning_requests 
+          SET status = 'FULFILLED', session_id = ?, updated_at = CURRENT_TIMESTAMP
+          WHERE id = ?
+        `).run(sessionId, linkedReq.id);
+
+        db.prepare(`
+          INSERT INTO learning_request_events (id, request_id, event_type, title, description, created_at)
+          VALUES (?, ?, 'REQUEST_FULFILLED', 'Learning Request Fulfilled', 'Session completed and skill credits settled.', CURRENT_TIMESTAMP)
+        `).run(`ev-${linkedReq.id}-fulfilled-${Date.now()}`, linkedReq.id);
+      }
+    } catch {
+      // Non-fatal
+    }
   });
 
   tx();

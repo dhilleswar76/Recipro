@@ -176,6 +176,28 @@ export function getDailyReport(dateStr: string) {
     .reduce((acc, s) => acc + (s.credits_amount || 1), 0);
   creditsDisputed = disputedSessionCredits;
 
+  // 5. Fetch Learning Requests
+  const learningRequests = db.prepare(`
+    SELECT 
+      lr.*,
+      lp.display_name as learner_name, lp.college as learner_college,
+      mp.display_name as mentor_name, mp.college as mentor_college
+    FROM learning_requests lr
+    LEFT JOIN profiles lp ON lr.learner_id = lp.user_id
+    LEFT JOIN profiles mp ON lr.matched_mentor_id = mp.user_id
+    ORDER BY lr.created_at DESC
+    LIMIT 50
+  `).all() as any[];
+
+  // 6. Fetch Notification Deliveries
+  const notificationDeliveries = db.prepare(`
+    SELECT nd.*, p.display_name
+    FROM notification_deliveries nd
+    LEFT JOIN profiles p ON nd.user_id = p.user_id
+    ORDER BY nd.created_at DESC
+    LIMIT 50
+  `).all() as any[];
+
   return {
     reportDate: dateStr,
     generatedAt: new Date().toISOString(),
@@ -188,6 +210,10 @@ export function getDailyReport(dateStr: string) {
       creditBasedSessions: totalCreditSettledSessions,
       mixedSessions: totalMixedSessions,
       pendingSessions: totalPending,
+      totalLearningRequests: learningRequests.length,
+      openLearningRequests: learningRequests.filter(r => r.status === 'OPEN').length,
+      matchedLearningRequests: learningRequests.filter(r => r.status === 'MENTOR_FOUND' || r.status === 'NOTIFIED').length,
+      fulfilledLearningRequests: learningRequests.filter(r => r.status === 'FULFILLED').length,
     },
     sessionStats: {
       totalScheduled,
@@ -213,6 +239,8 @@ export function getDailyReport(dateStr: string) {
     },
     sessions: enrichedSessions,
     creditTransactions: creditTxs,
+    learningRequests,
+    notificationDeliveries,
   };
 }
 
@@ -667,6 +695,23 @@ export function getSessionDetailReport(sessionId: string) {
     ORDER BY created_at ASC
   `).all(sessionId, agreement ? agreement.id : sessionId) as any[];
 
+  const attendanceEvents = db.prepare(`
+    SELECT sa.*, p.display_name
+    FROM session_attendance sa
+    LEFT JOIN profiles p ON sa.user_id = p.user_id
+    WHERE sa.session_id = ?
+    ORDER BY sa.joined_at ASC
+  `).all(sessionId) as any[];
+
+  const chatSummary = db.prepare(`
+    SELECT 
+      COUNT(*) as total_messages,
+      MAX(created_at) as last_message_at,
+      COUNT(DISTINCT sender_id) as active_chatters
+    FROM chat_messages
+    WHERE session_id = ?
+  `).get(sessionId) as any;
+
   const settlement = classifySettlement(session, agreement, creditTransactions[0], dispute);
 
   return {
@@ -677,6 +722,12 @@ export function getSessionDetailReport(sessionId: string) {
     dispute: dispute || null,
     blockchainTx: blockchainTx || null,
     auditHistory,
+    attendanceEvents,
+    chatMetadata: {
+      totalMessages: chatSummary?.total_messages || 0,
+      lastMessageAt: chatSummary?.last_message_at || null,
+      activeChatters: chatSummary?.active_chatters || 0,
+    },
     settlementClassification: settlement,
   };
 }

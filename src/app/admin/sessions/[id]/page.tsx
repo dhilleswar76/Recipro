@@ -315,6 +315,67 @@ export default function AdminSessionReportPage() {
             </div>
           )}
 
+          {/* Video Attendance & Classroom Telemetry */}
+          {report.attendanceEvents && (
+            <div className="glass-panel p-5 rounded-3xl border border-slate-800 space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-sky-400" />
+                  <span>Video Classroom Attendance &amp; Telemetry Events</span>
+                </h3>
+                <span className="text-xs text-slate-400">{report.attendanceEvents.length} events logged</span>
+              </div>
+
+              {report.attendanceEvents.length === 0 ? (
+                <div className="py-6 text-center text-xs text-slate-500">No classroom telemetry logged.</div>
+              ) : (
+                <div className="space-y-2 text-xs">
+                  {report.attendanceEvents.map((ev: any) => (
+                    <div key={ev.id} className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${
+                          ev.event_type === 'JOINED' ? 'bg-emerald-500/20 text-emerald-300' :
+                          ev.event_type === 'LEFT' ? 'bg-rose-500/20 text-rose-300' :
+                          'bg-slate-800 text-slate-300'
+                        }`}>
+                          {ev.event_type}
+                        </span>
+                        <span className="font-semibold text-white">{ev.display_name || ev.user_id}</span>
+                      </div>
+                      <span className="text-slate-400 text-[11px] font-mono">
+                        {new Date(ev.joined_at || ev.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Chat Activity Metadata (Privacy-Preserving) */}
+          {report.chatMetadata && (
+            <div className="glass-panel p-5 rounded-3xl border border-slate-800 space-y-3">
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <FileText className="w-4 h-4 text-accent-400" />
+                <span>In-Room Text Chat Activity Metadata</span>
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800">
+                  <span className="text-slate-500 block text-[11px]">Total Chat Messages</span>
+                  <strong className="text-white text-base">{report.chatMetadata.totalMessages}</strong>
+                </div>
+                <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800">
+                  <span className="text-slate-500 block text-[11px]">Active Chat Participants</span>
+                  <strong className="text-white text-base">{report.chatMetadata.activeChatters}</strong>
+                </div>
+                <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800">
+                  <span className="text-slate-500 block text-[11px]">Last Activity Timestamp</span>
+                  <strong className="text-white text-xs">{report.chatMetadata.lastMessageAt ? new Date(report.chatMetadata.lastMessageAt).toLocaleString() : 'None'}</strong>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Complete Audit Log Trail */}
           <div className="glass-panel p-5 rounded-3xl border border-slate-800 space-y-4">
             <h3 className="text-sm font-bold text-white flex items-center gap-2">

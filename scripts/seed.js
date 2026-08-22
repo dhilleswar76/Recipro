@@ -1066,6 +1066,144 @@ for (const s of allSessions) {
   }
 }
 
-console.log('Database seeded successfully with verified Python demo personas, historical session audit trails, & Smart Slot availability.');
+// 9. Seed Sample Learning Requests & Notification Deliveries
+const insertLearningReq = db.prepare(`
+  INSERT INTO learning_requests (
+    id, learner_id, skill_id, skill_name, category, requested_proficiency,
+    preferred_days, preferred_time_start, preferred_time_end, duration_hours,
+    learning_goal, search_scope, status, matched_mentor_id, matched_at, match_score, match_reasons_json, created_at, updated_at
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  ON CONFLICT(id) DO UPDATE SET
+    status = excluded.status,
+    matched_mentor_id = excluded.matched_mentor_id,
+    match_score = excluded.match_score
+`);
+
+const insertReqEvent = db.prepare(`
+  INSERT INTO learning_request_events (id, request_id, event_type, title, description, created_at)
+  VALUES (?, ?, ?, ?, ?, ?)
+  ON CONFLICT(id) DO NOTHING
+`);
+
+const insertNotifDelivery = db.prepare(`
+  INSERT INTO notification_deliveries (
+    id, notification_id, user_id, request_id, type, channel, recipient, subject, content, status, created_at, sent_at, delivered_at
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  ON CONFLICT(id) DO NOTHING
+`);
+
+// Sample 1: Maya Lin's Open Python request (Waiting for Mentor)
+insertLearningReq.run(
+  'lreq-maya-python',
+  'usr-maya',
+  'skill-python',
+  'Python',
+  'Computer Science',
+  'Beginner',
+  '["Tuesday","Thursday"]',
+  '17:00',
+  '20:00',
+  1.0,
+  'Master Python data structures and algorithm foundations',
+  'ALL',
+  'OPEN',
+  null,
+  null,
+  null,
+  '[]',
+  '2026-08-20 10:00:00',
+  '2026-08-20 10:00:00'
+);
+
+insertReqEvent.run('ev-maya-1', 'lreq-maya-python', 'REQUEST_CREATED', 'Learning Request Created', 'Requested Beginner mentorship for Python on Tue/Thu (17:00 - 20:00)', '2026-08-20 10:00:00');
+insertReqEvent.run('ev-maya-2', 'lreq-maya-python', 'COLLEGE_SEARCH_EMPTY', 'College Search Completed', 'Searched inside Stanford University. No available mentor found.', '2026-08-20 10:00:05');
+
+// Sample 2: Marcus Vance's Matched Solidity request
+insertLearningReq.run(
+  'lreq-marcus-solidity',
+  'usr-marcus',
+  'skill-solidity',
+  'Solidity',
+  'Computer Science',
+  'Advanced',
+  '["Monday","Wednesday","Friday"]',
+  '18:00',
+  '21:00',
+  1.0,
+  'Smart contract security auditing and reentrancy attack analysis',
+  'ALL',
+  'MENTOR_FOUND',
+  'usr-alex',
+  '2026-08-22 14:00:00',
+  94,
+  JSON.stringify([
+    '✓ Solidity skill verified via PLATFORM VERIFIED',
+    '✓ Available on your preferred days (Monday, Wednesday, Friday)',
+    '✓ Overlapping teaching window (17:00 – 20:00)',
+    '✓ Attends your campus (School of Engineering)'
+  ]),
+  '2026-08-21 09:00:00',
+  '2026-08-22 14:00:00'
+);
+
+insertReqEvent.run('ev-marcus-1', 'lreq-marcus-solidity', 'REQUEST_CREATED', 'Learning Request Created', 'Requested Advanced mentorship for Solidity', '2026-08-21 09:00:00');
+insertReqEvent.run('ev-marcus-2', 'lreq-marcus-solidity', 'MENTOR_REGISTERED_VERIFIED', 'Verified Mentor Joined', 'Alex Rivera verified for Solidity at School of Engineering', '2026-08-22 14:00:00');
+insertReqEvent.run('ev-marcus-3', 'lreq-marcus-solidity', 'MENTOR_MATCHED', 'Mentor Matched Your Request', 'Matched with Alex Rivera (94% compatibility score)', '2026-08-22 14:00:01');
+insertReqEvent.run('ev-marcus-4', 'lreq-marcus-solidity', 'NOTIFICATION_SENT', 'Notification Dispatched', 'Sent in-app and email alert to learner', '2026-08-22 14:00:05');
+
+insertNotifDelivery.run(
+  'del-marcus-email-1',
+  'notif-marcus-1',
+  'usr-marcus',
+  'lreq-marcus-solidity',
+  'MENTOR_FOUND',
+  'EMAIL',
+  'marcus.vance@campus.edu',
+  'A Solidity mentor is now available on SkillSwap Campus',
+  'Good news! Alex Rivera is now available to teach Solidity.',
+  'DELIVERED',
+  '2026-08-22 14:00:05',
+  '2026-08-22 14:00:05',
+  '2026-08-22 14:00:06'
+);
+
+insertNotifDelivery.run(
+  'del-marcus-inapp-1',
+  'notif-marcus-1',
+  'usr-marcus',
+  'lreq-marcus-solidity',
+  'MENTOR_FOUND',
+  'IN_APP',
+  'usr-marcus',
+  '🎉 Mentor Found for Solidity!',
+  'Alex Rivera is now available to teach Solidity (Advanced).',
+  'DELIVERED',
+  '2026-08-22 14:00:05',
+  '2026-08-22 14:00:05',
+  '2026-08-22 14:00:05'
+);
+
+// 10. Seed Sample Classroom Attendance & Chat Messages
+const insertAttendance = db.prepare(`
+  INSERT INTO session_attendance (id, session_id, user_id, event_type, joined_at, metadata_json, created_at)
+  VALUES (?, ?, ?, ?, ?, ?, ?)
+  ON CONFLICT(id) DO NOTHING
+`);
+
+const insertChatMessage = db.prepare(`
+  INSERT INTO chat_messages (id, session_id, sender_id, message, status, is_system, created_at)
+  VALUES (?, ?, ?, ?, 'SENT', ?, ?)
+  ON CONFLICT(id) DO NOTHING
+`);
+
+insertAttendance.run('att-demo-1', 'sess-hist-001', 'usr-alex', 'JOINED', '2026-08-15 17:00:00', '{"role":"TRAINER"}', '2026-08-15 17:00:00');
+insertAttendance.run('att-demo-2', 'sess-hist-001', 'usr-rahul', 'JOINED', '2026-08-15 17:01:00', '{"role":"LEARNER"}', '2026-08-15 17:01:00');
+insertAttendance.run('att-demo-3', 'sess-hist-001', 'usr-alex', 'LEFT', '2026-08-15 18:00:00', '{"durationMinutes":60}', '2026-08-15 18:00:00');
+insertAttendance.run('att-demo-4', 'sess-hist-001', 'usr-rahul', 'LEFT', '2026-08-15 18:00:05', '{"durationMinutes":59}', '2026-08-15 18:00:05');
+
+insertChatMessage.run('msg-demo-1', 'sess-hist-001', 'usr-alex', 'Welcome Rahul! Ready to dive into Python data pipelines?', 0, '2026-08-15 17:02:00');
+insertChatMessage.run('msg-demo-2', 'sess-hist-001', 'usr-rahul', 'Yes, excited to review the generator expressions and memory usage.', 0, '2026-08-15 17:03:00');
+
+console.log('Database seeded successfully with verified Python demo personas, historical session audit trails, Smart Slot availability, & Learner Requests.');
 db.close();
 

@@ -472,7 +472,7 @@ export function initDatabase(db: Database.Database) {
       FOREIGN KEY (skill_id) REFERENCES skills(id) ON DELETE CASCADE
     );
 
-    -- 16. Skill Gap & Demand Aggregation
+    -- 16. Skill Gap & Learner Demand Requests
     CREATE TABLE IF NOT EXISTS skill_requests (
       id TEXT PRIMARY KEY,
       learner_id TEXT NOT NULL,
@@ -489,6 +489,106 @@ export function initDatabase(db: Database.Database) {
       updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (learner_id) REFERENCES users(id) ON DELETE CASCADE,
       FOREIGN KEY (skill_id) REFERENCES skills(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS learning_requests (
+      id TEXT PRIMARY KEY,
+      learner_id TEXT NOT NULL,
+      skill_id TEXT NOT NULL,
+      skill_name TEXT NOT NULL,
+      category TEXT NOT NULL DEFAULT 'Computer Science',
+      requested_proficiency TEXT NOT NULL DEFAULT 'Beginner', -- 'Beginner', 'Intermediate', 'Advanced', 'Expert'
+      preferred_days TEXT NOT NULL DEFAULT '["Tuesday","Thursday"]', -- JSON array of day strings
+      preferred_time_start TEXT NOT NULL DEFAULT '17:00',
+      preferred_time_end TEXT NOT NULL DEFAULT '20:00',
+      duration_hours REAL NOT NULL DEFAULT 1.0,
+      learning_goal TEXT,
+      search_scope TEXT NOT NULL DEFAULT 'ALL', -- 'OWN_COLLEGE', 'PARTNER_COLLEGE', 'ALL'
+      status TEXT NOT NULL DEFAULT 'OPEN', -- 'OPEN', 'MENTOR_FOUND', 'NOTIFIED', 'SESSION_REQUESTED', 'SESSION_CONFIRMED', 'FULFILLED', 'CANCELLED', 'EXPIRED'
+      matched_mentor_id TEXT,
+      matched_at DATETIME,
+      match_score REAL,
+      match_reasons_json TEXT DEFAULT '[]',
+      session_id TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      expires_at DATETIME,
+      FOREIGN KEY (learner_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (skill_id) REFERENCES skills(id) ON DELETE CASCADE,
+      FOREIGN KEY (matched_mentor_id) REFERENCES users(id),
+      FOREIGN KEY (session_id) REFERENCES sessions(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS learning_request_matches (
+      id TEXT PRIMARY KEY,
+      request_id TEXT NOT NULL,
+      mentor_id TEXT NOT NULL,
+      match_score REAL NOT NULL,
+      match_reasons_json TEXT NOT NULL DEFAULT '[]',
+      notified_at DATETIME,
+      status TEXT NOT NULL DEFAULT 'FOUND', -- 'FOUND', 'NOTIFIED', 'VIEWED', 'SESSION_REQUESTED', 'DECLINED'
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(request_id, mentor_id),
+      FOREIGN KEY (request_id) REFERENCES learning_requests(id) ON DELETE CASCADE,
+      FOREIGN KEY (mentor_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS learning_request_events (
+      id TEXT PRIMARY KEY,
+      request_id TEXT NOT NULL,
+      event_type TEXT NOT NULL, -- 'REQUEST_CREATED', 'COLLEGE_SEARCH_EMPTY', 'OUTSIDE_SEARCH_EMPTY', 'MENTOR_REGISTERED_VERIFIED', 'MENTOR_MATCHED', 'NOTIFICATION_SENT', 'SESSION_REQUESTED', 'SESSION_CONFIRMED', 'SESSION_COMPLETED', 'REQUEST_FULFILLED', 'REQUEST_CANCELLED'
+      title TEXT NOT NULL,
+      description TEXT NOT NULL,
+      metadata_json TEXT DEFAULT '{}',
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (request_id) REFERENCES learning_requests(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS notification_deliveries (
+      id TEXT PRIMARY KEY,
+      notification_id TEXT,
+      user_id TEXT NOT NULL,
+      request_id TEXT,
+      type TEXT NOT NULL DEFAULT 'MENTOR_FOUND',
+      channel TEXT NOT NULL DEFAULT 'IN_APP', -- 'IN_APP', 'EMAIL', 'PUSH'
+      recipient TEXT,
+      subject TEXT,
+      content TEXT,
+      status TEXT NOT NULL DEFAULT 'SENT', -- 'PENDING', 'SENT', 'DELIVERED', 'FAILED', 'READ'
+      error_details TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      sent_at DATETIME,
+      delivered_at DATETIME,
+      read_at DATETIME,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    -- 16b. Video Attendance & Classroom Telemetry
+    CREATE TABLE IF NOT EXISTS session_attendance (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      event_type TEXT NOT NULL, -- 'JOINED', 'LEFT', 'RECONNECTED', 'MUTED', 'UNMUTED', 'VIDEO_ON', 'VIDEO_OFF', 'SCREEN_SHARE_START', 'SCREEN_SHARE_STOP'
+      joined_at DATETIME,
+      left_at DATETIME,
+      duration_seconds INTEGER DEFAULT 0,
+      metadata_json TEXT DEFAULT '{}',
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    -- 16c. Secure In-Room Session Chat
+    CREATE TABLE IF NOT EXISTS chat_messages (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      sender_id TEXT NOT NULL,
+      message TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'SENT', -- 'SENDING', 'SENT', 'FAILED'
+      is_system INTEGER NOT NULL DEFAULT 0,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
+      FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE
     );
 
     CREATE TABLE IF NOT EXISTS skill_subscriptions (
@@ -553,6 +653,14 @@ export function initDatabase(db: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_skill_evidence_user ON skill_evidence(user_id);
     CREATE INDEX IF NOT EXISTS idx_skill_requests_skill ON skill_requests(skill_id);
     CREATE INDEX IF NOT EXISTS idx_skill_requests_learner ON skill_requests(learner_id);
+    CREATE INDEX IF NOT EXISTS idx_learning_requests_learner ON learning_requests(learner_id);
+    CREATE INDEX IF NOT EXISTS idx_learning_requests_skill ON learning_requests(skill_id);
+    CREATE INDEX IF NOT EXISTS idx_learning_requests_status ON learning_requests(status);
+    CREATE INDEX IF NOT EXISTS idx_learning_req_matches_req ON learning_request_matches(request_id);
+    CREATE INDEX IF NOT EXISTS idx_learning_req_events_req ON learning_request_events(request_id);
+    CREATE INDEX IF NOT EXISTS idx_notif_deliveries_user ON notification_deliveries(user_id);
+    CREATE INDEX IF NOT EXISTS idx_session_attendance_sess ON session_attendance(session_id);
+    CREATE INDEX IF NOT EXISTS idx_chat_messages_sess ON chat_messages(session_id);
     CREATE INDEX IF NOT EXISTS idx_skill_subs_user_skill ON skill_subscriptions(user_id, skill_id);
     CREATE INDEX IF NOT EXISTS idx_study_roadmaps_user ON study_roadmaps(user_id);
     CREATE INDEX IF NOT EXISTS idx_roadmap_stages_roadmap ON roadmap_stages(roadmap_id);
@@ -578,6 +686,9 @@ export function initDatabase(db: Database.Database) {
   safeAddColumn(db, 'profiles', 'portfolio_visibility', "TEXT DEFAULT 'PUBLIC'");
   safeAddColumn(db, 'profiles', 'learning_goal_visibility', "TEXT DEFAULT 'PUBLIC'");
   safeAddColumn(db, 'profiles', 'daily_session_limit', 'INTEGER DEFAULT 3');
+  safeAddColumn(db, 'profiles', 'email_notifications_enabled', 'INTEGER DEFAULT 1');
+  safeAddColumn(db, 'profiles', 'push_notifications_enabled', 'INTEGER DEFAULT 1');
+  safeAddColumn(db, 'profiles', 'in_app_notifications_enabled', 'INTEGER DEFAULT 1');
   safeAddColumn(db, 'user_skills', 'assessment_score', 'REAL');
   safeAddColumn(db, 'user_skills', 'verified_at', 'DATETIME');
   safeAddColumn(db, 'user_skills', 'verified_by', 'TEXT');

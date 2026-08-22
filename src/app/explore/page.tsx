@@ -237,7 +237,7 @@ function ExploreComponent() {
       let scheduledStart = '';
       let scheduledEnd = '';
 
-      if (selectedSlot) {
+      if (isFlexibleScheduling && selectedSlot) {
         scheduledStart = selectedSlot.startTime;
         scheduledEnd = selectedSlot.endTime;
       } else {
@@ -1252,7 +1252,10 @@ function ExploreComponent() {
                 <div className="flex items-center justify-between bg-slate-900/90 p-1 rounded-xl border border-slate-800 text-xs">
                   <button
                     type="button"
-                    onClick={() => setIsFlexibleScheduling(true)}
+                    onClick={() => {
+                      setIsFlexibleScheduling(true);
+                      setSelectedSlot(null);
+                    }}
                     className={`flex-1 py-1.5 rounded-lg font-semibold transition-colors ${
                       isFlexibleScheduling ? 'bg-brand-500 text-dark-bg' : 'text-slate-400 hover:text-white'
                     }`}
@@ -1261,12 +1264,15 @@ function ExploreComponent() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setIsFlexibleScheduling(false)}
+                    onClick={() => {
+                      setIsFlexibleScheduling(false);
+                      setSelectedSlot(null);
+                    }}
                     className={`flex-1 py-1.5 rounded-lg font-semibold transition-colors ${
                       !isFlexibleScheduling ? 'bg-brand-500 text-dark-bg' : 'text-slate-400 hover:text-white'
                     }`}
                   >
-                    Exact Time Picker
+                    Exact Custom Time
                   </button>
                 </div>
 
@@ -1278,7 +1284,10 @@ function ExploreComponent() {
                   <input 
                     type="date"
                     value={bookingDate}
-                    onChange={(e) => setBookingDate(e.target.value)}
+                    onChange={(e) => {
+                      setBookingDate(e.target.value);
+                      setSelectedSlot(null);
+                    }}
                     className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-brand-500"
                   />
                 </div>
@@ -1301,7 +1310,7 @@ function ExploreComponent() {
                       </div>
                     ) : availableSlots.length === 0 ? (
                       <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-[11px] text-amber-300">
-                        No overlapping slots available on this date. Mentor may be fully booked or requires a buffer.
+                        No overlapping slots available on this date. Switch to <span className="font-bold underline cursor-pointer" onClick={() => { setIsFlexibleScheduling(false); setSelectedSlot(null); }}>Exact Custom Time</span> to pick a custom time.
                       </div>
                     ) : (
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -1327,18 +1336,57 @@ function ExploreComponent() {
                     )}
                   </div>
                 ) : (
-                  <div>
+                  <div className="space-y-2">
                     <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
-                      Exact Start Time
+                      Choose Any Custom Start Time
                     </label>
                     <input 
                       type="time"
                       value={bookingTime}
-                      onChange={(e) => setBookingTime(e.target.value)}
+                      onChange={(e) => {
+                        setBookingTime(e.target.value);
+                        setSelectedSlot(null);
+                      }}
                       className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-brand-500"
                     />
+
+                    {/* Quick Time Presets */}
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {[
+                        { label: '10:00 AM', val: '10:00' },
+                        { label: '02:00 PM', val: '14:00' },
+                        { label: '04:00 PM', val: '16:00' },
+                        { label: '05:30 PM', val: '17:30' },
+                        { label: '07:00 PM', val: '19:00' },
+                        { label: '08:30 PM', val: '20:30' },
+                      ].map((preset) => (
+                        <button
+                          key={preset.val}
+                          type="button"
+                          onClick={() => {
+                            setBookingTime(preset.val);
+                            setSelectedSlot(null);
+                          }}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-all ${
+                            bookingTime === preset.val
+                              ? 'bg-brand-500/20 border-brand-500 text-brand-300'
+                              : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 )}
+
+                {/* Selected Time Confirmation Badge */}
+                <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between text-xs">
+                  <span className="text-slate-400">Scheduled Time:</span>
+                  <span className="font-bold text-brand-300">
+                    {bookingDate} at {isFlexibleScheduling && selectedSlot ? `${selectedSlot.displayStart} - ${selectedSlot.displayEnd}` : `${bookingTime} (${slotDuration || 60}m)`}
+                  </span>
+                </div>
 
                 {/* Session Notes */}
                 <div>

@@ -19,11 +19,18 @@ export async function GET(req: NextRequest) {
       sk.name as skill_name, sk.category as skill_category, sk.icon as skill_icon,
       tp.display_name as teacher_name, tp.avatar as teacher_avatar, tp.college as teacher_college,
       lp.display_name as learner_name, lp.avatar as learner_avatar, lp.college as learner_college,
-      r.id as rating_id, r.score as rating_score
+      r.id as rating_id, r.score as rating_score,
+      sea.id as agreement_id,
+      sea.requested_return_skill_name as agreement_return_skill,
+      sea.return_type as agreement_return_type,
+      sea.credit_amount as agreement_credit_amount,
+      sea.status as agreement_status,
+      sea.proposed_by as agreement_proposed_by
     FROM sessions s
     JOIN skills sk ON s.skill_id = sk.id
     JOIN profiles tp ON s.teacher_id = tp.user_id
     JOIN profiles lp ON s.learner_id = lp.user_id
+    LEFT JOIN session_exchange_agreements sea ON s.id = sea.session_id
     LEFT JOIN ratings r ON s.id = r.session_id AND r.rater_id = ?
     WHERE s.teacher_id = ? OR s.learner_id = ?
     ORDER BY s.scheduled_start DESC

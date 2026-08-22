@@ -52,6 +52,18 @@ function withdraw(uint256 amount) external nonReentrant {
   const [newMessage, setNewMessage] = useState('');
   const [completing, setCompleting] = useState(false);
   const [completionSuccess, setCompletionSuccess] = useState(false);
+  const [exchangeData, setExchangeData] = useState<any | null>(null);
+
+  useEffect(() => {
+    fetch(`/api/sessions/${sessionId}/exchange`)
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.session) {
+          setExchangeData(data);
+        }
+      })
+      .catch(console.error);
+  }, [sessionId]);
 
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
@@ -95,6 +107,31 @@ function withdraw(uint256 amount) external nonReentrant {
   return (
     <div className="max-w-7xl mx-auto px-4 lg:px-8 py-6 space-y-4">
       
+      {/* Pinned SkillSwap Exchange Agreement Banner */}
+      {exchangeData && (
+        <div className="glass-panel p-3.5 rounded-2xl border border-brand-500/30 bg-brand-500/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2.5">
+            <span className="text-base">🤝</span>
+            <div>
+              <span className="font-bold text-white flex items-center gap-2">
+                Agreed SkillSwap Exchange:
+                <span className="px-2 py-0.5 rounded bg-brand-500/20 text-brand-300 font-extrabold border border-brand-500/40">
+                  {exchangeData.session.skill_name} ↔ {exchangeData.agreement?.return_type === 'SKILL' ? exchangeData.agreement?.requested_return_skill_name : `${exchangeData.agreement?.credit_amount || exchangeData.requiredCredits} Skill Credit(s)`}
+                </span>
+              </span>
+              <p className="text-[11px] text-slate-300 mt-0.5">
+                {exchangeData.session.teacher_name} teaches {exchangeData.session.skill_name} • {exchangeData.session.learner_name} provides {exchangeData.agreement?.return_type === 'SKILL' ? exchangeData.agreement?.requested_return_skill_name : `${exchangeData.agreement?.credit_amount || exchangeData.requiredCredits} Skill Credit(s)`}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            <span className="text-[10px] px-2 py-1 rounded-lg bg-slate-900 border border-slate-700 text-brand-400 font-bold flex items-center gap-1">
+              <ShieldCheck className="w-3 h-3" /> Pre-Session Terms Verified
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Room Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-900/90 p-4 rounded-2xl border border-slate-800">
         <div className="flex items-center gap-3">
@@ -103,7 +140,7 @@ function withdraw(uint256 amount) external nonReentrant {
             <h1 className="text-base font-bold text-white flex items-center gap-2">
               Live Mentorship Room: {sessionId.substring(0, 16)}...
               <span className="text-[10px] px-2 py-0.5 rounded bg-brand-500/20 text-brand-400 font-semibold border border-brand-500/30">
-                1 Credit in Escrow
+                {exchangeData?.agreement?.return_type === 'SKILL' ? 'Skill-for-Skill Exchange' : '1 Credit in Escrow'}
               </span>
             </h1>
             <p className="text-xs text-slate-400">Collaborative Audio/Video, Live Code Scratchpad &amp; Chat</p>

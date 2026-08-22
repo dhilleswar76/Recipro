@@ -223,3 +223,19 @@ export const ModeratorActionSchema = z.object({
   action: z.enum(['RESOLVE_REFUND', 'RESOLVE_PAYOUT', 'SUSPEND_USER', 'RESTRICT_CREDITS', 'DISMISS_REPORT', 'CLEAR_ALERT', 'FORCE_CANCEL']),
   reason: z.string().min(5).max(500),
 });
+
+// ==========================================
+// PRE-SESSION RETURN CONFIRMATION SCHEMAS
+// ==========================================
+
+export const ProposeReturnSkillSchema = z.object({
+  skillName: z.string().min(1, 'Skill name is required').max(50).trim(),
+  notes: z.string().max(300).optional(),
+});
+
+export const RespondReturnSkillSchema = z.object({
+  action: z.enum(['ACCEPT_SKILL', 'OFFER_CREDITS', 'PROPOSE_ALTERNATIVE', 'DECLINE']),
+  alternativeSkillName: z.string().max(50).trim().optional(),
+  notes: z.string().max(300).optional(),
+});
+

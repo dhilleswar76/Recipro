@@ -144,6 +144,33 @@ export function initDatabase(db: Database.Database) {
       FOREIGN KEY (learner_id) REFERENCES users(id)
     );
 
+    -- 7b. Pre-Session Skill Return Exchange Agreements
+    CREATE TABLE IF NOT EXISTS session_exchange_agreements (
+      id TEXT PRIMARY KEY,
+      session_id TEXT UNIQUE NOT NULL,
+      mentor_id TEXT NOT NULL,
+      learner_id TEXT NOT NULL,
+      taught_skill_id TEXT NOT NULL,
+      requested_return_skill_id TEXT,
+      requested_return_skill_name TEXT NOT NULL,
+      return_type TEXT NOT NULL DEFAULT 'SKILL', -- 'SKILL', 'CREDITS'
+      credit_amount INTEGER NOT NULL DEFAULT 1,
+      status TEXT NOT NULL DEFAULT 'PROPOSED', -- 'PENDING', 'PROPOSED', 'ACCEPTED', 'REJECTED', 'CHANGED', 'EXPIRED', 'CANCELLED'
+      proposal_count INTEGER NOT NULL DEFAULT 1,
+      proposed_by TEXT NOT NULL,
+      accepted_by TEXT,
+      notes TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      accepted_at DATETIME,
+      expires_at DATETIME,
+      FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
+      FOREIGN KEY (mentor_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (learner_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (taught_skill_id) REFERENCES skills(id),
+      FOREIGN KEY (requested_return_skill_id) REFERENCES skills(id)
+    );
+
     -- 8. Skill Credits Ledger
     CREATE TABLE IF NOT EXISTS skill_credit_accounts (
       id TEXT PRIMARY KEY,
@@ -515,6 +542,9 @@ export function initDatabase(db: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_skill_subs_user_skill ON skill_subscriptions(user_id, skill_id);
     CREATE INDEX IF NOT EXISTS idx_study_roadmaps_user ON study_roadmaps(user_id);
     CREATE INDEX IF NOT EXISTS idx_roadmap_stages_roadmap ON roadmap_stages(roadmap_id);
+    CREATE INDEX IF NOT EXISTS idx_exchange_session ON session_exchange_agreements(session_id);
+    CREATE INDEX IF NOT EXISTS idx_exchange_mentor ON session_exchange_agreements(mentor_id);
+    CREATE INDEX IF NOT EXISTS idx_exchange_learner ON session_exchange_agreements(learner_id);
   `);
 
   // Safe runtime column migrations for existing DB

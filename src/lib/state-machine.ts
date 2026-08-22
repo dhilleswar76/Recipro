@@ -279,6 +279,375 @@ export function checkAndAwardCredentials(userId: string, skillId: string): void 
   }
 }
 
+export const CREDIT_RATE_PER_HOUR = 1;
+
+export function calculateRequiredCredits(durationHours: number = 1.0): number {
+  return Math.max(1, Math.ceil((durationHours || 1.0) * CREDIT_RATE_PER_HOUR));
+}
+
+/**
+ * Get or query exchange agreement for a session
+ */
+export function getExchangeAgreement(sessionId: string) {
+  const db = getDb();
+  return db.prepare(`
+    SELECT sea.*, 
+           sk_taught.name as taught_skill_name,
+           sk_return.name as return_skill_catalog_name,
+           mp.display_name as mentor_name,
+           lp.display_name as learner_name
+    FROM session_exchange_agreements sea
+    JOIN skills sk_taught ON sea.taught_skill_id = sk_taught.id
+    LEFT JOIN skills sk_return ON sea.requested_return_skill_id = sk_return.id
+    JOIN profiles mp ON sea.mentor_id = mp.user_id
+    JOIN profiles lp ON sea.learner_id = lp.user_id
+    WHERE sea.session_id = ?
+  `).get(sessionId) as any;
+}
+
+/**
+ * Propose Return Skill by Mentor (or counter-propose by Learner)
+ */
+export function proposeReturnSkill(params: {
+  sessionId: string;
+  actorUserId: string;
+  skillName: string;
+  notes?: string;
+}): { success: boolean; agreement?: any; message: string } {
+  const db = getDb();
+  const { sessionId, actorUserId, skillName, notes } = params;
+
+  if (!skillName || !skillName.trim()) {
+    return { success: false, message: 'Return skill name is required' };
+  }
+
+  const session = db.prepare(`
+    SELECT s.*, sk.name as skill_name FROM sessions s JOIN skills sk ON s.skill_id = sk.id WHERE s.id = ?
+  `).get(sessionId) as any;
+
+  if (!session) {
+    return { success: false, message: 'Session not found' };
+  }
+
+  const isTeacher = session.teacher_id === actorUserId;
+  const isLearner = session.learner_id === actorUserId;
+
+  if (!isTeacher && !isLearner) {
+    return { success: false, message: 'Unauthorized: You are not a participant in this session' };
+  }
+
+  // Normalize / find skill in catalog (exact or substring match)
+  const cleanName = skillName.trim();
+  let returnSkill = db.prepare(`
+    SELECT id, name FROM skills 
+    WHERE LOWER(name) = LOWER(?) OR LOWER(name) LIKE ? OR ? LIKE ('%' || LOWER(name) || '%')
+    ORDER BY CASE WHEN LOWER(name) = LOWER(?) THEN 0 ELSE 1 END
+    LIMIT 1
+  `).get(cleanName, `%${cleanName.toLowerCase()}%`, cleanName.toLowerCase(), cleanName) as any;
+
+  if (!returnSkill) {
+    const newSkillId = `skill-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    db.prepare(`
+      INSERT INTO skills (id, name, category, description, is_verified)
+      VALUES (?, ?, 'General', ?, 1)
+    `).run(newSkillId, cleanName, `Peer requested skill: ${cleanName}`);
+    returnSkill = { id: newSkillId, name: cleanName };
+  }
+
+  const creditAmount = calculateRequiredCredits(session.duration_hours);
+  const existing = db.prepare(`SELECT * FROM session_exchange_agreements WHERE session_id = ?`).get(sessionId) as any;
+
+  const resultAgreement = db.transaction(() => {
+    let agreementId: string;
+    let newStatus: string;
+    let newProposalCount: number;
+
+    if (existing) {
+      if (existing.proposal_count >= 5) {
+        throw new Error('Maximum negotiation limit reached for this session.');
+      }
+      agreementId = existing.id;
+      newStatus = isTeacher ? 'PROPOSED' : 'CHANGED';
+      newProposalCount = existing.proposal_count + 1;
+
+      db.prepare(`
+        UPDATE session_exchange_agreements
+        SET requested_return_skill_id = ?,
+            requested_return_skill_name = ?,
+            credit_amount = ?,
+            status = ?,
+            proposal_count = ?,
+            proposed_by = ?,
+            notes = ?,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(
+        returnSkill.id,
+        returnSkill.name,
+        creditAmount,
+        newStatus,
+        newProposalCount,
+        actorUserId,
+        notes || '',
+        agreementId
+      );
+
+      db.prepare(`
+        INSERT INTO audit_logs (id, actor_id, action, target_type, target_id, previous_state, new_state)
+        VALUES (?, ?, ?, 'EXCHANGE_AGREEMENT', ?, ?, ?)
+      `).run(`audit-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`, actorUserId, isTeacher ? 'RETURN_SKILL_PROPOSED' : 'RETURN_SKILL_CHANGED', agreementId, existing.status, newStatus);
+    } else {
+      agreementId = `sea-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+      newStatus = 'PROPOSED';
+      newProposalCount = 1;
+
+      db.prepare(`
+        INSERT INTO session_exchange_agreements (
+          id, session_id, mentor_id, learner_id, taught_skill_id, requested_return_skill_id, requested_return_skill_name, return_type, credit_amount, status, proposal_count, proposed_by, notes
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'SKILL', ?, 'PROPOSED', 1, ?, ?)
+      `).run(
+        agreementId,
+        sessionId,
+        session.teacher_id,
+        session.learner_id,
+        session.skill_id,
+        returnSkill.id,
+        returnSkill.name,
+        creditAmount,
+        actorUserId,
+        notes || ''
+      );
+
+      db.prepare(`
+        INSERT INTO audit_logs (id, actor_id, action, target_type, target_id, previous_state, new_state)
+        VALUES (?, ?, 'RETURN_SKILL_PROPOSED', 'EXCHANGE_AGREEMENT', ?, 'NONE', 'PROPOSED')
+      `).run(`audit-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`, actorUserId, agreementId);
+    }
+
+    // Send in-app notification to the counterparty
+    const targetUserId = isTeacher ? session.learner_id : session.teacher_id;
+    const actorProfile = db.prepare(`SELECT display_name FROM profiles WHERE user_id = ?`).get(actorUserId) as any;
+    const actorName = actorProfile?.display_name || 'Your peer';
+
+    db.prepare(`
+      INSERT INTO notifications (id, user_id, title, message, type, link)
+      VALUES (?, ?, 'SkillSwap Return Request', ?, 'RETURN_SKILL_REQUESTED', '/sessions')
+    `).run(
+      `notif-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      targetUserId,
+      `${actorName} requested "${returnSkill.name}" in return for your upcoming ${session.skill_name} session.`
+    );
+
+    return db.prepare(`SELECT * FROM session_exchange_agreements WHERE id = ?`).get(agreementId);
+  })();
+
+  return {
+    success: true,
+    agreement: resultAgreement,
+    message: `Return skill "${returnSkill.name}" proposed successfully.`,
+  };
+}
+
+/**
+ * Respond to Pre-Session Return Proposal
+ */
+export function respondToReturnProposal(params: {
+  sessionId: string;
+  actorUserId: string;
+  action: 'ACCEPT_SKILL' | 'OFFER_CREDITS' | 'PROPOSE_ALTERNATIVE' | 'DECLINE';
+  alternativeSkillName?: string;
+  notes?: string;
+}): { success: boolean; agreement?: any; message: string } {
+  const db = getDb();
+  const { sessionId, actorUserId, action, alternativeSkillName, notes } = params;
+
+  const session = db.prepare(`
+    SELECT s.*, sk.name as skill_name FROM sessions s JOIN skills sk ON s.skill_id = sk.id WHERE s.id = ?
+  `).get(sessionId) as any;
+
+  if (!session) {
+    return { success: false, message: 'Session not found' };
+  }
+
+  const agreement = db.prepare(`SELECT * FROM session_exchange_agreements WHERE session_id = ?`).get(sessionId) as any;
+  if (!agreement) {
+    return { success: false, message: 'No exchange proposal exists for this session' };
+  }
+
+  const isTeacher = session.teacher_id === actorUserId;
+  const isLearner = session.learner_id === actorUserId;
+
+  if (!isTeacher && !isLearner) {
+    return { success: false, message: 'Unauthorized: You are not a participant in this session' };
+  }
+
+  const actorProfile = db.prepare(`SELECT display_name FROM profiles WHERE user_id = ?`).get(actorUserId) as any;
+  const actorName = actorProfile?.display_name || 'Your peer';
+  const targetUserId = isLearner ? session.teacher_id : session.learner_id;
+
+  if (action === 'ACCEPT_SKILL') {
+    // Validate server-side: Does the return skill provider (the learner) actually have this verified teaching skill?
+    const reqName = agreement.requested_return_skill_name.toLowerCase();
+    const skillProviderId = session.learner_id;
+    const verifiedSkill = db.prepare(`
+      SELECT us.* FROM user_skills us
+      JOIN skills sk ON us.skill_id = sk.id
+      WHERE us.user_id = ? 
+        AND (
+          us.skill_id = ? 
+          OR LOWER(sk.name) = LOWER(?) 
+          OR LOWER(sk.name) LIKE ? 
+          OR ? LIKE ('%' || LOWER(sk.name) || '%')
+        )
+        AND us.verification_status IN ('PEER_VERIFIED', 'PLATFORM_VERIFIED', 'ASSESSMENT_VERIFIED', 'VERIFIED')
+    `).get(
+      skillProviderId, 
+      agreement.requested_return_skill_id, 
+      agreement.requested_return_skill_name,
+      `%${reqName}%`,
+      reqName
+    ) as any;
+
+    if (!verifiedSkill) {
+      return {
+        success: false,
+        message: `Learner does not have a verified teaching skill for "${agreement.requested_return_skill_name}". Please take the skill verification assessment first or offer Skill Credits.`,
+      };
+    }
+
+    db.transaction(() => {
+      db.prepare(`
+        UPDATE session_exchange_agreements
+        SET return_type = 'SKILL',
+            status = 'ACCEPTED',
+            accepted_by = ?,
+            accepted_at = CURRENT_TIMESTAMP,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(actorUserId, agreement.id);
+
+      db.prepare(`UPDATE sessions SET status = 'SCHEDULED', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(sessionId);
+
+      db.prepare(`
+        INSERT INTO audit_logs (id, actor_id, action, target_type, target_id, previous_state, new_state)
+        VALUES (?, ?, 'RETURN_SKILL_ACCEPTED', 'EXCHANGE_AGREEMENT', ?, ?, 'ACCEPTED')
+      `).run(`audit-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`, actorUserId, agreement.id, agreement.status);
+
+      db.prepare(`
+        INSERT INTO notifications (id, user_id, title, message, type, link)
+        VALUES (?, ?, 'Return Skill Confirmed ✓', ?, 'RETURN_SKILL_ACCEPTED', '/sessions')
+      `).run(
+        `notif-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+        targetUserId,
+        `${actorName} confirmed they will teach "${agreement.requested_return_skill_name}" in return. Exchange is confirmed!`
+      );
+    })();
+
+    return {
+      success: true,
+      message: `Return skill exchange confirmed: ${session.skill_name} ↔ ${agreement.requested_return_skill_name}`,
+    };
+  }
+
+  if (action === 'OFFER_CREDITS') {
+    const requiredCredits = agreement.credit_amount || calculateRequiredCredits(session.duration_hours);
+    const account = db.prepare(`SELECT balance, escrow_balance FROM skill_credit_accounts WHERE user_id = ?`).get(actorUserId) as any;
+
+    if (!account || account.balance < requiredCredits) {
+      return {
+        success: false,
+        message: `Insufficient Skill Credits. Required: ${requiredCredits}, Available: ${account?.balance || 0}.`,
+      };
+    }
+
+    const idempotencyKey = `escrow-exchange-${sessionId}-${Date.now()}`;
+    const escrowRes = reserveEscrowCredits(actorUserId, requiredCredits, sessionId, idempotencyKey);
+    if (!escrowRes.success) {
+      return { success: false, message: escrowRes.message };
+    }
+
+    db.transaction(() => {
+      db.prepare(`
+        UPDATE session_exchange_agreements
+        SET return_type = 'CREDITS',
+            credit_amount = ?,
+            status = 'ACCEPTED',
+            accepted_by = ?,
+            accepted_at = CURRENT_TIMESTAMP,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(requiredCredits, actorUserId, agreement.id);
+
+      db.prepare(`
+        UPDATE sessions SET credits_amount = ?, status = 'SCHEDULED', updated_at = CURRENT_TIMESTAMP WHERE id = ?
+      `).run(requiredCredits, sessionId);
+
+      db.prepare(`
+        INSERT INTO audit_logs (id, actor_id, action, target_type, target_id, previous_state, new_state)
+        VALUES (?, ?, 'CREDIT_RESERVED', 'EXCHANGE_AGREEMENT', ?, ?, 'ACCEPTED')
+      `).run(`audit-${Date.now()}`, actorUserId, agreement.id, agreement.status);
+
+      db.prepare(`
+        INSERT INTO notifications (id, user_id, title, message, type, link)
+        VALUES (?, ?, 'Credit Return Confirmed ✓', ?, 'RETURN_CREDIT_OFFERED', '/sessions')
+      `).run(
+        `notif-${Date.now()}`,
+        targetUserId,
+        `${actorName} offered ${requiredCredits} Skill Credit(s) in return. Credits are safely reserved in escrow.`
+      );
+    })();
+
+    return {
+      success: true,
+      message: `Credit exchange confirmed: ${session.skill_name} ↔ ${requiredCredits} Skill Credit(s) reserved.`,
+    };
+  }
+
+  if (action === 'PROPOSE_ALTERNATIVE') {
+    if (!alternativeSkillName || !alternativeSkillName.trim()) {
+      return { success: false, message: 'Please specify the alternative skill you can teach.' };
+    }
+    return proposeReturnSkill({
+      sessionId,
+      actorUserId,
+      skillName: alternativeSkillName,
+      notes: notes || 'Counter-proposal from peer',
+    });
+  }
+
+  if (action === 'DECLINE') {
+    db.transaction(() => {
+      db.prepare(`
+        UPDATE session_exchange_agreements
+        SET status = 'REJECTED',
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(agreement.id);
+
+      db.prepare(`
+        INSERT INTO audit_logs (id, actor_id, action, target_type, target_id, previous_state, new_state)
+        VALUES (?, ?, 'RETURN_SKILL_DECLINED', 'EXCHANGE_AGREEMENT', ?, ?, 'REJECTED')
+      `).run(`audit-${Date.now()}`, actorUserId, agreement.id, agreement.status);
+
+      db.prepare(`
+        INSERT INTO notifications (id, user_id, title, message, type, link)
+        VALUES (?, ?, 'Return Skill Declined', ?, 'RETURN_SKILL_DECLINED', '/sessions')
+      `).run(
+        `notif-${Date.now()}`,
+        targetUserId,
+        `${actorName} declined the return requirement for your upcoming session.`
+      );
+    })();
+
+    return {
+      success: true,
+      message: 'Return proposal declined.',
+    };
+  }
+
+  return { success: false, message: 'Unknown action' };
+}
+
 /**
  * Main State Machine Transition Handler
  */
@@ -337,7 +706,12 @@ export function transitionSessionState(
 
   // Handle Specific Transition Logic
   if (targetState === 'CANCELLED') {
+    // Release any escrow credits and cancel exchange agreement
     refundEscrowCredits(session.learner_id, session.credits_amount, session.id, metadata?.reason || 'Cancelled');
+    db.prepare(`
+      UPDATE session_exchange_agreements SET status = 'CANCELLED', updated_at = CURRENT_TIMESTAMP WHERE session_id = ?
+    `).run(sessionId);
+
     db.prepare(`
       UPDATE sessions SET status = 'CANCELLED', cancellation_reason = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
     `).run(metadata?.reason || 'Cancelled', sessionId);
@@ -360,6 +734,21 @@ export function transitionSessionState(
   }
 
   if (targetState === 'IN_PROGRESS') {
+    // Session Start Lock: Validate that pre-session return confirmation is established and ACCEPTED
+    const agreement = db.prepare(`
+      SELECT * FROM session_exchange_agreements WHERE session_id = ?
+    `).get(sessionId) as any;
+
+    if (!agreement || agreement.status !== 'ACCEPTED') {
+      return {
+        success: false,
+        previousState: currentState,
+        newState: currentState,
+        sessionId,
+        message: 'Pre-session exchange confirmation required. The mentor and learner must confirm the return skill or credit terms before starting.',
+      };
+    }
+
     db.prepare(`UPDATE sessions SET status = 'IN_PROGRESS', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(sessionId);
     return { success: true, previousState: currentState, newState: 'IN_PROGRESS', sessionId, message: 'Session is now live in progress' };
   }

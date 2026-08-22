@@ -15,7 +15,13 @@ import {
   X, 
   ShieldAlert, 
   ArrowRight,
-  ShieldCheck
+  ShieldCheck,
+  RefreshCw,
+  Sparkles,
+  MessageSquare,
+  Lock,
+  Check,
+  HelpCircle
 } from 'lucide-react';
 
 export default function SessionsPage() {
@@ -73,6 +79,8 @@ export default function SessionsPage() {
     setExchangeError(null);
     setProposeSkillName('');
     setAlternativeSkillName('');
+    setProposeNotes('');
+    
     try {
       const res = await fetch(`/api/sessions/${session.id}/exchange`);
       if (res.ok) {
@@ -81,9 +89,13 @@ export default function SessionsPage() {
         if (data.agreement?.requested_return_skill_name) {
           setProposeSkillName(data.agreement.requested_return_skill_name);
         }
+      } else {
+        const errData = await res.json();
+        setExchangeError(errData.error || 'Failed to load exchange details');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to fetch exchange details:', err);
+      setExchangeError(err.message || 'Unable to load exchange information. Please retry.');
     } finally {
       setExchangeLoading(false);
     }
@@ -97,7 +109,7 @@ export default function SessionsPage() {
     setExchangeError(null);
 
     try {
-      const res = await fetch(`/api/sessions/${exchangeModalSession.id}/exchange/propose`, {
+      const res = await fetch(`/api/sessions/${exchangeModalSession.id}/return-skill`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -107,14 +119,14 @@ export default function SessionsPage() {
       });
 
       const data = await res.json();
-      if (res.ok) {
+      if (res.ok && data.success) {
         await fetchSessions();
         await openExchangeModal(exchangeModalSession);
       } else {
-        setExchangeError(data.error || 'Failed to propose return skill');
+        setExchangeError(data.error || 'Unable to save the return skill.');
       }
     } catch (err: any) {
-      setExchangeError(err.message || 'Failed to send return proposal');
+      setExchangeError(err.message || 'Unable to save the return skill. Please retry.');
     } finally {
       setExchangeSubmitting(false);
     }
@@ -127,7 +139,14 @@ export default function SessionsPage() {
     setExchangeError(null);
 
     try {
-      const res = await fetch(`/api/sessions/${exchangeModalSession.id}/exchange/respond`, {
+      let endpoint = `/api/sessions/${exchangeModalSession.id}/exchange/respond`;
+      if (action === 'ACCEPT_SKILL') {
+        endpoint = `/api/sessions/${exchangeModalSession.id}/return-skill/accept`;
+      } else if (action === 'DECLINE') {
+        endpoint = `/api/sessions/${exchangeModalSession.id}/return-skill/reject`;
+      }
+
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -137,15 +156,15 @@ export default function SessionsPage() {
       });
 
       const data = await res.json();
-      if (res.ok) {
+      if (res.ok && data.success) {
         await fetchSessions();
         await refreshUser();
-        setExchangeModalSession(null);
+        await openExchangeModal(exchangeModalSession);
       } else {
-        setExchangeError(data.error || 'Action failed');
+        setExchangeError(data.error || 'Your response could not be saved.');
       }
     } catch (err: any) {
-      setExchangeError(err.message || 'Failed to submit response');
+      setExchangeError(err.message || 'Your response could not be saved. Please retry.');
     } finally {
       setExchangeSubmitting(false);
     }
@@ -188,10 +207,10 @@ export default function SessionsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sessionId: ratingSession.id,
-          score: Number(ratingScore),
+          score: ratingScore,
+          punctualityScore,
+          clarityScore,
           review: reviewText,
-          punctualityScore: Number(punctualityScore),
-          clarityScore: Number(clarityScore),
         }),
       });
 
@@ -205,7 +224,7 @@ export default function SessionsPage() {
         alert(data.error || 'Failed to submit rating');
       }
     } catch (err) {
-      console.error('Rating submit error:', err);
+      console.error('Rating error:', err);
     } finally {
       setRatingSubmitting(false);
     }
@@ -218,338 +237,351 @@ export default function SessionsPage() {
     setDisputeSubmitting(true);
 
     try {
-      // 1. Transition session state to DISPUTED
-      await fetch(`/api/sessions/${disputeSession.id}/action`, {
+      const res = await fetch('/api/disputes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'DISPUTE',
-          idempotencyKey: `disp-${disputeSession.id}-${Date.now()}`,
-          reason: disputeDetails,
-        }),
-      });
-
-      // 2. Record official report in moderation queue
-      const reportedId = disputeSession.teacher_id === user?.id ? disputeSession.learner_id : disputeSession.teacher_id;
-      await fetch('/api/reports', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          reportedId,
           sessionId: disputeSession.id,
           reason: disputeReason,
           details: disputeDetails,
         }),
       });
 
-      setDisputeSession(null);
-      setDisputeDetails('');
-      await fetchSessions();
-      await refreshUser();
+      if (res.ok) {
+        setDisputeSession(null);
+        setDisputeDetails('');
+        await fetchSessions();
+      } else {
+        const data = await res.json();
+        alert(data.error || 'Failed to open dispute');
+      }
     } catch (err) {
-      console.error('Dispute submit error:', err);
+      console.error('Dispute error:', err);
     } finally {
       setDisputeSubmitting(false);
     }
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-4 lg:px-8 py-8 space-y-8">
+    <div className="max-w-6xl mx-auto px-4 py-8 space-y-8">
       
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-display font-extrabold text-white">
-            Session &amp; Escrow Manager
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-brand-500/10 border border-brand-500/30 text-brand-400 text-xs font-semibold mb-2">
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Campus Skill Exchange Network</span>
+          </div>
+          <h1 className="text-3xl font-display font-extrabold text-white tracking-tight">
+            My Learning &amp; Teaching Sessions
           </h1>
-          <p className="text-xs sm:text-sm text-slate-400 mt-1">
-            Track your scheduled learning sessions, live rooms, and escrow credit settlements.
+          <p className="text-xs text-slate-400 mt-1">
+            Manage upcoming peer sessions, set return skill requirements, and enter live video classrooms.
           </p>
         </div>
 
         <Link
           href="/explore"
-          className="px-4 py-2 rounded-xl bg-brand-500 hover:bg-brand-400 text-dark-bg font-bold text-xs shadow-glow-brand transition-all self-start sm:self-auto flex items-center gap-1.5"
+          className="self-start md:self-auto py-2 px-4 rounded-xl bg-brand-500 hover:bg-brand-400 text-dark-bg font-bold text-xs shadow-glow-brand transition-colors flex items-center gap-1.5"
         >
-          Book Another Session <ArrowRight className="w-3.5 h-3.5" />
+          <span>Find New Skill Peer</span>
+          <ArrowRight className="w-4 h-4" />
         </Link>
       </div>
 
-      {/* Escrow Rule Banner */}
-      <div className="glass-panel p-4 rounded-2xl border border-slate-800 flex items-center justify-between gap-4 text-xs">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-brand-500/20 text-brand-400 flex items-center justify-center font-bold">
-            <Coins className="w-5 h-5" />
-          </div>
-          <div>
-            <span className="font-bold text-white">Automated Escrow Protection</span>
-            <p className="text-slate-400 text-[11px]">1 Skill Credit reserved upon request &rarr; released to mentor upon double completion confirmation.</p>
-          </div>
-        </div>
-        <Link href="/wallet" className="text-brand-400 font-semibold hover:underline text-[11px] whitespace-nowrap">
-          View On-Chain Ledger &rarr;
-        </Link>
-      </div>
-
-      {/* Sessions Feed */}
+      {/* Sessions Content */}
       {loading ? (
-        <div className="py-20 text-center text-xs text-slate-400">
-          Loading active and historical campus sessions...
+        <div className="flex justify-center py-20">
+          <div className="w-8 h-8 border-2 border-brand-400 border-t-transparent rounded-full animate-spin" />
         </div>
       ) : sessions.length === 0 ? (
         <div className="glass-panel p-12 rounded-3xl border border-slate-800 text-center space-y-4">
-          <Calendar className="w-12 h-12 text-slate-600 mx-auto" />
-          <h3 className="text-base font-bold text-white">No Sessions Scheduled Yet</h3>
-          <p className="text-xs text-slate-400 max-w-md mx-auto">
-            Find a peer mentor on the Explore page or add skills to your profile so other students can request sessions from you!
-          </p>
+          <div className="w-16 h-16 rounded-2xl bg-slate-900 border border-slate-800 text-slate-500 flex items-center justify-center mx-auto">
+            <Calendar className="w-8 h-8" />
+          </div>
+          <div className="space-y-1">
+            <h3 className="text-lg font-bold text-white">No Sessions Scheduled</h3>
+            <p className="text-xs text-slate-400 max-w-sm mx-auto">
+              You don't have any active learning or teaching sessions. Explore skills or respond to learner requests to get started!
+            </p>
+          </div>
           <Link
             href="/explore"
-            className="inline-flex px-5 py-2.5 rounded-xl bg-brand-500 text-dark-bg font-bold text-xs shadow-glow-brand"
+            className="inline-block py-2.5 px-6 rounded-xl bg-brand-500 hover:bg-brand-400 text-dark-bg font-extrabold text-xs shadow-glow-brand transition-all"
           >
-            Explore Mentors Now
+            Explore Campus Mentors
           </Link>
         </div>
       ) : (
         <div className="space-y-4">
           {sessions.map((sess) => {
-            const isTeacher = sess.teacher_id === user?.id;
+            const isTeacher = (sess.teacher_id === user?.id);
             const counterpartyName = isTeacher ? sess.learner_name : sess.teacher_name;
             const counterpartyCollege = isTeacher ? sess.learner_college : sess.teacher_college;
-            const roleBadge = isTeacher ? 'Teaching Mentor' : 'Learner';
+            const isDirectExchange = (sess.agreement_return_type === 'SKILL' || !sess.agreement_return_type);
+            const isAgreementAccepted = sess.agreement_status === 'ACCEPTED';
+            const isPendingAgreement = !isAgreementAccepted && sess.status !== 'CANCELLED' && sess.status !== 'DISPUTED';
 
             return (
-              <div key={sess.id} className="glass-panel p-5 rounded-2xl border border-slate-800 space-y-4 glass-panel-hover">
+              <div 
+                key={sess.id}
+                className={`glass-panel p-6 rounded-3xl border transition-all space-y-4 ${
+                  sess.status === 'COMPLETED' || sess.status === 'CREDIT_SETTLED'
+                    ? 'border-slate-800/80 bg-slate-950/40 opacity-90'
+                    : sess.status === 'CANCELLED'
+                    ? 'border-slate-800/50 bg-slate-950/20 opacity-60'
+                    : sess.status === 'DISPUTED'
+                    ? 'border-rose-500/40 bg-rose-950/10'
+                    : isAgreementAccepted
+                    ? 'border-brand-500/40 bg-slate-900/60 shadow-lg shadow-brand-500/5'
+                    : 'border-amber-500/30 bg-slate-900/60'
+                }`}
+              >
                 
-                {/* Session Header */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="flex items-start gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center font-bold text-xs text-white">
-                      {isTeacher ? 'TEACH' : 'LEARN'}
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-bold text-white text-base">{sess.title}</h3>
-                        <span className={`text-[10px] px-2 py-0.5 rounded font-bold border ${
-                          sess.status === 'CREDIT_SETTLED' ? 'bg-brand-500/20 text-brand-400 border-brand-500/30' :
-                          sess.status === 'IN_PROGRESS' ? 'bg-accent-500/20 text-accent-400 border-accent-500/30 animate-pulse' :
-                          sess.status === 'DISPUTED' ? 'bg-rose-500/20 text-rose-400 border-rose-500/30' :
-                          'bg-slate-800 text-slate-300 border-slate-700'
-                        }`}>
-                          {sess.status.replace('_', ' ')}
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-400 mt-0.5">
-                        With <strong className="text-slate-200">{counterpartyName}</strong> ({counterpartyCollege}) • <span className="text-brand-400">{roleBadge}</span>
-                      </p>
-                    </div>
+                {/* Top Row: Meta info & State Badge */}
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
+                  <div className="flex items-center gap-3">
+                    <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
+                      isTeacher 
+                        ? 'bg-sky-500/10 text-sky-400 border-sky-500/30' 
+                        : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                    }`}>
+                      {isTeacher ? '🧑‍🏫 You are Teaching' : '🎓 You are Learning'}
+                    </span>
+                    <span className="text-xs text-slate-400 flex items-center gap-1">
+                      <Clock className="w-3.5 h-3.5" />
+                      {sess.duration_hours || 1} Hour Session ({sess.mode})
+                    </span>
                   </div>
 
-                  {/* Scheduled Time & Credits */}
-                  <div className="flex items-center gap-4 text-xs self-start sm:self-auto">
-                    <div className="flex items-center gap-1.5 text-slate-300">
-                      <Clock className="w-3.5 h-3.5 text-slate-500" />
-                      <span>{new Date(sess.scheduled_start).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</span>
-                    </div>
-                    <div className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-brand-400 font-bold">
-                      {sess.credits_amount} Credit
-                    </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-extrabold tracking-wide border ${
+                      sess.status === 'COMPLETED' || sess.status === 'CREDIT_SETTLED' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' :
+                      sess.status === 'IN_PROGRESS' ? 'bg-accent-500/20 text-accent-300 border-accent-500/40 animate-pulse' :
+                      sess.status === 'CANCELLED' ? 'bg-slate-800 text-slate-500 border-slate-700' :
+                      sess.status === 'DISPUTED' ? 'bg-rose-500/20 text-rose-300 border-rose-500/40' :
+                      'bg-brand-500/20 text-brand-300 border-brand-500/40'
+                    }`}>
+                      {sess.status}
+                    </span>
                   </div>
                 </div>
 
-                {sess.notes && (
-                  <p className="text-xs text-slate-300 bg-slate-900/60 p-2.5 rounded-xl border border-slate-800/80">
-                    <span className="text-slate-400 font-medium">Session Goal: </span>{sess.notes}
-                  </p>
-                )}
+                {/* Main Session Content Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
+                  
+                  {/* Left Column: Skill & Time */}
+                  <div className="md:col-span-4 space-y-1">
+                    <h2 className="text-lg font-bold text-white group-hover:text-brand-300 transition-colors">
+                      {sess.title || `${sess.skill_name} Peer Session`}
+                    </h2>
+                    <div className="text-xs text-brand-400 font-semibold flex items-center gap-1.5">
+                      <span>Target Skill:</span>
+                      <span className="px-2 py-0.5 rounded bg-brand-500/10 border border-brand-500/20 font-bold">
+                        {sess.skill_name}
+                      </span>
+                    </div>
+                    <div className="text-xs text-slate-400 flex items-center gap-1 pt-1">
+                      <Calendar className="w-3.5 h-3.5 text-slate-500" />
+                      <span>{new Date(sess.scheduled_start).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} at {new Date(sess.scheduled_start).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</span>
+                    </div>
+                  </div>
 
-                {/* Pre-Session Skill Return Confirmation Banner */}
-                {(sess.status === 'ACCEPTED' || sess.status === 'SCHEDULED') && (
-                  <div className={`p-3.5 rounded-xl border text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
-                    sess.agreement_status === 'ACCEPTED'
-                      ? 'bg-brand-500/10 border-brand-500/30 text-brand-300'
-                      : sess.agreement_status === 'PROPOSED'
-                      ? 'bg-cyan-500/10 border-cyan-500/30 text-cyan-300'
-                      : sess.agreement_status === 'CHANGED'
-                      ? 'bg-amber-500/10 border-amber-500/30 text-amber-300'
-                      : 'bg-indigo-500/10 border-indigo-500/30 text-indigo-300'
-                  }`}>
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-7 h-7 rounded-lg bg-slate-900/80 flex items-center justify-center font-bold">
-                        {sess.agreement_status === 'ACCEPTED' ? '✓' : '🔄'}
+                  {/* Middle Column: Peer Details */}
+                  <div className="md:col-span-4 p-3 rounded-2xl bg-slate-950/60 border border-slate-800 space-y-1 text-xs">
+                    <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">
+                      {isTeacher ? 'Learner Peer' : 'Mentor Peer'}
+                    </span>
+                    <div className="font-bold text-white flex items-center justify-between">
+                      <span>{counterpartyName}</span>
+                      <span className="text-[11px] text-slate-400 font-normal">{counterpartyCollege}</span>
+                    </div>
+                    <div className="text-[11px] text-slate-400 flex items-center justify-between pt-1 border-t border-slate-900">
+                      <span>Settlement:</span>
+                      <span className="font-semibold text-brand-400">
+                        {isDirectExchange ? 'Direct Skill Exchange' : `${sess.credits_amount || 1} Skill Credit(s)`}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Right Column: Pre-Session Agreement Status */}
+                  <div className="md:col-span-4 p-3.5 rounded-2xl border bg-slate-950/80 space-y-2 text-xs flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Return Agreement:</span>
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${
+                          isAgreementAccepted ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' :
+                          sess.agreement_status === 'PROPOSED' ? 'bg-amber-500/20 text-amber-300 border-amber-500/40' :
+                          sess.agreement_status === 'REJECTED' ? 'bg-rose-500/20 text-rose-300 border-rose-500/40' :
+                          'bg-slate-800 text-slate-400 border-slate-700'
+                        }`}>
+                          {isAgreementAccepted ? '✓ Confirmed' :
+                           sess.agreement_status === 'PROPOSED' ? '⏳ Pending' :
+                           sess.agreement_status === 'REJECTED' ? '⚠ Rejected' :
+                           'Not Set'}
+                        </span>
                       </div>
-                      <div>
-                        <div className="font-bold text-white flex items-center gap-1.5">
-                          <span>Pre-Session Return Agreement:</span>
-                          <span className={`text-[10px] px-1.5 py-0.2 rounded font-semibold border ${
-                            sess.agreement_status === 'ACCEPTED' ? 'bg-brand-500/20 text-brand-400 border-brand-500/30' :
-                            'bg-slate-800 text-slate-300 border-slate-700'
-                          }`}>
-                            {sess.agreement_status || 'NOT_SPECIFIED'}
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-slate-300 mt-0.5">
-                          {sess.agreement_status === 'ACCEPTED' ? (
-                            <span>
-                              Exchange Confirmed: <strong className="text-white">{sess.skill_name}</strong> ↔{' '}
-                              <strong className="text-white">
-                                {sess.agreement_return_type === 'SKILL'
-                                  ? sess.agreement_return_skill
-                                  : `${sess.agreement_credit_amount || 1} Skill Credit(s)`}
-                              </strong>
-                            </span>
-                          ) : isTeacher ? (
-                            sess.agreement_status === 'PROPOSED' ? (
-                              <span>You requested <strong className="text-white">{sess.agreement_return_skill}</strong> in return. Waiting for learner to confirm.</span>
-                            ) : (
-                              <span>Before starting: Please specify what skill you would like to receive in return from {counterpartyName}.</span>
-                            )
+
+                      <div className="text-[11px] text-slate-300 mt-1.5">
+                        {isAgreementAccepted ? (
+                          <div className="space-y-0.5">
+                            <div>You learn: <strong className="text-white">{isTeacher ? sess.agreement_return_skill : sess.skill_name}</strong></div>
+                            <div>You teach: <strong className="text-white">{isTeacher ? sess.skill_name : sess.agreement_return_skill}</strong></div>
+                          </div>
+                        ) : sess.agreement_status === 'PROPOSED' ? (
+                          isTeacher ? (
+                            <span>Requested return: <strong className="text-amber-300">{sess.agreement_return_skill}</strong> (Waiting for learner)</span>
                           ) : (
-                            sess.agreement_status === 'PROPOSED' ? (
-                              <span>{sess.teacher_name} requested <strong className="text-white">{sess.agreement_return_skill}</strong> in return. Please confirm your return offer.</span>
-                            ) : (
-                              <span>Waiting for mentor to specify their return requirement.</span>
-                            )
-                          )}
-                        </p>
+                            <span>Mentor requested: <strong className="text-amber-300">{sess.agreement_return_skill}</strong> in return</span>
+                          )
+                        ) : sess.agreement_status === 'REJECTED' ? (
+                          <span className="text-rose-300">Return skill was rejected. Please specify another return skill.</span>
+                        ) : (
+                          isTeacher ? (
+                            <span className="text-amber-300">Set return skill before session starts.</span>
+                          ) : (
+                            <span className="text-slate-400">Waiting for mentor to set return skill.</span>
+                          )
+                        )}
                       </div>
                     </div>
 
-                    <button
-                      onClick={() => openExchangeModal(sess)}
-                      className={`px-3.5 py-1.5 rounded-xl font-bold text-xs shadow-sm transition-all whitespace-nowrap self-start sm:self-auto ${
-                        sess.agreement_status === 'ACCEPTED'
-                          ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700'
-                          : 'bg-brand-500 hover:bg-brand-400 text-dark-bg shadow-glow-brand'
-                      }`}
-                    >
-                      {sess.agreement_status === 'ACCEPTED' ? 'View Agreement' : isTeacher ? 'Set Return Skill' : 'Respond to Request'}
-                    </button>
+                    {sess.status !== 'CANCELLED' && sess.status !== 'COMPLETED' && sess.status !== 'CREDIT_SETTLED' && (
+                      <button
+                        onClick={() => openExchangeModal(sess)}
+                        className={`w-full py-1.5 px-3 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-1.5 ${
+                          isAgreementAccepted
+                            ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700'
+                            : 'bg-brand-500 hover:bg-brand-400 text-dark-bg shadow-glow-brand'
+                        }`}
+                      >
+                        {isAgreementAccepted 
+                          ? 'View Agreement Terms' 
+                          : isTeacher 
+                          ? (sess.agreement_status === 'REJECTED' ? 'Set Another Return Skill' : 'Set Return Skill') 
+                          : (sess.agreement_status === 'PROPOSED' ? 'Review & Confirm Agreement' : 'View Agreement')}
+                      </button>
+                    )}
                   </div>
-                )}
 
-                {/* State-Dependent Action Buttons */}
-                <div className="pt-2 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3">
+                </div>
+
+                {/* Bottom Row: Actions & Video Classroom Gate */}
+                <div className="pt-3 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-3">
                   
-                  {/* Left: State status indicators */}
+                  {/* Status Note / Explanation */}
                   <div className="text-[11px] text-slate-400 flex items-center gap-2">
                     {sess.status === 'REQUESTED' && <span>Awaiting mentor acceptance. Escrow locked.</span>}
                     {(sess.status === 'ACCEPTED' || sess.status === 'SCHEDULED') && (
-                      <span>
-                        {sess.agreement_status === 'ACCEPTED' ? (
-                          <span className="text-brand-400 font-medium flex items-center gap-1">
-                            <CheckCircle2 className="w-3.5 h-3.5" /> Exchange Terms Accepted. Ready to start!
-                          </span>
-                        ) : (
-                          <span className="text-amber-400 font-medium">
-                            ⚠️ Exchange terms unconfirmed. Session locked until confirmed.
-                          </span>
-                        )}
-                      </span>
+                      isAgreementAccepted ? (
+                        <span className="text-emerald-400 font-semibold flex items-center gap-1">
+                          <CheckCircle2 className="w-3.5 h-3.5" /> Exchange terms confirmed. Video classroom is unlocked!
+                        </span>
+                      ) : (
+                        <span className="text-amber-400 font-semibold flex items-center gap-1">
+                          <Lock className="w-3.5 h-3.5" /> Room Locked: Return skill agreement must be confirmed before entering.
+                        </span>
+                      )
                     )}
                     {sess.status === 'PENDING_CONFIRMATION' && (
-                      <span className="text-amber-300">
+                      <span className="text-amber-300 font-semibold">
                         {isTeacher 
-                          ? (sess.teacher_confirmed ? 'You confirmed. Waiting for learner confirmation.' : 'Learner has confirmed. Please confirm completion to settle credit!')
-                          : (sess.learner_confirmed ? 'You confirmed. Waiting for mentor confirmation.' : 'Mentor has confirmed. Please confirm completion to release escrow!')
-                        }
-                      </span>
-                    )}
-                    {sess.status === 'CREDIT_SETTLED' && (
-                      <span className="text-brand-400 flex items-center gap-1">
-                        <CheckCircle2 className="w-3.5 h-3.5" /> 1 Credit Settled to Mentor
-                      </span>
-                    )}
-                    {sess.status === 'DISPUTED' && (
-                      <span className="text-rose-400 flex items-center gap-1">
-                        <AlertTriangle className="w-3.5 h-3.5" /> Under Moderator Review (Credits Frozen)
+                          ? (sess.teacher_confirmed ? 'You confirmed completion. Waiting for learner.' : 'Please confirm completion to settle credit!')
+                          : (sess.learner_confirmed ? 'You confirmed completion. Waiting for mentor.' : 'Please confirm completion to release escrow!')}
                       </span>
                     )}
                   </div>
 
-                  {/* Right: Interactive Actions */}
+                  {/* Action Buttons */}
                   <div className="flex flex-wrap items-center gap-2">
                     
-                    {/* Teacher: Accept / Reject Request */}
+                    {/* Mentor Accept/Decline for REQUESTED status */}
                     {sess.status === 'REQUESTED' && isTeacher && (
                       <>
                         <button
                           onClick={() => handleSessionAction(sess.id, 'CANCEL')}
                           disabled={actionLoading === sess.id}
-                          className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-rose-300 font-semibold text-xs border border-slate-700"
+                          className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-rose-300 font-semibold text-xs border border-slate-700"
                         >
                           Decline Request
                         </button>
                         <button
                           onClick={() => handleSessionAction(sess.id, 'ACCEPT')}
                           disabled={actionLoading === sess.id}
-                          className="px-4 py-1.5 rounded-lg bg-brand-500 hover:bg-brand-400 text-dark-bg font-bold text-xs shadow-glow-brand"
+                          className="px-4 py-1.5 rounded-xl bg-brand-500 hover:bg-brand-400 text-dark-bg font-bold text-xs shadow-glow-brand"
                         >
                           Accept Session Request
                         </button>
                       </>
                     )}
 
-                    {/* Learner: Cancel Request before Accepted */}
+                    {/* Learner Cancel for REQUESTED status */}
                     {sess.status === 'REQUESTED' && !isTeacher && (
                       <button
                         onClick={() => handleSessionAction(sess.id, 'CANCEL')}
                         disabled={actionLoading === sess.id}
-                        className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs border border-slate-700"
+                        className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs border border-slate-700"
                       >
-                        Cancel Request &amp; Refund Escrow
+                        Cancel Request &amp; Refund
                       </button>
                     )}
 
-                    {/* Join Live Session Room: Locked until return agreement accepted */}
+                    {/* Video Classroom Access: Gate Enforced */}
                     {(sess.status === 'ACCEPTED' || sess.status === 'SCHEDULED' || sess.status === 'IN_PROGRESS' || sess.status === 'PENDING_CONFIRMATION') && (
-                      sess.agreement_status === 'ACCEPTED' || sess.status === 'IN_PROGRESS' || sess.status === 'PENDING_CONFIRMATION' ? (
+                      isAgreementAccepted || sess.status === 'IN_PROGRESS' || sess.status === 'PENDING_CONFIRMATION' ? (
                         <Link
                           href={`/live/${sess.id}`}
-                          className="px-4 py-1.5 rounded-lg bg-accent-500 hover:bg-accent-400 text-white font-bold text-xs shadow-glow-accent flex items-center gap-1.5"
+                          className="px-4 py-2 rounded-xl bg-accent-500 hover:bg-accent-400 text-white font-extrabold text-xs shadow-glow-accent flex items-center gap-1.5 transition-all"
                         >
-                          <Video className="w-3.5 h-3.5" /> Enter Live Peer Room
+                          <Video className="w-4 h-4" />
+                          <span>Join Video Session</span>
                         </Link>
                       ) : (
                         <button
                           onClick={() => openExchangeModal(sess)}
-                          className="px-4 py-1.5 rounded-lg bg-slate-800 text-slate-500 font-bold text-xs border border-slate-700 flex items-center gap-1.5 hover:border-slate-600"
-                          title="Confirm return exchange terms before entering"
+                          className="px-4 py-2 rounded-xl bg-slate-800 text-amber-300 hover:bg-slate-700 font-bold text-xs border border-amber-500/30 flex items-center gap-1.5 transition-all"
+                          title="Click to review and confirm return agreement"
                         >
-                          <Video className="w-3.5 h-3.5 text-slate-600" /> Room Locked (Confirm Return)
+                          <Lock className="w-3.5 h-3.5 text-amber-400" />
+                          <span>Review Agreement to Unlock</span>
                         </button>
                       )
                     )}
 
-                    {/* Confirm Completion */}
+                    {/* Completion Confirmation Buttons */}
                     {(sess.status === 'IN_PROGRESS' || sess.status === 'PENDING_CONFIRMATION') && (
                       <button
-                        onClick={() => handleSessionAction(sess.id, 'CONFIRM_COMPLETION')}
-                        disabled={actionLoading === sess.id}
-                        className="px-4 py-1.5 rounded-lg bg-brand-500 hover:bg-brand-400 text-dark-bg font-bold text-xs shadow-glow-brand"
+                        onClick={() => handleSessionAction(sess.id, 'CONFIRM')}
+                        disabled={actionLoading === sess.id || (isTeacher ? sess.teacher_confirmed : sess.learner_confirmed)}
+                        className={`px-3.5 py-1.5 rounded-xl font-bold text-xs transition-colors flex items-center gap-1.5 ${
+                          (isTeacher ? sess.teacher_confirmed : sess.learner_confirmed)
+                            ? 'bg-slate-800 text-emerald-400 border border-emerald-500/30 cursor-default'
+                            : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-glow-brand'
+                        }`}
                       >
-                        Confirm Session Complete
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span>{(isTeacher ? sess.teacher_confirmed : sess.learner_confirmed) ? 'Confirmed ✓' : 'Confirm Completion'}</span>
                       </button>
                     )}
 
-                    {/* Submit Rating if Settled and not yet rated */}
-                    {sess.status === 'CREDIT_SETTLED' && !sess.rating_id && (
+                    {/* Rate & Review Button */}
+                    {(sess.status === 'COMPLETED' || sess.status === 'CREDIT_SETTLED') && !sess.rating_id && (
                       <button
                         onClick={() => setRatingSession(sess)}
-                        className="px-3.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-dark-bg font-bold text-xs flex items-center gap-1"
+                        className="px-3.5 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-bold text-xs border border-amber-500/40 flex items-center gap-1.5 transition-colors"
                       >
-                        <Star className="w-3.5 h-3.5 fill-dark-bg" /> Leave Peer Review
+                        <Star className="w-3.5 h-3.5 fill-amber-400" />
+                        <span>Leave Peer Review</span>
                       </button>
                     )}
 
-                    {/* Flag Dispute if not resolved */}
-                    {sess.status !== 'DISPUTED' && sess.status !== 'CANCELLED' && (
+                    {/* Dispute Button */}
+                    {(sess.status === 'SCHEDULED' || sess.status === 'ACCEPTED' || sess.status === 'IN_PROGRESS' || sess.status === 'PENDING_CONFIRMATION') && (
                       <button
                         onClick={() => setDisputeSession(sess)}
-                        className="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-rose-400 text-xs border border-slate-800"
-                        title="Report an issue with this session"
+                        className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-rose-400 text-xs border border-slate-800 hover:border-rose-500/30 transition-colors"
                       >
-                        <ShieldAlert className="w-3.5 h-3.5" />
+                        Report Issue
                       </button>
                     )}
 
@@ -564,47 +596,61 @@ export default function SessionsPage() {
       )}
 
       {/* ============================================================ */}
-      {/* MODAL: PRE-SESSION SKILL RETURN CONFIRMATION */}
+      {/* MODAL: SET RETURN SKILL / EXCHANGE AGREEMENT */}
       {/* ============================================================ */}
       {exchangeModalSession && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="glass-panel w-full max-w-lg rounded-3xl border border-slate-700 shadow-2xl p-6 relative space-y-5 max-h-[90vh] overflow-y-auto">
-            <button
-              type="button"
-              onClick={() => setExchangeModalSession(null)}
-              className="absolute right-4 top-4 text-slate-400 hover:text-white"
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="glass-panel w-full max-w-xl rounded-3xl border border-slate-700 shadow-2xl p-6 sm:p-8 relative space-y-6 max-h-[90vh] overflow-y-auto">
+            
+            {/* Close Button */}
+            <button 
+              type="button" 
+              onClick={() => { setExchangeModalSession(null); setExchangeDetails(null); }} 
+              className="absolute right-5 top-5 p-1 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
 
             {/* Modal Header */}
-            <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-2xl bg-brand-500/20 text-brand-400 border border-brand-500/30 flex items-center justify-center font-bold text-lg">
-                🔄
+            <div className="space-y-1">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-brand-500/10 border border-brand-500/30 text-brand-400 text-xs font-semibold">
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Direct Skill Exchange Agreement</span>
               </div>
-              <div>
-                <h3 className="text-base font-bold text-white">Pre-Session SkillSwap Exchange</h3>
-                <p className="text-xs text-slate-400">
-                  {exchangeModalSession.title} • {exchangeModalSession.teacher_name} &amp; {exchangeModalSession.learner_name}
-                </p>
-              </div>
+              <h2 className="text-2xl font-display font-extrabold text-white">
+                {exchangeDetails?.userRoleInSession === 'MENTOR' 
+                  ? 'Set Return Skill Requirement' 
+                  : 'Confirm Skill Return Agreement'}
+              </h2>
+              <p className="text-xs text-slate-400">
+                Before this session can start, both peers must agree on what skill will be returned.
+              </p>
             </div>
 
             {exchangeError && (
-              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-                <span>{exchangeError}</span>
+              <div className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                  <span>{exchangeError}</span>
+                </div>
+                <button
+                  onClick={() => openExchangeModal(exchangeModalSession)}
+                  className="px-2.5 py-1 rounded-lg bg-rose-500/20 text-rose-200 text-[11px] font-bold hover:bg-rose-500/30"
+                >
+                  Retry
+                </button>
               </div>
             )}
 
             {exchangeLoading ? (
-              <div className="py-12 text-center text-xs text-slate-400">
-                Loading live exchange agreement terms...
+              <div className="py-16 text-center space-y-3">
+                <div className="w-8 h-8 border-2 border-brand-400 border-t-transparent rounded-full animate-spin mx-auto" />
+                <p className="text-xs text-slate-400">Loading live agreement details from campus ledger...</p>
               </div>
             ) : (
               <>
-                {/* Session Context Box */}
-                <div className="p-3.5 rounded-2xl bg-slate-950/70 border border-slate-800 space-y-2 text-xs">
+                {/* Session Context Summary Card */}
+                <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 space-y-2 text-xs">
                   <div className="flex items-center justify-between">
                     <span className="text-slate-400">Teaching Mentor:</span>
                     <strong className="text-white">{exchangeDetails?.session?.teacher_name}</strong>
@@ -616,188 +662,255 @@ export default function SessionsPage() {
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-slate-400">Session Duration:</span>
-                    <span className="text-slate-200">{exchangeDetails?.session?.duration_hours || 1} Hour(s)</span>
+                    <span className="text-slate-400">Learner Student:</span>
+                    <strong className="text-white">{exchangeDetails?.session?.learner_name}</strong>
                   </div>
                   <div className="flex items-center justify-between border-t border-slate-800/80 pt-2">
-                    <span className="text-slate-400">Credit Rate Policy:</span>
-                    <span className="text-brand-400 font-semibold">{exchangeDetails?.requiredCredits || 1} Skill Credit = 1 Hour</span>
+                    <span className="text-slate-400">Agreement Status:</span>
+                    <span className={`font-bold ${
+                      exchangeDetails?.agreement?.status === 'ACCEPTED' ? 'text-emerald-400' :
+                      exchangeDetails?.agreement?.status === 'PROPOSED' ? 'text-amber-400' :
+                      exchangeDetails?.agreement?.status === 'REJECTED' ? 'text-rose-400' :
+                      'text-slate-400'
+                    }`}>
+                      {exchangeDetails?.agreement?.status === 'ACCEPTED' ? '✓ Accepted & Ready to Start' :
+                       exchangeDetails?.agreement?.status === 'PROPOSED' ? '⏳ Pending Learner Confirmation' :
+                       exchangeDetails?.agreement?.status === 'REJECTED' ? '⚠ Rejected by Learner' :
+                       'Not Specified'}
+                    </span>
                   </div>
                 </div>
 
-                {/* VIEW A: MENTOR PROPOSAL FORM */}
+                {/* ============================================================ */}
+                {/* VIEW A: MENTOR RETURN SKILL FORM */}
+                {/* ============================================================ */}
                 {exchangeDetails?.userRoleInSession === 'MENTOR' && (
                   <form onSubmit={handleProposeReturnSkill} className="space-y-4">
-                    <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-3">
+                    <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-3">
                       <label className="block text-xs font-bold text-white">
-                        What skill would you like in return from {exchangeDetails?.session?.learner_name}?
+                        What skill will you ask in return from {exchangeDetails?.session?.learner_name}?
                       </label>
-                      <p className="text-[11px] text-slate-400">
-                        Type any skill (e.g. Solidity, Java, UI/UX, Rust, Calculus). The learner will be asked to confirm whether they can teach it or offer Skill Credits.
+                      <p className="text-[11px] text-slate-400 leading-relaxed">
+                        Select a skill you want to learn in exchange. The learner will be notified to explicitly accept or offer credits.
                       </p>
 
-                      <input
-                        type="text"
-                        required
-                        value={proposeSkillName}
-                        onChange={(e) => setProposeSkillName(e.target.value)}
-                        placeholder="e.g. Solidity, Java, UI/UX, Python..."
-                        className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-brand-500"
-                      />
+                      {/* Dropdown / Quick Select */}
+                      <div className="space-y-2">
+                        <select
+                          value={proposeSkillName}
+                          onChange={(e) => setProposeSkillName(e.target.value)}
+                          className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-brand-500"
+                        >
+                          <option value="">-- Choose from Campus Skills Catalog --</option>
+                          {(exchangeDetails?.allCatalogSkills || []).map((sk: any) => (
+                            <option key={sk.id} value={sk.name}>
+                              {sk.name} ({sk.category})
+                            </option>
+                          ))}
+                        </select>
 
-                      {/* Autocomplete Quick Chips */}
+                        <div className="text-[11px] text-slate-500 text-center">or type custom skill name:</div>
+
+                        <input
+                          type="text"
+                          required
+                          value={proposeSkillName}
+                          onChange={(e) => setProposeSkillName(e.target.value)}
+                          placeholder="e.g. UI/UX Design, Solidity, Python, Data Structures..."
+                          className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-brand-500"
+                        />
+                      </div>
+
+                      {/* Quick Chips */}
                       <div className="flex flex-wrap gap-1.5 pt-1">
-                        <span className="text-[10px] text-slate-500 self-center">Suggestions:</span>
-                        {['Solidity', 'Java', 'React', 'Python', 'Machine Learning', 'UI/UX', 'SQL', 'TypeScript'].map((s) => (
+                        <span className="text-[10px] text-slate-500 self-center">Popular:</span>
+                        {['UI/UX Design', 'Solidity', 'Python Programming', 'Machine Learning', 'Data Structures & Algorithms', 'React'].map((s) => (
                           <button
                             type="button"
                             key={s}
                             onClick={() => setProposeSkillName(s)}
-                            className="px-2 py-0.5 rounded-md bg-slate-800 hover:bg-slate-700 text-[10px] text-slate-300 border border-slate-700"
+                            className="px-2 py-0.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-[10px] text-slate-300 border border-slate-700 transition-colors"
                           >
                             {s}
                           </button>
                         ))}
                       </div>
+
+                      {/* Optional Notes */}
+                      <div className="pt-2">
+                        <label className="block text-[11px] font-semibold text-slate-400 mb-1">
+                          Notes / Topics to cover (Optional):
+                        </label>
+                        <input
+                          type="text"
+                          value={proposeNotes}
+                          onChange={(e) => setProposeNotes(e.target.value)}
+                          placeholder="e.g. Focus on Figma auto-layout and components"
+                          className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none"
+                        />
+                      </div>
                     </div>
 
-                    {exchangeDetails?.agreement?.status === 'ACCEPTED' ? (
+                    {exchangeDetails?.agreement?.status === 'ACCEPTED' && (
                       <div className="p-3 rounded-xl bg-brand-500/10 border border-brand-500/30 text-brand-300 text-xs">
-                        ✓ Exchange currently agreed: <strong>{exchangeDetails.agreement.taught_skill_name}</strong> ↔ <strong>{exchangeDetails.agreement.return_type === 'SKILL' ? exchangeDetails.agreement.requested_return_skill_name : `${exchangeDetails.agreement.credit_amount} Skill Credit(s)`}</strong>. Proposing a new skill will request re-confirmation from the learner.
+                        ✓ Currently confirmed exchange: <strong>{exchangeDetails.agreement.taught_skill_name}</strong> ↔ <strong>{exchangeDetails.agreement.requested_return_skill_name}</strong>. Proposing a new skill will require fresh confirmation from {exchangeDetails.session.learner_name}.
                       </div>
-                    ) : null}
+                    )}
 
-                    <button
-                      type="submit"
-                      disabled={exchangeSubmitting || !proposeSkillName.trim()}
-                      className="w-full py-2.5 rounded-xl bg-brand-500 hover:bg-brand-400 text-dark-bg font-bold text-xs shadow-glow-brand transition-all disabled:opacity-50"
-                    >
-                      {exchangeSubmitting ? 'Sending Request...' : 'Send Return Request to Learner'}
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setExchangeModalSession(null)}
+                        className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs border border-slate-700 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={exchangeSubmitting || !proposeSkillName.trim()}
+                        className="flex-2 py-2.5 px-6 rounded-xl bg-brand-500 hover:bg-brand-400 text-dark-bg font-extrabold text-xs shadow-glow-brand transition-all disabled:opacity-50 flex items-center justify-center gap-1.5"
+                      >
+                        <Check className="w-4 h-4" />
+                        <span>{exchangeSubmitting ? 'Saving...' : 'Save Return Skill'}</span>
+                      </button>
+                    </div>
                   </form>
                 )}
 
-                {/* VIEW B: LEARNER RESPONSE / CONFIRMATION PANEL */}
+                {/* ============================================================ */}
+                {/* VIEW B: LEARNER CONFIRMATION / ACCEPTANCE PANEL */}
+                {/* ============================================================ */}
                 {exchangeDetails?.userRoleInSession === 'LEARNER' && (
                   <div className="space-y-4">
-                    {exchangeDetails?.agreement ? (
-                      <div className="space-y-3">
-                        <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-2">
-                          <span className="text-[11px] uppercase tracking-wider text-slate-400 font-bold">Mentor's Requested Return:</span>
-                          <div className="text-sm font-extrabold text-white flex items-center gap-2">
-                            <span>⛓️ {exchangeDetails.agreement.requested_return_skill_name}</span>
+                    {exchangeDetails?.agreement?.status === 'ACCEPTED' ? (
+                      <div className="p-5 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 space-y-3 text-center">
+                        <div className="w-12 h-12 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto border border-emerald-500/30 shadow-glow-brand">
+                          <CheckCircle2 className="w-6 h-6" />
+                        </div>
+                        <h3 className="text-base font-extrabold text-white">Return Skill Confirmed!</h3>
+                        <p className="text-xs text-slate-300 max-w-sm mx-auto">
+                          You agreed to return <strong className="text-emerald-300">{exchangeDetails.agreement.requested_return_skill_name}</strong> to {exchangeDetails.session.teacher_name} for the <strong className="text-white">{exchangeDetails.session.skill_name}</strong> session.
+                        </p>
+                        <Link
+                          href={`/live/${exchangeDetails.session.id}`}
+                          className="inline-flex items-center gap-1.5 py-2.5 px-6 rounded-xl bg-accent-500 hover:bg-accent-400 text-white font-extrabold text-xs shadow-glow-accent transition-all"
+                        >
+                          <Video className="w-4 h-4" />
+                          <span>Enter Video Classroom</span>
+                        </Link>
+                      </div>
+                    ) : exchangeDetails?.agreement ? (
+                      <div className="space-y-4">
+                        
+                        {/* Summary of Proposal */}
+                        <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-2">
+                          <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                            Mentor's Return Request:
+                          </span>
+                          <div className="text-base font-extrabold text-white flex items-center gap-2">
+                            <span>🤝 {exchangeDetails.agreement.requested_return_skill_name}</span>
                           </div>
-                          <p className="text-[11px] text-slate-300">
-                            {exchangeDetails.session.teacher_name} will teach you <strong>{exchangeDetails.session.skill_name}</strong>. In exchange, they would like to learn <strong>{exchangeDetails.agreement.requested_return_skill_name}</strong>.
+                          <p className="text-xs text-slate-300">
+                            {exchangeDetails.session.teacher_name} will teach you <strong>{exchangeDetails.session.skill_name}</strong>. In exchange, you will teach <strong>{exchangeDetails.agreement.requested_return_skill_name}</strong>.
                           </p>
                         </div>
 
-                        {/* Option 1: Teach Requested Skill */}
-                        <div className="p-4 rounded-2xl border border-slate-800 bg-slate-950/60 space-y-2.5">
+                        {/* Option 1: Accept Exchange */}
+                        <div className="p-4 rounded-2xl border border-brand-500/30 bg-brand-500/5 space-y-2.5">
                           <div className="flex items-center justify-between">
-                            <h4 className="font-bold text-white text-xs">Option 1: Teach {exchangeDetails.agreement.requested_return_skill_name} in Return</h4>
-                            {exchangeDetails.learnerCanTeachRequestedSkill ? (
+                            <h4 className="font-bold text-white text-xs">Option 1: Agree to Teach {exchangeDetails.agreement.requested_return_skill_name}</h4>
+                            {exchangeDetails.learnerCanTeachRequestedSkill && (
                               <span className="text-[10px] px-2 py-0.5 rounded bg-brand-500/20 text-brand-400 font-bold border border-brand-500/30 flex items-center gap-1">
                                 <ShieldCheck className="w-3 h-3" /> Verified Skill
-                              </span>
-                            ) : (
-                              <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 font-bold border border-amber-500/30">
-                                Unverified
                               </span>
                             )}
                           </div>
 
-                          {exchangeDetails.learnerCanTeachRequestedSkill ? (
-                            <button
-                              onClick={() => handleRespondReturnProposal('ACCEPT_SKILL')}
-                              disabled={exchangeSubmitting}
-                              className="w-full py-2 rounded-xl bg-brand-500 hover:bg-brand-400 text-dark-bg font-bold text-xs shadow-glow-brand transition-all"
-                            >
-                              ✓ Yes, I Can Teach {exchangeDetails.agreement.requested_return_skill_name}
-                            </button>
-                          ) : (
-                            <div className="space-y-2">
-                              <p className="text-[11px] text-slate-400">
-                                You do not currently have a verified teaching skill for <strong>{exchangeDetails.agreement.requested_return_skill_name}</strong>. You can offer Skill Credits or take the verification assessment.
-                              </p>
-                              <Link
-                                href="/profile"
-                                className="inline-block text-brand-400 text-[11px] font-semibold hover:underline"
-                              >
-                                Take Skill Verification Assessment &rarr;
-                              </Link>
-                            </div>
-                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleRespondReturnProposal('ACCEPT_SKILL')}
+                            disabled={exchangeSubmitting}
+                            className="w-full py-3 rounded-xl bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-400 hover:to-brand-500 text-dark-bg font-extrabold text-xs shadow-glow-brand transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                          >
+                            <Check className="w-4 h-4" />
+                            <span>{exchangeSubmitting ? 'Confirming...' : `Accept Exchange (I will return ${exchangeDetails.agreement.requested_return_skill_name})`}</span>
+                          </button>
                         </div>
 
                         {/* Option 2: Offer Skill Credits */}
                         <div className="p-4 rounded-2xl border border-slate-800 bg-slate-950/60 space-y-2.5">
                           <div className="flex items-center justify-between">
                             <h4 className="font-bold text-white text-xs">Option 2: Offer Skill Credits Instead</h4>
-                            <div className="flex items-center gap-1 text-xs text-brand-400 font-bold">
+                            <span className="text-xs text-brand-400 font-bold flex items-center gap-1">
                               <Coins className="w-3.5 h-3.5" />
-                              <span>Required: {exchangeDetails.requiredCredits} Credit(s)</span>
-                            </div>
+                              {exchangeDetails.requiredCredits} Credit(s)
+                            </span>
                           </div>
 
-                          <div className="flex items-center justify-between text-[11px] text-slate-400 bg-slate-900 p-2 rounded-lg">
-                            <span>Your Available Balance:</span>
+                          <div className="flex items-center justify-between text-[11px] text-slate-400 bg-slate-900 p-2 rounded-xl">
+                            <span>Your Balance:</span>
                             <strong className="text-white font-bold">{exchangeDetails.learnerAvailableBalance} Credit(s)</strong>
                           </div>
 
                           {exchangeDetails.learnerAvailableBalance >= exchangeDetails.requiredCredits ? (
                             <button
+                              type="button"
                               onClick={() => handleRespondReturnProposal('OFFER_CREDITS')}
                               disabled={exchangeSubmitting}
-                              className="w-full py-2 rounded-xl bg-accent-500 hover:bg-accent-400 text-white font-bold text-xs shadow-glow-accent transition-all"
+                              className="w-full py-2.5 rounded-xl bg-accent-500 hover:bg-accent-400 text-white font-bold text-xs shadow-glow-accent transition-all"
                             >
-                              Offer &amp; Reserve {exchangeDetails.requiredCredits} Skill Credit(s)
+                              Offer {exchangeDetails.requiredCredits} Skill Credit(s) from Balance
                             </button>
                           ) : (
                             <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-[11px]">
-                              Insufficient credits ({exchangeDetails.learnerAvailableBalance}/{exchangeDetails.requiredCredits}). Earn credits by teaching skills to other peers!
+                              Insufficient credits ({exchangeDetails.learnerAvailableBalance}/{exchangeDetails.requiredCredits}).
                             </div>
                           )}
                         </div>
 
-                        {/* Option 3: Counter-Propose Another Skill */}
+                        {/* Option 3: Request Different Skill */}
                         <div className="p-4 rounded-2xl border border-slate-800 bg-slate-950/60 space-y-2.5">
-                          <h4 className="font-bold text-white text-xs">Option 3: Suggest Another Skill You Can Teach</h4>
+                          <h4 className="font-bold text-white text-xs">Option 3: Request Different Return Skill</h4>
                           
                           <div className="flex gap-2">
                             <input
                               type="text"
                               value={alternativeSkillName}
                               onChange={(e) => setAlternativeSkillName(e.target.value)}
-                              placeholder="e.g. React, Python, UI/UX..."
+                              placeholder="e.g. Python, Solidity, UI/UX..."
                               className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none"
                             />
                             <button
+                              type="button"
                               onClick={() => handleRespondReturnProposal('PROPOSE_ALTERNATIVE')}
                               disabled={exchangeSubmitting || !alternativeSkillName.trim()}
-                              className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs border border-slate-700 disabled:opacity-50"
+                              className="px-4 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs border border-slate-700 disabled:opacity-50"
                             >
-                              Propose
+                              Suggest
                             </button>
                           </div>
                         </div>
 
-                        {/* Option 4: Decline */}
+                        {/* Option 4: Reject */}
                         <button
+                          type="button"
                           onClick={() => handleRespondReturnProposal('DECLINE')}
                           disabled={exchangeSubmitting}
-                          className="w-full py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-rose-400 font-semibold text-xs border border-slate-800"
+                          className="w-full py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-rose-400 font-semibold text-xs border border-slate-800 transition-colors"
                         >
-                          Decline Return Requirement
+                          Reject Return Requirement
                         </button>
                       </div>
                     ) : (
-                      <div className="py-8 text-center space-y-3">
-                        <p className="text-xs text-slate-300">
-                          {exchangeDetails?.session?.teacher_name} has not yet specified their return skill requirement.
-                        </p>
-                        <p className="text-[11px] text-slate-500">
-                          Once your mentor submits what they'd like in return, you'll be notified here to confirm.
+                      <div className="py-12 text-center space-y-3">
+                        <div className="w-12 h-12 rounded-2xl bg-slate-900 text-slate-500 flex items-center justify-center mx-auto border border-slate-800">
+                          <Clock className="w-6 h-6" />
+                        </div>
+                        <h3 className="text-sm font-bold text-white">
+                          Waiting for {exchangeDetails?.session?.teacher_name}
+                        </h3>
+                        <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                          Your mentor has not yet specified what skill they'd like in return. You will receive an in-app notification once they propose the return skill.
                         </p>
                       </div>
                     )}
@@ -813,7 +926,7 @@ export default function SessionsPage() {
       {/* MODAL: SUBMIT PEER RATING & REVIEW */}
       {/* ============================================================ */}
       {ratingSession && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
           <form onSubmit={handleSubmitRating} className="glass-panel w-full max-w-md rounded-3xl border border-slate-700 shadow-2xl p-6 relative space-y-4">
             <button type="button" onClick={() => setRatingSession(null)} className="absolute right-4 top-4 text-slate-400 hover:text-white">
               <X className="w-5 h-5" />
@@ -899,7 +1012,7 @@ export default function SessionsPage() {
       {/* MODAL: SUBMIT DISPUTE */}
       {/* ============================================================ */}
       {disputeSession && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
           <form onSubmit={handleSubmitDispute} className="glass-panel w-full max-w-md rounded-3xl border border-rose-500/40 shadow-2xl p-6 relative space-y-4">
             <button type="button" onClick={() => setDisputeSession(null)} className="absolute right-4 top-4 text-slate-400 hover:text-white">
               <X className="w-5 h-5" />
@@ -948,7 +1061,7 @@ export default function SessionsPage() {
               disabled={disputeSubmitting}
               className="w-full py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs transition-colors"
             >
-              {disputeSubmitting ? 'Freezing Escrow...' : 'Submit to Campus Moderator Queue'}
+              {disputeSubmitting ? 'Opening Dispute...' : 'Submit Dispute to Moderator'}
             </button>
           </form>
         </div>

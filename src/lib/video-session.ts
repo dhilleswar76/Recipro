@@ -89,6 +89,22 @@ export function authorizeSessionParticipant(
     };
   }
 
+  if (session.status === 'DISPUTED') {
+    return {
+      authorized: false,
+      sessionId,
+      userId,
+      displayName: 'Participant',
+      role: 'LEARNER',
+      sessionTitle: session.title,
+      skillName: session.skill_name || 'Skill',
+      token: '',
+      isOnline: false,
+      status: 'DISPUTED',
+      error: 'Session is frozen under moderator dispute review.',
+    };
+  }
+
   const isTeacher = (session.teacher_id === userId);
   const isLearner = (session.learner_id === userId);
 
@@ -105,6 +121,27 @@ export function authorizeSessionParticipant(
       isOnline: false,
       status: 'FORBIDDEN',
       error: 'Access denied: You are not an authorized participant in this learning session.',
+    };
+  }
+
+  // Pre-Session Return Skill Start Gate for Direct Skill Exchanges
+  const agreement = db.prepare(`
+    SELECT * FROM session_exchange_agreements WHERE session_id = ?
+  `).get(sessionId) as any;
+
+  if (agreement && agreement.return_type === 'SKILL' && agreement.status !== 'ACCEPTED') {
+    return {
+      authorized: false,
+      sessionId,
+      userId,
+      displayName: isTeacher ? (session.teacher_name || 'Teacher') : (session.learner_name || 'Learner'),
+      role: isTeacher ? 'TRAINER' : 'LEARNER',
+      sessionTitle: session.title,
+      skillName: session.skill_name || 'Skill Session',
+      token: '',
+      isOnline: false,
+      status: session.status,
+      error: 'Session entry locked: Pre-session return skill agreement has not been confirmed by the learner.',
     };
   }
 

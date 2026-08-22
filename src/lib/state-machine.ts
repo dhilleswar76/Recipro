@@ -353,6 +353,10 @@ export function proposeReturnSkill(params: {
     return { success: false, message: 'Session not found' };
   }
 
+  if (session.status === 'COMPLETED' || session.status === 'CANCELLED' || session.status === 'DISPUTED' || session.status === 'IN_PROGRESS') {
+    return { success: false, message: `Cannot modify return skill for a session with status ${session.status}` };
+  }
+
   const isTeacher = session.teacher_id === actorUserId;
   const isLearner = session.learner_id === actorUserId;
 
@@ -387,7 +391,7 @@ export function proposeReturnSkill(params: {
     let newProposalCount: number;
 
     if (existing) {
-      if (existing.proposal_count >= 5) {
+      if (existing.proposal_count >= 10) {
         throw new Error('Maximum negotiation limit reached for this session.');
       }
       agreementId = existing.id;
@@ -398,10 +402,13 @@ export function proposeReturnSkill(params: {
         UPDATE session_exchange_agreements
         SET requested_return_skill_id = ?,
             requested_return_skill_name = ?,
+            return_type = 'SKILL',
             credit_amount = ?,
             status = ?,
             proposal_count = ?,
             proposed_by = ?,
+            accepted_by = NULL,
+            accepted_at = NULL,
             notes = ?,
             updated_at = CURRENT_TIMESTAMP
         WHERE id = ?

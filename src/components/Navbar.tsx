@@ -23,18 +23,7 @@ import {
 
 export function Navbar() {
   const pathname = usePathname();
-  const { user, logout, switchDemoUser } = useAuth();
-  const [demoMenuOpen, setDemoMenuOpen] = useState(false);
-
-  const demoPersonas = [
-    { email: 'alice@campus.edu', name: 'Alice Chen', role: 'Student (React/Node)', badge: 'Learner/Mentor' },
-    { email: 'rahul.kumar@campus.edu', name: 'Rahul Kumar', role: 'Senior Mentor (Python/Solidity)', badge: 'Top Mentor' },
-    { email: 'elena.rostova@campus.edu', name: 'Elena Rostova', role: 'Design TA (Figma/UX)', badge: 'Top Designer' },
-    { email: 'david.kim@campus.edu', name: 'David Kim', role: 'Applied Math Tutor', badge: 'Calculus TA' },
-    { email: 'botfarm1@external-temp.net', name: 'QuickSwap Pro', role: 'Suspicious Ring Account', badge: 'Flagged / Sybil' },
-    { email: 'moderator.sarah@campus.edu', name: 'Sarah Jenkins', role: 'Campus Moderator', badge: 'Moderator' },
-    { email: 'admin@skillswap.campus.edu', name: 'Campus Admin', role: 'System SRE & Admin', badge: 'Admin' },
-  ];
+  const { user, logout } = useAuth();
 
   return (
     <header className="sticky top-0 z-50 glass-panel border-b border-slate-800/80 px-4 lg:px-8 py-3">
@@ -162,51 +151,7 @@ export function Navbar() {
             </Link>
           )}
 
-          {/* Demo Persona Switcher Dropdown (Essential for testing all flows) */}
-          <div className="relative">
-            <button 
-              onClick={() => setDemoMenuOpen(!demoMenuOpen)}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-xs font-medium text-slate-200 border border-slate-700 transition-colors"
-            >
-              <span className="w-2 h-2 rounded-full bg-brand-400"></span>
-              <span className="hidden sm:inline">Demo:</span>
-              <span className="font-semibold text-white truncate max-w-[90px]">{user?.display_name?.split(' ')[0] || 'Alice'}</span>
-              <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
-            </button>
 
-            {demoMenuOpen && (
-              <div className="absolute right-0 mt-2 w-72 glass-panel rounded-xl shadow-2xl p-2 border border-slate-700 z-50">
-                <div className="px-2 py-1 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                  Switch Campus Persona
-                </div>
-                <div className="divide-y divide-slate-800">
-                  {demoPersonas.map((p) => (
-                    <button
-                      key={p.email}
-                      onClick={async () => {
-                        await switchDemoUser(p.email);
-                        setDemoMenuOpen(false);
-                      }}
-                      className={`w-full text-left p-2 rounded-lg text-xs flex items-center justify-between hover:bg-slate-800/80 transition-colors ${
-                        user?.email === p.email ? 'bg-slate-800 text-brand-400 font-semibold' : 'text-slate-300'
-                      }`}
-                    >
-                      <div>
-                        <div className="font-medium text-white flex items-center gap-1.5">
-                          {p.name}
-                          {user?.email === p.email && <CheckCircle2 className="w-3.5 h-3.5 text-brand-400" />}
-                        </div>
-                        <div className="text-[11px] text-slate-400">{p.role}</div>
-                      </div>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-900 text-slate-400 border border-slate-700">
-                        {p.badge}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
 
           {/* User Profile / Logout */}
           {user ? (

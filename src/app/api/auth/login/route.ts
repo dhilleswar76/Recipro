@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
 
     const user = db.prepare(`
       SELECT 
-        u.id, u.email, u.password_hash, u.role, u.status, u.campus_id,
+        u.id, u.email, u.password_hash, u.role, u.status, u.campus_id, u.user_type,
         p.display_name, p.avatar, p.college, p.major, p.year, p.is_verified_student,
         acc.balance, acc.escrow_balance
       FROM users u
@@ -57,6 +57,7 @@ export async function POST(req: NextRequest) {
         major: user.major,
         year: user.year,
         role: user.role,
+        user_type: user.user_type || 'TEACHER_LEARNER',
         status: user.status,
         campusId: user.campus_id,
         isVerifiedStudent: Boolean(user.is_verified_student),

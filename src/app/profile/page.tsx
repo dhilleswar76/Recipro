@@ -26,7 +26,7 @@ import {
 import { getSkillStatusDisplay } from '@/lib/skill-display';
 
 export default function ProfilePage() {
-  const { user, refreshUser, switchDemoUser } = useAuth();
+  const { user, refreshUser } = useAuth();
 
   const [activeTab, setActiveTab] = useState<'SKILLS' | 'GOALS' | 'AVAILABILITY' | 'PREFERENCES'>('SKILLS');
 
@@ -339,57 +339,23 @@ export default function ProfilePage() {
 
   if (!user) {
     return (
-      <div className="max-w-xl mx-auto py-16 px-4 text-center space-y-6">
-        <div className="w-16 h-16 rounded-2xl bg-brand-500/20 text-brand-400 flex items-center justify-center mx-auto text-2xl font-bold">
+      <div className="max-w-md mx-auto py-20 px-4 text-center space-y-6">
+        <div className="w-16 h-16 rounded-2xl bg-brand-500/20 text-brand-400 flex items-center justify-center mx-auto text-2xl font-bold border border-brand-500/30">
           🎓
         </div>
         <div className="space-y-2">
-          <h2 className="text-xl font-bold text-white">SkillSwap Campus Profile</h2>
+          <h2 className="text-2xl font-bold text-white">Student Profile Access</h2>
           <p className="text-xs text-slate-400">
-            Select a student persona below to instantly view profile, verify skills, manage availability, and schedule sessions:
+            Please log in with your campus account to view your verified skills, manage availability, and access your learning dashboard.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-          <button
-            onClick={() => switchDemoUser('alice@campus.edu')}
-            className="glass-panel p-3.5 rounded-2xl border border-brand-500/30 hover:border-brand-500 text-left space-y-1 transition-all group"
-          >
-            <div className="text-xs font-bold text-white group-hover:text-brand-400">Alice Chen (Learner/Mentor)</div>
-            <div className="text-[11px] text-slate-400">React, Node.js • MIT</div>
-          </button>
-
-          <button
-            onClick={() => switchDemoUser('rahul.kumar@campus.edu')}
-            className="glass-panel p-3.5 rounded-2xl border border-sky-500/30 hover:border-sky-500 text-left space-y-1 transition-all group"
-          >
-            <div className="text-xs font-bold text-white group-hover:text-sky-400">Rahul Kumar (Senior Mentor)</div>
-            <div className="text-[11px] text-slate-400">Python, Solidity • Stanford</div>
-          </button>
-
-          <button
-            onClick={() => switchDemoUser('elena.rostova@campus.edu')}
-            className="glass-panel p-3.5 rounded-2xl border border-purple-500/30 hover:border-purple-500 text-left space-y-1 transition-all group"
-          >
-            <div className="text-xs font-bold text-white group-hover:text-purple-400">Elena Rostova (Design TA)</div>
-            <div className="text-[11px] text-slate-400">Figma, UI/UX • Harvard</div>
-          </button>
-
-          <button
-            onClick={() => switchDemoUser('david.kim@campus.edu')}
-            className="glass-panel p-3.5 rounded-2xl border border-emerald-500/30 hover:border-emerald-500 text-left space-y-1 transition-all group"
-          >
-            <div className="text-xs font-bold text-white group-hover:text-emerald-400">David Kim (Math Tutor)</div>
-            <div className="text-[11px] text-slate-400">Calculus, Linear Algebra • Berkeley</div>
-          </button>
-        </div>
-
-        <div className="pt-3 border-t border-slate-800 flex items-center justify-center gap-3">
+        <div className="pt-2 flex items-center justify-center gap-3">
           <Link 
             href="/login" 
-            className="px-5 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-400 text-dark-bg font-bold text-xs shadow-glow-brand transition-colors"
+            className="px-6 py-3 rounded-xl bg-brand-500 hover:bg-brand-400 text-dark-bg font-bold text-xs shadow-glow-brand transition-colors flex items-center gap-2"
           >
-            Go to Login Page (with Demo Credentials)
+            <span>Log In to Your Profile</span>
           </Link>
         </div>
       </div>

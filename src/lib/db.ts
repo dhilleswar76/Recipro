@@ -591,6 +591,48 @@ export function initDatabase(db: Database.Database) {
       FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE
     );
 
+    -- 16d. Video Room Signaling & WebRTC Exchange
+    CREATE TABLE IF NOT EXISTS session_signaling_messages (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      sender_id TEXT NOT NULL,
+      receiver_id TEXT,
+      signal_type TEXT NOT NULL, -- 'OFFER', 'ANSWER', 'ICE_CANDIDATE', 'JOIN_ROOM', 'LEAVE_ROOM', 'PRESENCE_PING'
+      payload_json TEXT NOT NULL,
+      is_consumed INTEGER NOT NULL DEFAULT 0,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
+      FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    -- 16e. Live Video Room Presence & Device State
+    CREATE TABLE IF NOT EXISTS session_room_presence (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      display_name TEXT NOT NULL,
+      role TEXT NOT NULL, -- 'TRAINER', 'LEARNER'
+      camera_on INTEGER NOT NULL DEFAULT 1,
+      mic_on INTEGER NOT NULL DEFAULT 1,
+      screen_sharing INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'CONNECTED', -- 'CONNECTED', 'DISCONNECTED'
+      last_ping DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(session_id, user_id),
+      FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    -- 16f. Collaborative Live Code & Scratchpad
+    CREATE TABLE IF NOT EXISTS session_scratchpads (
+      id TEXT PRIMARY KEY,
+      session_id TEXT UNIQUE NOT NULL,
+      content TEXT NOT NULL DEFAULT '',
+      language TEXT NOT NULL DEFAULT 'javascript',
+      updated_by TEXT NOT NULL,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+    );
+
     CREATE TABLE IF NOT EXISTS skill_subscriptions (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,

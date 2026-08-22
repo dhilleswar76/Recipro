@@ -198,9 +198,37 @@ export function getDailyReport(dateStr: string) {
     LIMIT 50
   `).all() as any[];
 
+  // 7. Compute Platform-Wide Lifetime Totals across All Time
+  const allTimeStatsRaw = db.prepare(`
+    SELECT 
+      COUNT(*) as total_lifetime_sessions,
+      SUM(CASE WHEN status IN ('ACCEPTED', 'SCHEDULED', 'IN_PROGRESS', 'PENDING_CONFIRMATION') THEN 1 ELSE 0 END) as active_sessions,
+      SUM(CASE WHEN status IN ('COMPLETED', 'CREDIT_SETTLED') THEN 1 ELSE 0 END) as completed_sessions,
+      SUM(CASE WHEN status = 'CANCELLED' THEN 1 ELSE 0 END) as cancelled_sessions,
+      SUM(CASE WHEN status = 'DISPUTED' THEN 1 ELSE 0 END) as disputed_sessions
+    FROM sessions
+  `).get() as any;
+
+  const totalEscrowLocked = (db.prepare(`
+    SELECT COALESCE(SUM(escrow_balance), 0) as total FROM skill_credit_accounts
+  `).get() as any).total;
+
+  const totalUsersCount = (db.prepare(`
+    SELECT COUNT(*) as count FROM users
+  `).get() as any).count;
+
   return {
     reportDate: dateStr,
     generatedAt: new Date().toISOString(),
+    platformLifetimeStats: {
+      totalLifetimeSessions: allTimeStatsRaw?.total_lifetime_sessions || 0,
+      activeSessions: allTimeStatsRaw?.active_sessions || 0,
+      completedSessions: allTimeStatsRaw?.completed_sessions || 0,
+      cancelledSessions: allTimeStatsRaw?.cancelled_sessions || 0,
+      disputedSessions: allTimeStatsRaw?.disputed_sessions || 0,
+      totalEscrowLocked,
+      totalUsersCount,
+    },
     overview: {
       totalSessions: totalScheduled,
       completedSessions: totalCompleted,
@@ -241,6 +269,102 @@ export function getDailyReport(dateStr: string) {
     creditTransactions: creditTxs,
     learningRequests,
     notificationDeliveries,
+  };
+}
+
+/**
+ * Get Comprehensive Sessions List with Server-Side Search, Status Filter & Pagination
+ */
+export function getSessionsListReport(params: {
+  search?: string;
+  status?: string;
+  date?: string;
+  settlement?: string;
+  page?: number;
+  limit?: number;
+}) {
+  const db = getDb();
+  const page = Math.max(1, params.page || 1);
+  const limit = Math.min(100, Math.max(5, params.limit || 20));
+  const offset = (page - 1) * limit;
+
+  let whereClauses: string[] = [];
+  let queryParams: any[] = [];
+
+  if (params.search && params.search.trim()) {
+    const term = `%${params.search.trim().toLowerCase()}%`;
+    whereClauses.push(`(
+      LOWER(sk.name) LIKE ? OR
+      LOWER(tp.display_name) LIKE ? OR
+      LOWER(lp.display_name) LIKE ? OR
+      LOWER(tu.email) LIKE ? OR
+      LOWER(lu.email) LIKE ? OR
+      s.id LIKE ?
+    )`);
+    queryParams.push(term, term, term, term, term, term);
+  }
+
+  if (params.status && params.status !== 'ALL') {
+    whereClauses.push(`s.status = ?`);
+    queryParams.push(params.status);
+  }
+
+  if (params.date && params.date !== 'ALL') {
+    whereClauses.push(`(DATE(s.scheduled_start) = DATE(?) OR DATE(s.created_at) = DATE(?))`);
+    queryParams.push(params.date, params.date);
+  }
+
+  const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+
+  const totalCount = (db.prepare(`
+    SELECT COUNT(*) as count
+    FROM sessions s
+    JOIN skills sk ON s.skill_id = sk.id
+    JOIN profiles tp ON s.teacher_id = tp.user_id
+    JOIN profiles lp ON s.learner_id = lp.user_id
+    JOIN users tu ON s.teacher_id = tu.id
+    JOIN users lu ON s.learner_id = lu.id
+    ${whereSql}
+  `).get(...queryParams) as any).count;
+
+  const rawSessions = db.prepare(`
+    SELECT 
+      s.*,
+      sk.name as skill_name, sk.category as skill_category, sk.icon as skill_icon,
+      tp.display_name as teacher_name, tp.college as teacher_college, tp.avatar as teacher_avatar, tu.email as teacher_email,
+      lp.display_name as learner_name, lp.college as learner_college, lp.avatar as learner_avatar, lu.email as learner_email,
+      sea.status as agreement_status, sea.return_type as agreement_return_type, sea.requested_return_skill_name, sea.credit_amount as agreement_credit_amount, sea.proposed_by as agreement_proposed_by, sea.accepted_by as agreement_accepted_by, sea.accepted_at as agreement_accepted_at,
+      d.id as dispute_id, d.reason as dispute_reason, d.status as dispute_status
+    FROM sessions s
+    JOIN skills sk ON s.skill_id = sk.id
+    JOIN profiles tp ON s.teacher_id = tp.user_id
+    JOIN profiles lp ON s.learner_id = lp.user_id
+    JOIN users tu ON s.teacher_id = tu.id
+    JOIN users lu ON s.learner_id = lu.id
+    LEFT JOIN session_exchange_agreements sea ON s.id = sea.session_id
+    LEFT JOIN disputes d ON s.id = d.session_id
+    ${whereSql}
+    ORDER BY s.scheduled_start DESC, s.created_at DESC
+    LIMIT ? OFFSET ?
+  `).all(...queryParams, limit, offset) as any[];
+
+  const sessions = rawSessions.map(sess => {
+    const settlement = classifySettlement(sess, { status: sess.agreement_status, return_type: sess.agreement_return_type }, null, { status: sess.dispute_status });
+    return {
+      ...sess,
+      settlement_classification: settlement,
+    };
+  });
+
+  return {
+    sessions,
+    pagination: {
+      total: totalCount,
+      page,
+      limit,
+      totalPages: Math.ceil(totalCount / limit),
+      hasMore: offset + sessions.length < totalCount,
+    }
   };
 }
 

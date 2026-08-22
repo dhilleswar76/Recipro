@@ -22,7 +22,11 @@ import {
   Lock,
   ChevronRight,
   TrendingUp,
-  Award
+  Award,
+  Video,
+  Sparkles,
+  ShieldCheck,
+  Check
 } from 'lucide-react';
 
 export default function AdminDashboardPage() {
@@ -35,7 +39,7 @@ export default function AdminDashboardPage() {
   const [loginError, setLoginError] = useState<string | null>(null);
   const [loginLoading, setLoginLoading] = useState(false);
 
-  // Date selection state (Defaults to canonical date 2026-08-23 or today)
+  // Date selection state (Defaults to current date)
   const [selectedDate, setSelectedDate] = useState<string>('2026-08-23');
   const [dailyReport, setDailyReport] = useState<any | null>(null);
   const [reportLoading, setReportLoading] = useState(true);
@@ -48,10 +52,18 @@ export default function AdminDashboardPage() {
   const [usersData, setUsersData] = useState<any | null>(null);
   const [usersLoading, setUsersLoading] = useState(false);
 
+  // Sessions Directory State
+  const [sessionSearch, setSessionSearch] = useState('');
+  const [sessionStatusFilter, setSessionStatusFilter] = useState('ALL');
+  const [sessionDateFilter, setSessionDateFilter] = useState('ALL');
+  const [sessionPage, setSessionPage] = useState(1);
+  const [sessionsData, setSessionsData] = useState<any | null>(null);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+
   // Active View Tab
   const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'USERS' | 'SESSIONS' | 'REQUESTS'>('OVERVIEW');
 
-  // Fetch Daily Report
+  // Fetch Daily Report & Platform Overview
   const fetchDailyReport = async (dateStr: string) => {
     setReportLoading(true);
     try {
@@ -90,9 +102,33 @@ export default function AdminDashboardPage() {
     }
   };
 
+  // Fetch Comprehensive Sessions Directory
+  const fetchSessions = async () => {
+    setSessionsLoading(true);
+    try {
+      const query = new URLSearchParams({
+        search: sessionSearch,
+        status: sessionStatusFilter,
+        date: sessionDateFilter,
+        page: sessionPage.toString(),
+        limit: '15',
+      });
+      const res = await fetch(`/api/admin/reports/sessions?${query.toString()}`);
+      if (res.ok) {
+        const data = await res.json();
+        setSessionsData(data);
+      }
+    } catch (err) {
+      console.error('Failed to load sessions directory:', err);
+    } finally {
+      setSessionsLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (user?.role === 'ADMIN') {
       fetchDailyReport(selectedDate);
+      fetchSessions();
       fetchUsers();
     }
   }, [user]);
@@ -108,6 +144,12 @@ export default function AdminDashboardPage() {
     fetchUsers();
   };
 
+  const handleSessionSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    setSessionPage(1);
+    fetchSessions();
+  };
+
   const handleAdminLogin = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setLoginLoading(true);
@@ -118,6 +160,7 @@ export default function AdminDashboardPage() {
         setLoginError('Invalid administrator credentials.');
       } else {
         fetchDailyReport(selectedDate);
+        fetchSessions();
         fetchUsers();
       }
     } catch (err: any) {
@@ -233,7 +276,7 @@ export default function AdminDashboardPage() {
   return (
     <div className="max-w-7xl mx-auto px-4 lg:px-8 py-8 space-y-6">
       
-      {/* Header & Date Selector */}
+      {/* Platform-Wide Lifetime Live Header */}
       <div className="glass-panel p-6 rounded-3xl border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 rounded-2xl bg-rose-500/20 text-rose-400 border border-rose-500/30 flex items-center justify-center font-bold text-xl">
@@ -241,7 +284,7 @@ export default function AdminDashboardPage() {
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-extrabold text-white">SkillSwap Campus Admin</h1>
+              <h1 className="text-xl font-extrabold text-white">SkillSwap Campus Admin Dashboard</h1>
               <span className="text-[10px] px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 font-bold border border-rose-500/30">
                 Authoritative Mode
               </span>
@@ -285,6 +328,39 @@ export default function AdminDashboardPage() {
         </form>
       </div>
 
+      {/* Platform-Wide Lifetime Stats Bar */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="glass-panel p-3.5 rounded-2xl border border-slate-800 space-y-1">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">All-Time Sessions</span>
+          <div className="text-xl font-extrabold text-white">{dailyReport?.platformLifetimeStats?.totalLifetimeSessions ?? 0}</div>
+        </div>
+
+        <div className="glass-panel p-3.5 rounded-2xl border border-emerald-500/30 bg-emerald-500/5 space-y-1">
+          <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">Active / Scheduled</span>
+          <div className="text-xl font-extrabold text-emerald-300">{dailyReport?.platformLifetimeStats?.activeSessions ?? 0}</div>
+        </div>
+
+        <div className="glass-panel p-3.5 rounded-2xl border border-brand-500/30 bg-brand-500/5 space-y-1">
+          <span className="text-[10px] font-bold text-brand-400 uppercase tracking-wider">Completed / Settled</span>
+          <div className="text-xl font-extrabold text-brand-300">{dailyReport?.platformLifetimeStats?.completedSessions ?? 0}</div>
+        </div>
+
+        <div className="glass-panel p-3.5 rounded-2xl border border-amber-500/30 bg-amber-500/5 space-y-1">
+          <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">Disputed Sessions</span>
+          <div className="text-xl font-extrabold text-amber-300">{dailyReport?.platformLifetimeStats?.disputedSessions ?? 0}</div>
+        </div>
+
+        <div className="glass-panel p-3.5 rounded-2xl border border-indigo-500/30 bg-indigo-500/5 space-y-1">
+          <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider">Escrow Locked</span>
+          <div className="text-xl font-extrabold text-indigo-300">{dailyReport?.platformLifetimeStats?.totalEscrowLocked ?? 0} Credits</div>
+        </div>
+
+        <div className="glass-panel p-3.5 rounded-2xl border border-cyan-500/30 bg-cyan-500/5 space-y-1">
+          <span className="text-[10px] font-bold text-cyan-400 uppercase tracking-wider">Platform Users</span>
+          <div className="text-xl font-extrabold text-cyan-300">{dailyReport?.platformLifetimeStats?.totalUsersCount ?? 0}</div>
+        </div>
+      </div>
+
       {/* Navigation Tabs */}
       <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
         <button
@@ -296,6 +372,19 @@ export default function AdminDashboardPage() {
           }`}
         >
           Daily Overview ({selectedDate})
+        </button>
+        <button
+          onClick={() => {
+            setActiveTab('SESSIONS');
+            fetchSessions();
+          }}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors ${
+            activeTab === 'SESSIONS'
+              ? 'bg-slate-800 text-white border border-slate-700'
+              : 'text-slate-400 hover:text-white hover:bg-slate-900'
+          }`}
+        >
+          Campus Sessions Directory ({sessionsData?.pagination?.total ?? (dailyReport?.platformLifetimeStats?.totalLifetimeSessions || 0)})
         </button>
         <button
           onClick={() => {
@@ -311,16 +400,6 @@ export default function AdminDashboardPage() {
           User Activity Reports
         </button>
         <button
-          onClick={() => setActiveTab('SESSIONS')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors ${
-            activeTab === 'SESSIONS'
-              ? 'bg-slate-800 text-white border border-slate-700'
-              : 'text-slate-400 hover:text-white hover:bg-slate-900'
-          }`}
-        >
-          Daily Sessions ({dailyReport?.sessions?.length || 0})
-        </button>
-        <button
           onClick={() => setActiveTab('REQUESTS')}
           className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors ${
             activeTab === 'REQUESTS'
@@ -328,7 +407,7 @@ export default function AdminDashboardPage() {
               : 'text-slate-400 hover:text-white hover:bg-slate-900'
           }`}
         >
-          Learner Requests &amp; Matches ({dailyReport?.learningRequests?.length || 0})
+          Learner Demand Requests ({dailyReport?.learningRequests?.length || 0})
         </button>
       </div>
 
@@ -336,10 +415,10 @@ export default function AdminDashboardPage() {
       {activeTab === 'OVERVIEW' && (
         <div className="space-y-6">
           
-          {/* Main Stat Counters Grid */}
+          {/* Main Day Stat Counters Grid */}
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
             <div className="glass-panel p-4 rounded-2xl border border-slate-800 space-y-1">
-              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Total Sessions</span>
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Day Sessions</span>
               <div className="text-2xl font-extrabold text-white">{dailyReport?.overview?.totalSessions ?? 0}</div>
             </div>
 
@@ -389,7 +468,7 @@ export default function AdminDashboardPage() {
 
               <div className="space-y-2.5 text-xs">
                 <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/80 border border-slate-800">
-                  <span className="text-slate-300">Total Scheduled Sessions</span>
+                  <span className="text-slate-300">Scheduled for this date</span>
                   <strong className="text-white font-mono text-sm">{dailyReport?.sessionStats?.totalScheduled ?? 0}</strong>
                 </div>
 
@@ -455,21 +534,24 @@ export default function AdminDashboardPage() {
 
           </div>
 
-          {/* Quick Recent Sessions Table */}
+          {/* Quick Day Sessions Table */}
           <div className="glass-panel p-5 rounded-3xl border border-slate-800 space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-white">Daily Sessions Feed ({dailyReport?.sessions?.length || 0})</h3>
+              <h3 className="text-sm font-bold text-white">Daily Sessions Feed for {selectedDate} ({dailyReport?.sessions?.length || 0})</h3>
               <button
-                onClick={() => setActiveTab('SESSIONS')}
+                onClick={() => {
+                  setActiveTab('SESSIONS');
+                  fetchSessions();
+                }}
                 className="text-brand-400 font-semibold text-xs hover:underline flex items-center gap-1"
               >
-                View Full Table <ArrowRight className="w-3 h-3" />
+                View Full Platform Sessions Directory <ArrowRight className="w-3 h-3" />
               </button>
             </div>
 
             {(!dailyReport?.sessions || dailyReport.sessions.length === 0) ? (
               <div className="py-12 text-center text-xs text-slate-400">
-                No session activity recorded for {selectedDate}.
+                No session activity recorded specifically for {selectedDate}. Use the Sessions Directory tab to view all campus sessions.
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -486,7 +568,7 @@ export default function AdminDashboardPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/60">
-                    {dailyReport.sessions.slice(0, 5).map((sess: any) => (
+                    {dailyReport.sessions.slice(0, 8).map((sess: any) => (
                       <tr key={sess.id} className="hover:bg-slate-900/30 transition-colors">
                         <td className="py-3 px-3 font-mono text-[11px] text-slate-300">{sess.id}</td>
                         <td className="py-3 px-3 font-bold text-white">{sess.skill_name}</td>
@@ -494,10 +576,11 @@ export default function AdminDashboardPage() {
                           <div><strong className="text-brand-400">T:</strong> {sess.teacher_name}</div>
                           <div><strong className="text-indigo-400">L:</strong> {sess.learner_name}</div>
                         </td>
-                        <td className="py-3 px-3 text-slate-300">{sess.scheduled_start.substring(11, 16)}</td>
+                        <td className="py-3 px-3 text-slate-300">{sess.scheduled_start?.substring(11, 16) || 'Scheduled'}</td>
                         <td className="py-3 px-3">
                           <span className={`text-[10px] px-2 py-0.5 rounded font-bold border ${
-                            sess.status === 'CREDIT_SETTLED' ? 'bg-brand-500/20 text-brand-400 border-brand-500/30' :
+                            sess.status === 'CREDIT_SETTLED' || sess.status === 'COMPLETED' ? 'bg-brand-500/20 text-brand-400 border-brand-500/30' :
+                            sess.status === 'IN_PROGRESS' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 animate-pulse' :
                             sess.status === 'DISPUTED' ? 'bg-rose-500/20 text-rose-400 border-rose-500/30' :
                             'bg-slate-800 text-slate-300 border-slate-700'
                           }`}>
@@ -524,7 +607,198 @@ export default function AdminDashboardPage() {
         </div>
       )}
 
-      {/* TAB 2: USER-WISE ACTIVITY REPORTS */}
+      {/* TAB 2: COMPREHENSIVE CAMPUS SESSIONS DIRECTORY */}
+      {activeTab === 'SESSIONS' && (
+        <div className="space-y-6">
+          
+          {/* Search & Status Filter Bar */}
+          <form onSubmit={handleSessionSearch} className="glass-panel p-4 rounded-2xl border border-slate-800 flex flex-wrap items-center gap-3">
+            <div className="flex-1 min-w-[240px] relative">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+              <input
+                type="text"
+                value={sessionSearch}
+                onChange={(e) => setSessionSearch(e.target.value)}
+                placeholder="Search skill name, teacher, learner, email, or session ID..."
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl pl-9 pr-3 py-2 text-xs text-white focus:outline-none focus:border-brand-500"
+              />
+            </div>
+
+            <div className="flex items-center gap-2">
+              <select
+                value={sessionStatusFilter}
+                onChange={(e) => setSessionStatusFilter(e.target.value)}
+                className="bg-slate-900 border border-slate-700 text-xs text-slate-300 rounded-xl px-3 py-2"
+              >
+                <option value="ALL">All Statuses</option>
+                <option value="REQUESTED">Requested</option>
+                <option value="ACCEPTED">Accepted</option>
+                <option value="SCHEDULED">Scheduled</option>
+                <option value="IN_PROGRESS">In Progress</option>
+                <option value="PENDING_CONFIRMATION">Pending Confirmation</option>
+                <option value="COMPLETED">Completed</option>
+                <option value="CREDIT_SETTLED">Credit Settled</option>
+                <option value="CANCELLED">Cancelled</option>
+                <option value="DISPUTED">Disputed</option>
+              </select>
+
+              <select
+                value={sessionDateFilter}
+                onChange={(e) => setSessionDateFilter(e.target.value)}
+                className="bg-slate-900 border border-slate-700 text-xs text-slate-300 rounded-xl px-3 py-2"
+              >
+                <option value="ALL">All Dates (Lifetime)</option>
+                <option value={selectedDate}>Selected Date ({selectedDate})</option>
+              </select>
+
+              <button
+                type="submit"
+                className="px-4 py-2 rounded-xl bg-brand-500 hover:bg-brand-400 text-dark-bg font-bold text-xs shadow-glow-brand"
+              >
+                Search Sessions
+              </button>
+            </div>
+          </form>
+
+          {/* Sessions List Table */}
+          <div className="glass-panel p-5 rounded-3xl border border-slate-800 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <Video className="w-4 h-4 text-brand-400" />
+                <span>Live Campus Sessions Directory ({sessionsData?.pagination?.total ?? 0})</span>
+              </h3>
+              <button
+                onClick={fetchSessions}
+                className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 font-semibold border border-slate-700 flex items-center gap-1.5"
+              >
+                <RefreshCw className={`w-3 h-3 ${sessionsLoading ? 'animate-spin' : ''}`} /> Refresh
+              </button>
+            </div>
+
+            {sessionsLoading ? (
+              <div className="py-16 text-center text-xs text-slate-400">Loading live sessions from database...</div>
+            ) : (!sessionsData?.sessions || sessionsData.sessions.length === 0) ? (
+              <div className="py-16 text-center text-xs text-slate-400">
+                No sessions found matching your filters.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="text-[11px] text-slate-400 uppercase border-b border-slate-800 bg-slate-900/40">
+                    <tr>
+                      <th className="py-2.5 px-3">Session ID &amp; Time</th>
+                      <th className="py-2.5 px-3">Skill &amp; Category</th>
+                      <th className="py-2.5 px-3">Teaching Mentor</th>
+                      <th className="py-2.5 px-3">Learner</th>
+                      <th className="py-2.5 px-3">Return Agreement</th>
+                      <th className="py-2.5 px-3">Status</th>
+                      <th className="py-2.5 px-3">Settlement</th>
+                      <th className="py-2.5 px-3 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60">
+                    {sessionsData.sessions.map((sess: any) => (
+                      <tr key={sess.id} className="hover:bg-slate-900/30 transition-colors">
+                        <td className="py-3 px-3">
+                          <div className="font-mono text-[11px] text-slate-300">{sess.id}</div>
+                          <div className="text-[10px] text-slate-500 mt-0.5 flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            <span>{new Date(sess.scheduled_start).toLocaleDateString([], { month: 'short', day: 'numeric' })} • {new Date(sess.scheduled_start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                          </div>
+                        </td>
+
+                        <td className="py-3 px-3">
+                          <div className="font-bold text-white">{sess.skill_name}</div>
+                          <div className="text-[11px] text-brand-400">{sess.skill_category}</div>
+                        </td>
+
+                        <td className="py-3 px-3">
+                          <div className="font-bold text-white">{sess.teacher_name}</div>
+                          <div className="text-[10px] text-slate-400">{sess.teacher_college} • {sess.teacher_email}</div>
+                        </td>
+
+                        <td className="py-3 px-3">
+                          <div className="font-bold text-white">{sess.learner_name}</div>
+                          <div className="text-[10px] text-slate-400">{sess.learner_college} • {sess.learner_email}</div>
+                        </td>
+
+                        <td className="py-3 px-3">
+                          {sess.agreement_status === 'ACCEPTED' ? (
+                            <span className="text-[10px] px-2 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/40 inline-flex items-center gap-1">
+                              <Check className="w-2.5 h-2.5" /> Return: {sess.requested_return_skill_name || 'Agreed'}
+                            </span>
+                          ) : sess.agreement_status === 'PROPOSED' ? (
+                            <span className="text-[10px] px-2 py-0.5 rounded-lg bg-amber-500/20 text-amber-300 font-bold border border-amber-500/40">
+                              ⏳ Proposed: {sess.requested_return_skill_name}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] px-2 py-0.5 rounded-lg bg-slate-800 text-slate-400 border border-slate-700">
+                              {sess.credits_amount || 1} Escrow Credit(s)
+                            </span>
+                          )}
+                        </td>
+
+                        <td className="py-3 px-3">
+                          <span className={`text-[10px] px-2.5 py-1 rounded-xl font-extrabold border inline-flex items-center gap-1.5 ${
+                            sess.status === 'CREDIT_SETTLED' || sess.status === 'COMPLETED' ? 'bg-brand-500/20 text-brand-300 border-brand-500/40' :
+                            sess.status === 'IN_PROGRESS' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 animate-pulse' :
+                            sess.status === 'SCHEDULED' ? 'bg-sky-500/20 text-sky-300 border-sky-500/40' :
+                            sess.status === 'DISPUTED' ? 'bg-rose-500/20 text-rose-300 border-rose-500/40' :
+                            'bg-slate-800 text-slate-300 border-slate-700'
+                          }`}>
+                            {sess.status === 'IN_PROGRESS' && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />}
+                            {sess.status}
+                          </span>
+                        </td>
+
+                        <td className="py-3 px-3 font-semibold text-slate-300">
+                          {sess.settlement_classification}
+                        </td>
+
+                        <td className="py-3 px-3 text-right">
+                          <Link
+                            href={`/admin/sessions/${sess.id}`}
+                            className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-[11px] border border-slate-700 inline-flex items-center gap-1 transition-colors"
+                          >
+                            <span>Audit Deep-Dive</span>
+                            <ChevronRight className="w-3 h-3" />
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Pagination Controls */}
+            {sessionsData?.pagination && sessionsData.pagination.totalPages > 1 && (
+              <div className="pt-3 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
+                <span>Page {sessionsData.pagination.page} of {sessionsData.pagination.totalPages} ({sessionsData.pagination.total} total sessions)</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    disabled={sessionPage <= 1}
+                    onClick={() => { setSessionPage(p => p - 1); fetchSessions(); }}
+                    className="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-white disabled:opacity-40"
+                  >
+                    Previous
+                  </button>
+                  <button
+                    disabled={sessionPage >= sessionsData.pagination.totalPages}
+                    onClick={() => { setSessionPage(p => p + 1); fetchSessions(); }}
+                    className="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-white disabled:opacity-40"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+        </div>
+      )}
+
+      {/* TAB 3: USER-WISE ACTIVITY REPORTS */}
       {activeTab === 'USERS' && (
         <div className="space-y-6">
           
@@ -657,78 +931,7 @@ export default function AdminDashboardPage() {
         </div>
       )}
 
-      {/* TAB 3: ALL SESSIONS TABLE */}
-      {activeTab === 'SESSIONS' && (
-        <div className="glass-panel p-5 rounded-3xl border border-slate-800 space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold text-white">All Sessions on {selectedDate}</h3>
-            <a
-              href={`/api/admin/reports/export?type=daily&date=${selectedDate}`}
-              download
-              className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 font-semibold border border-slate-700 flex items-center gap-1.5"
-            >
-              <Download className="w-3.5 h-3.5" /> Export Table CSV
-            </a>
-          </div>
-
-          {(!dailyReport?.sessions || dailyReport.sessions.length === 0) ? (
-            <div className="py-16 text-center text-xs text-slate-400">
-              No sessions scheduled for {selectedDate}.
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="text-[11px] text-slate-400 uppercase border-b border-slate-800 bg-slate-900/40">
-                  <tr>
-                    <th className="py-2.5 px-3">Session ID</th>
-                    <th className="py-2.5 px-3">Title &amp; Skill</th>
-                    <th className="py-2.5 px-3">Teaching Mentor</th>
-                    <th className="py-2.5 px-3">Learner</th>
-                    <th className="py-2.5 px-3">Duration</th>
-                    <th className="py-2.5 px-3">Status</th>
-                    <th className="py-2.5 px-3">Settlement</th>
-                    <th className="py-2.5 px-3 text-right">Details</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/60">
-                  {dailyReport.sessions.map((sess: any) => (
-                    <tr key={sess.id} className="hover:bg-slate-900/30 transition-colors">
-                      <td className="py-3 px-3 font-mono text-[11px] text-slate-300">{sess.id}</td>
-                      <td className="py-3 px-3">
-                        <div className="font-bold text-white">{sess.title}</div>
-                        <div className="text-[11px] text-brand-400">{sess.skill_name}</div>
-                      </td>
-                      <td className="py-3 px-3 text-slate-200">{sess.teacher_name}</td>
-                      <td className="py-3 px-3 text-slate-200">{sess.learner_name}</td>
-                      <td className="py-3 px-3 text-slate-300">{sess.duration_hours}h</td>
-                      <td className="py-3 px-3">
-                        <span className={`text-[10px] px-2 py-0.5 rounded font-bold border ${
-                          sess.status === 'CREDIT_SETTLED' ? 'bg-brand-500/20 text-brand-400 border-brand-500/30' :
-                          sess.status === 'DISPUTED' ? 'bg-rose-500/20 text-rose-400 border-rose-500/30' :
-                          'bg-slate-800 text-slate-300 border-slate-700'
-                        }`}>
-                          {sess.status}
-                        </span>
-                      </td>
-                      <td className="py-3 px-3 font-semibold text-slate-300">{sess.settlement_classification}</td>
-                      <td className="py-3 px-3 text-right">
-                        <Link
-                          href={`/admin/sessions/${sess.id}`}
-                          className="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-[11px] border border-slate-700 inline-flex items-center gap-1"
-                        >
-                          Audit <ChevronRight className="w-3 h-3" />
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* TAB 4: LEARNER REQUESTS & NOTIFICATION AUDIT */}
+      {/* TAB 4: LEARNER DEMAND REQUESTS & MATCHES */}
       {activeTab === 'REQUESTS' && (
         <div className="space-y-6">
           {/* Summary Metric Counters */}

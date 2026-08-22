@@ -17,18 +17,34 @@ export const SkillVerificationStatusEnum = z.enum([
 ]);
 
 export const RegisterSchema = z.object({
-  email: z.string().email('Please enter a valid email address').toLowerCase().trim(),
+  email: z.preprocess(
+    (val) => typeof val === 'string' ? val.trim().toLowerCase() : val,
+    z.string().email('Please enter a valid email address')
+  ),
   password: z.string().min(8, 'Password must be at least 8 characters long'),
-  displayName: z.string().min(2, 'Name must be at least 2 characters').max(50),
-  college: z.string().min(2, 'College name is required').max(100),
-  major: z.string().min(2, 'Major/Faculty is required').max(100),
-  year: z.enum(['Freshman', 'Sophomore', 'Junior', 'Senior', 'Graduate', 'PhD']),
+  name: z.string().min(2, 'Name must be at least 2 characters').max(50).optional(),
+  displayName: z.string().min(2, 'Name must be at least 2 characters').max(50).optional(),
+  college: z.string().max(100).optional().default('SkillSwap Campus'),
+  major: z.string().max(100).optional().default('General Studies'),
+  year: z.enum(['Freshman', 'Sophomore', 'Junior', 'Senior', 'Graduate', 'PhD']).optional().default('Freshman'),
   userType: UserTypeEnum.optional().default('TEACHER_LEARNER'),
   role: z.enum(['STUDENT', 'MODERATOR', 'ADMIN']).optional().default('STUDENT'),
 });
 
+export const OnboardingSchema = z.object({
+  userType: UserTypeEnum.default('TEACHER_LEARNER'),
+  college: z.string().min(2, 'College name is required').max(100),
+  major: z.string().min(2, 'Major/Faculty is required').max(100),
+  year: z.enum(['Freshman', 'Sophomore', 'Junior', 'Senior', 'Graduate', 'PhD']),
+  teachingPreference: TeachingPreferenceEnum.optional().default('Anyone'),
+  bio: z.string().max(500).optional(),
+});
+
 export const LoginSchema = z.object({
-  email: z.string().email('Please enter a valid email address').toLowerCase().trim(),
+  email: z.preprocess(
+    (val) => typeof val === 'string' ? val.trim().toLowerCase() : val,
+    z.string().email('Please enter a valid email address')
+  ),
   password: z.string().min(1, 'Password is required'),
 });
 
@@ -70,9 +86,13 @@ export const SubmitAssessmentSchema = z.object({
   skillId: z.string().min(1, 'Skill ID is required'),
   targetLevel: z.enum(['Beginner', 'Intermediate', 'Advanced', 'Expert']).default('Intermediate'),
   answers: z.array(z.object({
-    questionId: z.string(),
-    selectedOption: z.number().int(),
-  })),
+    questionId: z.string().min(1, 'Question ID is required'),
+    selectedOption: z.union([
+      z.number().int().min(0).max(3),
+      z.enum(['A', 'B', 'C', 'D']),
+      z.string().min(1),
+    ]),
+  })).min(1, 'At least one answer must be submitted'),
 });
 
 export const SubmitEvidenceSchema = z.object({
@@ -219,3 +239,42 @@ export const ModeratorActionSchema = z.object({
   action: z.enum(['RESOLVE_REFUND', 'RESOLVE_PAYOUT', 'SUSPEND_USER', 'RESTRICT_CREDITS', 'DISMISS_REPORT', 'CLEAR_ALERT', 'FORCE_CANCEL']),
   reason: z.string().min(5).max(500),
 });
+
+// ==========================================
+// PRE-SESSION RETURN CONFIRMATION SCHEMAS
+// ==========================================
+
+export const ProposeReturnSkillSchema = z.object({
+  skillName: z.string().min(1, 'Skill name is required').max(50).trim(),
+  notes: z.string().max(300).optional(),
+});
+
+export const RespondReturnSkillSchema = z.object({
+  action: z.enum(['ACCEPT_SKILL', 'OFFER_CREDITS', 'PROPOSE_ALTERNATIVE', 'DECLINE']),
+  alternativeSkillName: z.string().max(50).trim().optional(),
+  notes: z.string().max(300).optional(),
+});
+
+export function isAcademicEmail(email: string): boolean {
+  if (!email || typeof email !== 'string') return false;
+  const lower = email.trim().toLowerCase();
+  const parts = lower.split('@');
+  if (parts.length !== 2) return false;
+  const domain = parts[1];
+  if (!domain) return false;
+
+  return (
+    domain.endsWith('.edu') ||
+    domain.endsWith('.ac.in') ||
+    domain.endsWith('.ac.uk') ||
+    domain.endsWith('.edu.in') ||
+    domain.endsWith('.edu.au') ||
+    domain.endsWith('.ac.nz') ||
+    domain.endsWith('.ac.za') ||
+    domain.endsWith('.edu.sg') ||
+    domain.includes('.edu.') ||
+    domain.includes('.ac.')
+  );
+}
+
+

@@ -15,6 +15,8 @@ export interface UserProfile {
   major?: string;
   year?: string;
   is_verified_student: boolean;
+  email_verified?: boolean;
+  is_academic_email?: boolean;
   trust_score: number;
   completion_rate: number;
   cancellation_rate: number;

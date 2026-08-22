@@ -3,6 +3,7 @@ import { getDb } from '@/lib/db';
 import { requireAuth } from '@/lib/auth';
 import { AddSkillSchema } from '@/lib/validations';
 import { notifyLearnersOfNewMentor } from '@/lib/skill-gap';
+import { evaluateActiveLearningRequests } from '@/lib/learning-requests';
 
 export async function GET() {
   const db = getDb();
@@ -100,6 +101,7 @@ export async function POST(req: NextRequest) {
 
     if (initialStatus === 'PLATFORM_VERIFIED' || initialStatus === 'ASSESSMENT_VERIFIED') {
       notifyLearnersOfNewMentor(user.userId, skill.id);
+      evaluateActiveLearningRequests(db, { triggerSkillId: skill.id });
     }
 
     return NextResponse.json({

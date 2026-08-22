@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import crypto from 'crypto';
+import { getDb, isAcademicEmail } from '@/lib/db';
 import { RegisterSchema } from '@/lib/validations';
 import { hashPassword, signToken } from '@/lib/auth';
 
@@ -15,12 +16,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { email, password, displayName, college, major, year } = parsed.data;
+    const { email, password, college, major, year } = parsed.data;
+    const displayName = (parsed.data.name || parsed.data.displayName || 'Campus Member').trim();
+    const cleanEmail = email.trim().toLowerCase();
     const userType = parsed.data.userType || 'TEACHER_LEARNER';
     const db = getDb();
 
-    // Check if user already exists
-    const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+    // Check if user already exists (case-insensitive)
+    const existing = db.prepare('SELECT id FROM users WHERE LOWER(email) = ?').get(cleanEmail);
     if (existing) {
       return NextResponse.json(
         { error: 'An account with this email address already exists' },
@@ -30,23 +33,31 @@ export async function POST(req: NextRequest) {
 
     const userId = `usr-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     const passwordHash = await hashPassword(password);
+    
     // Strict security rule: Public registration CANNOT grant ADMIN or MODERATOR role
     const userRole = 'STUDENT';
     const campusId = `STU-${Math.floor(100000 + Math.random() * 900000)}`;
 
-    const tx = db.transaction(() => {
-      // 1. Insert User with user_type
-      db.prepare(`
-        INSERT INTO users (id, email, password_hash, role, status, campus_id, user_type)
-        VALUES (?, ?, ?, ?, 'ACTIVE', ?, ?)
-      `).run(userId, email, passwordHash, userRole, campusId, userType);
+    // Generate cryptographically secure email verification token (valid for 24 hours)
+    const verificationToken = crypto.randomBytes(32).toString('hex');
+    const tokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    const isAcademic = isAcademicEmail(cleanEmail) ? 1 : 0;
 
-      // 2. Insert Profile with default teaching_preference
+    const tx = db.transaction(() => {
+      // 1. Insert User with verification token and academic email flag
+      db.prepare(`
+        INSERT INTO users (
+          id, email, password_hash, role, status, campus_id, user_type,
+          email_verified, verification_token, verification_token_expires, is_academic_email
+        ) VALUES (?, ?, ?, ?, 'ACTIVE', ?, ?, 0, ?, ?, ?)
+      `).run(userId, cleanEmail, passwordHash, userRole, campusId, userType, verificationToken, tokenExpires, isAcademic);
+
+      // 2. Insert Profile with default values
       db.prepare(`
         INSERT INTO profiles (
           id, user_id, display_name, college, major, year, is_verified_student, trust_score, teaching_preference
-        ) VALUES (?, ?, ?, ?, ?, ?, 1, 75.0, 'Anyone')
-      `).run(`prof-${userId}`, userId, displayName, college, major, year);
+        ) VALUES (?, ?, ?, ?, ?, ?, 0, 75.0, 'Anyone')
+      `).run(`prof-${userId}`, userId, displayName, college || 'SkillSwap Campus', major || 'General Studies', year || 'Freshman');
 
       // 3. Insert Skill Credit Account with 3 starter credits
       db.prepare(`
@@ -63,7 +74,7 @@ export async function POST(req: NextRequest) {
       // 5. Welcome Notification
       db.prepare(`
         INSERT INTO notifications (id, user_id, title, message, type, link)
-        VALUES (?, ?, 'Welcome to SkillSwap Campus!', 'You received 3 Starter Skill Credits. Explore skills or list what you can teach to earn more.', 'INFO', '/explore')
+        VALUES (?, ?, 'Welcome to SkillSwap Campus!', 'Please verify your email address to complete your profile setup and start exchanging skills.', 'INFO', '/verify-email')
       `).run(`notif-${Date.now()}`, userId);
     });
 
@@ -71,26 +82,30 @@ export async function POST(req: NextRequest) {
 
     const token = signToken({
       userId,
-      email,
+      email: cleanEmail,
       role: userRole,
       status: 'ACTIVE',
     });
 
     const response = NextResponse.json({
       success: true,
-      message: 'Account created successfully with 3 Starter Skill Credits',
+      message: 'Account created successfully. Please verify your email to continue.',
       user: {
         id: userId,
-        email,
+        email: cleanEmail,
         displayName,
         role: userRole,
         campusId,
-        college,
-        major,
-        year,
+        college: college || 'SkillSwap Campus',
+        major: major || 'General Studies',
+        year: year || 'Freshman',
         balance: 3,
+        emailVerified: false,
+        isAcademicEmail: Boolean(isAcademic),
       },
       token,
+      verificationToken,
+      nextStep: '/verify-email',
     }, { status: 201 });
 
     response.cookies.set('skillswap_token', token, {

@@ -23,12 +23,23 @@ import {
   HelpCircle,
   AlertCircle
 } from 'lucide-react';
-import { getSkillStatusDisplay } from '@/lib/skill-verification';
+import { useSearchParams, useRouter } from 'next/navigation';
+import MyLearningRequests from '@/components/MyLearningRequests';
+import { getSkillStatusDisplay } from '@/lib/skill-display';
 
 export default function ProfilePage() {
-  const { user, refreshUser, switchDemoUser } = useAuth();
+  const router = useRouter();
+  const { user, refreshUser } = useAuth();
+  const searchParams = useSearchParams();
 
-  const [activeTab, setActiveTab] = useState<'SKILLS' | 'GOALS' | 'AVAILABILITY' | 'PREFERENCES'>('SKILLS');
+  const [activeTab, setActiveTab] = useState<'SKILLS' | 'GOALS' | 'REQUESTS' | 'AVAILABILITY' | 'PREFERENCES'>('SKILLS');
+
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab === 'requests') {
+      setActiveTab('REQUESTS');
+    }
+  }, [searchParams]);
 
   // AI Extraction State
   const [extractModalOpen, setExtractModalOpen] = useState(false);
@@ -265,8 +276,11 @@ export default function ProfilePage() {
     setAssessmentLoading(true);
     setAssessmentModalOpen(true);
 
+    const skillName = skill.skill_name || skill.name || 'Python';
+    const proficiency = skill.proficiency || 'Intermediate';
+
     try {
-      const res = await fetch(`/api/skill-assessments?skillName=${encodeURIComponent(skill.skill_name)}`);
+      const res = await fetch(`/api/skill-assessments?skillName=${encodeURIComponent(skillName)}&proficiency=${encodeURIComponent(proficiency)}`);
       if (res.ok) {
         const data = await res.json();
         setAssessmentQuestions(data.questions || []);
@@ -294,18 +308,19 @@ export default function ProfilePage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          skillId: assessmentSkill.skill_id,
-          targetLevel: assessmentSkill.proficiency,
+          skillId: assessmentSkill.skill_id || assessmentSkill.id,
+          targetLevel: assessmentSkill.proficiency || 'Intermediate',
           answers: answersArray,
         }),
       });
 
       const data = await res.json();
       if (res.ok) {
-        setAssessmentResult(data.result);
+        setAssessmentResult(data.result || data);
         await refreshUser();
       } else {
-        alert(data.error || 'Assessment evaluation failed');
+        const errMsg = typeof data.error === 'object' ? data.error.message : data.error;
+        alert(errMsg || 'Assessment evaluation failed');
       }
     } catch (err) {
       console.error('Assessment submit error:', err);
@@ -339,57 +354,23 @@ export default function ProfilePage() {
 
   if (!user) {
     return (
-      <div className="max-w-xl mx-auto py-16 px-4 text-center space-y-6">
-        <div className="w-16 h-16 rounded-2xl bg-brand-500/20 text-brand-400 flex items-center justify-center mx-auto text-2xl font-bold">
+      <div className="max-w-md mx-auto py-20 px-4 text-center space-y-6">
+        <div className="w-16 h-16 rounded-2xl bg-brand-500/20 text-brand-400 flex items-center justify-center mx-auto text-2xl font-bold border border-brand-500/30">
           🎓
         </div>
         <div className="space-y-2">
-          <h2 className="text-xl font-bold text-white">SkillSwap Campus Profile</h2>
+          <h2 className="text-2xl font-bold text-white">Student Profile Access</h2>
           <p className="text-xs text-slate-400">
-            Select a student persona below to instantly view profile, verify skills, manage availability, and schedule sessions:
+            Please log in with your campus account to view your verified skills, manage availability, and access your learning dashboard.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-          <button
-            onClick={() => switchDemoUser('alice@campus.edu')}
-            className="glass-panel p-3.5 rounded-2xl border border-brand-500/30 hover:border-brand-500 text-left space-y-1 transition-all group"
-          >
-            <div className="text-xs font-bold text-white group-hover:text-brand-400">Alice Chen (Learner/Mentor)</div>
-            <div className="text-[11px] text-slate-400">React, Node.js • MIT</div>
-          </button>
-
-          <button
-            onClick={() => switchDemoUser('rahul.kumar@campus.edu')}
-            className="glass-panel p-3.5 rounded-2xl border border-sky-500/30 hover:border-sky-500 text-left space-y-1 transition-all group"
-          >
-            <div className="text-xs font-bold text-white group-hover:text-sky-400">Rahul Kumar (Senior Mentor)</div>
-            <div className="text-[11px] text-slate-400">Python, Solidity • Stanford</div>
-          </button>
-
-          <button
-            onClick={() => switchDemoUser('elena.rostova@campus.edu')}
-            className="glass-panel p-3.5 rounded-2xl border border-purple-500/30 hover:border-purple-500 text-left space-y-1 transition-all group"
-          >
-            <div className="text-xs font-bold text-white group-hover:text-purple-400">Elena Rostova (Design TA)</div>
-            <div className="text-[11px] text-slate-400">Figma, UI/UX • Harvard</div>
-          </button>
-
-          <button
-            onClick={() => switchDemoUser('david.kim@campus.edu')}
-            className="glass-panel p-3.5 rounded-2xl border border-emerald-500/30 hover:border-emerald-500 text-left space-y-1 transition-all group"
-          >
-            <div className="text-xs font-bold text-white group-hover:text-emerald-400">David Kim (Math Tutor)</div>
-            <div className="text-[11px] text-slate-400">Calculus, Linear Algebra • Berkeley</div>
-          </button>
-        </div>
-
-        <div className="pt-3 border-t border-slate-800 flex items-center justify-center gap-3">
+        <div className="pt-2 flex items-center justify-center gap-3">
           <Link 
             href="/login" 
-            className="px-5 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-400 text-dark-bg font-bold text-xs shadow-glow-brand transition-colors"
+            className="px-6 py-3 rounded-xl bg-brand-500 hover:bg-brand-400 text-dark-bg font-bold text-xs shadow-glow-brand transition-colors flex items-center gap-2"
           >
-            Go to Login Page (with Demo Credentials)
+            <span>Log In to Your Profile</span>
           </Link>
         </div>
       </div>
@@ -424,6 +405,26 @@ export default function ProfilePage() {
                 <span className="text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">
                   {user.campusId || 'STU-102948'}
                 </span>
+                
+                {user.user_type !== 'TEACHER_LEARNER' && user.role !== 'ADMIN' && user.role !== 'MODERATOR' && (
+                  <button
+                    onClick={async () => {
+                      try {
+                        const res = await fetch('/api/auth/upgrade', { method: 'POST' });
+                        if (res.ok) {
+                          await refreshUser();
+                          alert('Account successfully upgraded to Mentor + Student! You can now both teach and learn.');
+                        }
+                      } catch (err) {
+                        console.error('Upgrade error:', err);
+                      }
+                    }}
+                    className="text-xs px-3 py-1 rounded-full bg-brand-500 hover:bg-brand-400 text-dark-bg font-bold shadow-sm transition-all flex items-center gap-1"
+                  >
+                    <span>Upgrade to Mentor + Student</span>
+                    <Sparkles className="w-3 h-3" />
+                  </button>
+                )}
               </div>
 
               <p className="text-xs sm:text-sm text-slate-400 mt-1">
@@ -513,6 +514,14 @@ export default function ProfilePage() {
             }`}
           >
             <Target className="w-4 h-4" /> Skills I Want to Learn ({user.goals?.length || 0})
+          </button>
+          <button
+            onClick={() => setActiveTab('REQUESTS')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-colors ${
+              activeTab === 'REQUESTS' ? 'bg-amber-500 text-dark-bg' : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <BookOpen className="w-4 h-4" /> My Learning Requests
           </button>
           <button
             onClick={() => setActiveTab('AVAILABILITY')}
@@ -657,6 +666,27 @@ export default function ProfilePage() {
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* ============================================================ */}
+        {/* TAB 2B: MY LEARNING REQUESTS & DEMAND ACTIVITY */}
+        {/* ============================================================ */}
+        {activeTab === 'REQUESTS' && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-bold text-white">My Learning Requests</h2>
+                <p className="text-xs text-slate-400">Track unfulfilled skill demand, mentor matches, and automated availability notifications.</p>
+              </div>
+              <button
+                onClick={() => router.push('/explore')}
+                className="px-3.5 py-1.5 rounded-xl bg-brand-500 hover:bg-brand-400 text-dark-bg font-bold text-xs shadow-glow-brand transition-colors"
+              >
+                + New Request
+              </button>
+            </div>
+            <MyLearningRequests />
           </div>
         )}
 
@@ -912,25 +942,33 @@ export default function ProfilePage() {
                       )}
 
                       <div className="space-y-1.5 pt-1">
-                        {q.options.map((opt: string, optIdx: number) => (
-                          <label
-                            key={optIdx}
-                            className={`flex items-center gap-2.5 p-2 rounded-xl border cursor-pointer transition-colors ${
-                              selectedAnswers[q.id] === optIdx
-                                ? 'bg-sky-500/20 border-sky-500 text-white'
-                                : 'bg-slate-950/60 border-slate-800/80 text-slate-300 hover:border-slate-700'
-                            }`}
-                          >
-                            <input 
-                              type="radio"
-                              name={q.id}
-                              checked={selectedAnswers[q.id] === optIdx}
-                              onChange={() => setSelectedAnswers(prev => ({ ...prev, [q.id]: optIdx }))}
-                              className="text-sky-500 focus:ring-0"
-                            />
-                            <span>{opt}</span>
-                          </label>
-                        ))}
+                        {q.options.map((opt: any, optIdx: number) => {
+                          const optText = typeof opt === 'string' ? opt : opt.text;
+                          const optVal = typeof opt === 'string' ? optIdx : (opt.id || optIdx);
+                          const isSelected = selectedAnswers[q.id] === optVal;
+                          return (
+                            <label
+                              key={optIdx}
+                              className={`flex items-center gap-2.5 p-2 rounded-xl border cursor-pointer transition-colors ${
+                                isSelected
+                                  ? 'bg-sky-500/20 border-sky-500 text-white'
+                                  : 'bg-slate-950/60 border-slate-800/80 text-slate-300 hover:border-slate-700'
+                              }`}
+                            >
+                              <input 
+                                type="radio"
+                                name={q.id}
+                                checked={isSelected}
+                                onChange={() => setSelectedAnswers(prev => ({ ...prev, [q.id]: optVal }))}
+                                className="text-sky-500 focus:ring-0"
+                              />
+                              <span className="font-semibold text-sky-400 min-w-[16px]">
+                                {typeof opt === 'object' && opt.id ? `${opt.id}.` : ''}
+                              </span>
+                              <span>{optText}</span>
+                            </label>
+                          );
+                        })}
                       </div>
                     </div>
                   ))}

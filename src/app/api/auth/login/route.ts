@@ -13,18 +13,20 @@ export async function POST(req: NextRequest) {
     }
 
     const { email, password } = parsed.data;
+    const cleanEmail = email.trim().toLowerCase();
     const db = getDb();
 
     const user = db.prepare(`
       SELECT 
-        u.id, u.email, u.password_hash, u.role, u.status, u.campus_id,
+        u.id, u.email, u.password_hash, u.role, u.status, u.campus_id, u.user_type,
+        COALESCE(u.email_verified, 0) as email_verified, COALESCE(u.is_academic_email, 0) as is_academic_email,
         p.display_name, p.avatar, p.college, p.major, p.year, p.is_verified_student,
         acc.balance, acc.escrow_balance
       FROM users u
       JOIN profiles p ON u.id = p.user_id
       LEFT JOIN skill_credit_accounts acc ON u.id = acc.user_id
-      WHERE u.email = ?
-    `).get(email) as any;
+      WHERE LOWER(u.email) = ?
+    `).get(cleanEmail) as any;
 
     if (!user) {
       return NextResponse.json({ error: 'Invalid email or password credentials' }, { status: 401 });
@@ -57,9 +59,12 @@ export async function POST(req: NextRequest) {
         major: user.major,
         year: user.year,
         role: user.role,
+        user_type: user.user_type || 'TEACHER_LEARNER',
         status: user.status,
         campusId: user.campus_id,
         isVerifiedStudent: Boolean(user.is_verified_student),
+        emailVerified: Boolean(user.email_verified),
+        isAcademicEmail: Boolean(user.is_academic_email),
         balance: user.balance || 0,
         escrowBalance: user.escrow_balance || 0,
       },

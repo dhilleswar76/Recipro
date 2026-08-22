@@ -12,24 +12,36 @@ export async function GET(req: NextRequest) {
   const { user } = authRes;
   const db = getDb();
 
-  // Fetch sessions where user is teacher OR learner
-  const sessions = db.prepare(`
-    SELECT 
-      s.*,
-      sk.name as skill_name, sk.category as skill_category, sk.icon as skill_icon,
-      tp.display_name as teacher_name, tp.avatar as teacher_avatar, tp.college as teacher_college,
-      lp.display_name as learner_name, lp.avatar as learner_avatar, lp.college as learner_college,
-      r.id as rating_id, r.score as rating_score
-    FROM sessions s
-    JOIN skills sk ON s.skill_id = sk.id
-    JOIN profiles tp ON s.teacher_id = tp.user_id
-    JOIN profiles lp ON s.learner_id = lp.user_id
-    LEFT JOIN ratings r ON s.id = r.session_id AND r.rater_id = ?
-    WHERE s.teacher_id = ? OR s.learner_id = ?
-    ORDER BY s.scheduled_start DESC
-  `).all(user.userId, user.userId, user.userId);
+  try {
+    // Fetch sessions where user is teacher OR learner with resilient LEFT JOINs
+    const sessions = db.prepare(`
+      SELECT 
+        s.*,
+        sk.name as skill_name, sk.category as skill_category, sk.icon as skill_icon,
+        COALESCE(tp.display_name, 'Teacher') as teacher_name, tp.avatar as teacher_avatar, tp.college as teacher_college,
+        COALESCE(lp.display_name, 'Learner') as learner_name, lp.avatar as learner_avatar, lp.college as learner_college,
+        r.id as rating_id, r.score as rating_score,
+        sea.id as agreement_id,
+        sea.requested_return_skill_name as agreement_return_skill,
+        sea.return_type as agreement_return_type,
+        sea.credit_amount as agreement_credit_amount,
+        sea.status as agreement_status,
+        sea.proposed_by as agreement_proposed_by
+      FROM sessions s
+      LEFT JOIN skills sk ON s.skill_id = sk.id
+      LEFT JOIN profiles tp ON s.teacher_id = tp.user_id
+      LEFT JOIN profiles lp ON s.learner_id = lp.user_id
+      LEFT JOIN session_exchange_agreements sea ON s.id = sea.session_id
+      LEFT JOIN ratings r ON s.id = r.session_id AND r.rater_id = ?
+      WHERE s.teacher_id = ? OR s.learner_id = ?
+      ORDER BY s.scheduled_start DESC
+    `).all(user.userId, user.userId, user.userId);
 
-  return NextResponse.json({ sessions });
+    return NextResponse.json({ sessions });
+  } catch (err: any) {
+    console.error('Fetch Sessions Error:', err);
+    return NextResponse.json({ error: 'Failed to retrieve sessions', details: err.message }, { status: 500 });
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -62,6 +74,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'The selected mentor does not teach this skill' }, { status: 400 });
     }
 
+    // Pre-check learner credit balance
+    const account = db.prepare(`
+      SELECT balance FROM skill_credit_accounts WHERE user_id = ?
+    `).get(user.userId) as { balance: number } | undefined;
+
+    if (!account || account.balance < creditsAmount) {
+      return NextResponse.json({ 
+        error: `Insufficient Skill Credits. You have ${account?.balance || 0} credits, but ${creditsAmount} is required.` 
+      }, { status: 402 });
+    }
+
     const sessionId = `sess-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     const idempotencyKey = `book-${sessionId}`;
 
@@ -82,13 +105,7 @@ export async function POST(req: NextRequest) {
         return; // Abort booking transaction
       }
 
-      // 2. Reserve Learner Escrow Credits
-      const escrowRes = reserveEscrowCredits(user.userId, creditsAmount, sessionId, idempotencyKey);
-      if (!escrowRes.success) {
-        throw new Error(`INSUFFICIENT_CREDITS:${escrowRes.message}`);
-      }
-
-      // 3. Insert Session Record
+      // 2. Insert Session Record FIRST (Satisfies Foreign Key constraints for subsequent credit transactions)
       const meetingUrl = `https://meet.skillswap.internal/room/${sessionId}`;
       db.prepare(`
         INSERT INTO sessions (
@@ -109,6 +126,25 @@ export async function POST(req: NextRequest) {
         idempotencyKey,
         notes || ''
       );
+
+      // 2b. Insert Session Participants (Explicit Session Roles)
+      db.prepare(`
+        INSERT OR IGNORE INTO session_participants (id, session_id, user_id, session_role, confirmed)
+        VALUES (?, ?, ?, 'TRAINER', 0), (?, ?, ?, 'LEARNER', 0)
+      `).run(
+        `sp-${sessionId}-trainer`,
+        sessionId,
+        teacherId,
+        `sp-${sessionId}-learner`,
+        sessionId,
+        user.userId
+      );
+
+      // 3. Reserve Learner Escrow Credits (Now references existing sessionId)
+      const escrowRes = reserveEscrowCredits(user.userId, creditsAmount, sessionId, idempotencyKey);
+      if (!escrowRes.success) {
+        throw new Error(`INSUFFICIENT_CREDITS:${escrowRes.message}`);
+      }
 
       // 4. Notify Teacher
       db.prepare(`
@@ -150,7 +186,6 @@ export async function POST(req: NextRequest) {
     }, { status: 201 });
   } catch (err: any) {
     console.error('Book Session Error:', err);
-    return NextResponse.json({ error: 'Failed to create session request' }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to create session request', details: err.message }, { status: 500 });
   }
 }
-

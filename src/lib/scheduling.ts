@@ -158,7 +158,7 @@ export function checkSlotHardConstraints(
   // 2. Check Teacher Conflicting Sessions (with Buffer)
   const teacherSessions = db.prepare(`
     SELECT id, scheduled_start, scheduled_end, status FROM sessions
-    WHERE teacher_id = ? AND status NOT IN ('CANCELLED')
+    WHERE teacher_id = ? AND status IN ('REQUESTED', 'ACCEPTED', 'SCHEDULED', 'IN_PROGRESS', 'PENDING_CONFIRMATION')
   `).all(params.teacherId) as Array<{ id: string; scheduled_start: string; scheduled_end: string; status: string }>;
 
   for (const sess of teacherSessions) {
@@ -186,7 +186,7 @@ export function checkSlotHardConstraints(
   // 3. Check Learner Conflicting Sessions
   const learnerSessions = db.prepare(`
     SELECT id, scheduled_start, scheduled_end FROM sessions
-    WHERE (learner_id = ? OR teacher_id = ?) AND status NOT IN ('CANCELLED')
+    WHERE (learner_id = ? OR teacher_id = ?) AND status IN ('REQUESTED', 'ACCEPTED', 'SCHEDULED', 'IN_PROGRESS', 'PENDING_CONFIRMATION')
   `).all(params.learnerId, params.learnerId) as Array<{ id: string; scheduled_start: string; scheduled_end: string }>;
 
   for (const sess of learnerSessions) {
@@ -291,7 +291,7 @@ export function calculateAvailableSlots(params: {
 
   const mentorBookings = db.prepare(`
     SELECT scheduled_start, scheduled_end FROM sessions
-    WHERE teacher_id = ? AND status NOT IN ('CANCELLED')
+    WHERE teacher_id = ? AND status IN ('REQUESTED', 'ACCEPTED', 'SCHEDULED', 'IN_PROGRESS', 'PENDING_CONFIRMATION')
       AND scheduled_start >= ? AND scheduled_start <= ?
   `).all(params.teacherId, dayStartStr, dayEndStr) as Array<{ scheduled_start: string; scheduled_end: string }>;
 
@@ -300,7 +300,7 @@ export function calculateAvailableSlots(params: {
   if (params.learnerId) {
     learnerBookings = db.prepare(`
       SELECT scheduled_start, scheduled_end FROM sessions
-      WHERE (learner_id = ? OR teacher_id = ?) AND status NOT IN ('CANCELLED')
+      WHERE (learner_id = ? OR teacher_id = ?) AND status IN ('REQUESTED', 'ACCEPTED', 'SCHEDULED', 'IN_PROGRESS', 'PENDING_CONFIRMATION')
         AND scheduled_start >= ? AND scheduled_start <= ?
     `).all(params.learnerId, params.learnerId, dayStartStr, dayEndStr) as Array<{ scheduled_start: string; scheduled_end: string }>;
   }

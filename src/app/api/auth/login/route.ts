@@ -13,6 +13,7 @@ export async function POST(req: NextRequest) {
     }
 
     const { email, password } = parsed.data;
+    const cleanEmail = email.trim().toLowerCase();
     const db = getDb();
 
     const user = db.prepare(`
@@ -23,8 +24,8 @@ export async function POST(req: NextRequest) {
       FROM users u
       JOIN profiles p ON u.id = p.user_id
       LEFT JOIN skill_credit_accounts acc ON u.id = acc.user_id
-      WHERE u.email = ?
-    `).get(email) as any;
+      WHERE LOWER(u.email) = ?
+    `).get(cleanEmail) as any;
 
     if (!user) {
       return NextResponse.json({ error: 'Invalid email or password credentials' }, { status: 401 });

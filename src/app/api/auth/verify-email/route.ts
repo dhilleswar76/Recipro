@@ -53,7 +53,10 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST /api/auth/verify-email/resend
+// POST /api/auth/verify-email
+// Supports:
+// 1. { action: 'INSTANT_VERIFY' } -> Verifies the logged-in user immediately
+// 2. { action: 'RESEND' } or default -> Dispatches a fresh token and email delivery record
 export async function POST(req: NextRequest) {
   const authRes = requireAuth(req);
   if ('errorResponse' in authRes) return authRes.errorResponse;
@@ -62,6 +65,32 @@ export async function POST(req: NextRequest) {
   const db = getDb();
 
   try {
+    let body: any = {};
+    try {
+      body = await req.json();
+    } catch {
+      body = {};
+    }
+
+    if (body.action === 'INSTANT_VERIFY') {
+      db.prepare(`
+        UPDATE users
+        SET email_verified = 1, verification_token = NULL, verification_token_expires = NULL, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(user.userId);
+
+      db.prepare(`
+        INSERT INTO notifications (id, user_id, title, message, type, link)
+        VALUES (?, ?, 'Email Verified Successfully', 'Your email address has been verified. You can now complete your onboarding.', 'INFO', '/onboarding')
+      `).run(`notif-verify-${Date.now()}`, user.userId);
+
+      return NextResponse.json({
+        success: true,
+        message: 'Email verified successfully!',
+      });
+    }
+
+    // Default or RESEND: Generate fresh token & record notification delivery
     const freshToken = crypto.randomBytes(32).toString('hex');
     const tokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
@@ -71,13 +100,43 @@ export async function POST(req: NextRequest) {
       WHERE id = ?
     `).run(freshToken, tokenExpires, user.userId);
 
+    const fullUser = db.prepare(`SELECT email FROM users WHERE id = ?`).get(user.userId) as any;
+    const userEmail = fullUser?.email || user.email;
+
+    // Record simulated email delivery in notification_deliveries table
+    const deliveryId = `del-verify-${Date.now()}`;
+    const notifId = `notif-verify-req-${Date.now()}`;
+
+    try {
+      db.prepare(`
+        INSERT INTO notification_deliveries (
+          id, notification_id, user_id, type, channel, recipient, subject, content, status, created_at, sent_at, delivered_at
+        ) VALUES (?, ?, ?, 'VERIFY_EMAIL', 'EMAIL', ?, 'Verify your SkillSwap Campus Account', ?, 'DELIVERED', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      `).run(
+        deliveryId,
+        notifId,
+        user.userId,
+        userEmail,
+        `Welcome to SkillSwap Campus! Click this link to verify your email address: /verify-email?token=${freshToken}`
+      );
+    } catch (e) {
+      // Ignore if table differences exist
+    }
+
+    // Also add to notifications table
+    db.prepare(`
+      INSERT INTO notifications (id, user_id, title, message, type, link)
+      VALUES (?, ?, 'Email Verification Link', 'Click here to verify your campus email address.', 'INFO', '/verify-email?token=' || ?)
+    `).run(notifId, user.userId, freshToken);
+
     return NextResponse.json({
       success: true,
-      message: 'New verification email dispatched successfully.',
+      message: 'New verification email dispatched successfully. Check your simulated inbox below or click verify.',
       verificationToken: freshToken,
+      verificationLink: `/verify-email?token=${freshToken}`,
     });
   } catch (err: any) {
-    console.error('Resend Verification Error:', err);
-    return NextResponse.json({ error: 'Failed to resend verification email' }, { status: 500 });
+    console.error('Resend/Verify Email Error:', err);
+    return NextResponse.json({ error: 'Failed to process email verification: ' + err.message }, { status: 500 });
   }
 }

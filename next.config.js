@@ -1,8 +1,7 @@
-/** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
   experimental: {
-    serverComponentsExternalPackages: ['better-sqlite3'],
+    serverComponentsExternalPackages: ['better-sqlite3', 'bcryptjs'],
   },
   webpack: (config, { isServer }) => {
     if (!isServer) {
@@ -11,6 +10,8 @@ const nextConfig = {
         fs: false,
         net: false,
         tls: false,
+        crypto: false,
+        'better-sqlite3': false,
       };
     }
     return config;

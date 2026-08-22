@@ -4,7 +4,7 @@ import { requireAuth } from '@/lib/auth';
 import { SubmitAssessmentSchema } from '@/lib/validations';
 import { evaluateSkillAssessment } from '@/lib/skill-verification';
 import { notifyLearnersOfNewMentor } from '@/lib/skill-gap';
-import { generatePythonQuiz, sanitizeAssessmentForClient } from '@/lib/gemini';
+import { generateSkillAssessment, sanitizeAssessmentForClient } from '@/lib/gemini';
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -12,10 +12,11 @@ export async function GET(req: NextRequest) {
   const proficiency = (searchParams.get('proficiency') || 'Intermediate') as any;
 
   try {
-    // Generate Python assessment via Gemini AI provider (with local curated fallback)
-    const quiz = await generatePythonQuiz({
+    // Generate skill-specific assessment via Gemini AI provider (with local curated fallback per skill)
+    const quiz = await generateSkillAssessment({
+      skillName,
       proficiency: ['Beginner', 'Intermediate', 'Advanced', 'Expert'].includes(proficiency) ? proficiency : 'Intermediate',
-      questionCount: 10,
+      questionCount: 5,
     });
 
     // Strip correctOption and explanation before sending to client

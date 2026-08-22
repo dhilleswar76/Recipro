@@ -369,27 +369,400 @@ export const LOCAL_PYTHON_QUIZ_BANK: Record<string, AssessmentQuestion[]> = {
   ],
 };
 
+export const LOCAL_SKILL_QUIZ_BANKS: Record<string, AssessmentQuestion[]> = {
+  'solidity': [
+    {
+      id: 'sol-1',
+      question: 'Which design pattern is essential to protect against Reentrancy attacks in Solidity?',
+      options: [
+        { id: 'A', text: 'Interactions-Effects-Checks' },
+        { id: 'B', text: 'Checks-Effects-Interactions' },
+        { id: 'C', text: 'Delegatecall Proxy Pattern' },
+        { id: 'D', text: 'Factory Contract Pattern' },
+      ],
+      correctOption: 'B',
+      explanation: 'Checks-Effects-Interactions ensures state variables (such as user balances) are modified before external calls.',
+      hint: 'Modify state before making external transfer calls.',
+      level: 'Intermediate',
+    },
+    {
+      id: 'sol-2',
+      question: 'What is the difference between `memory` and `calldata` in Solidity function arguments?',
+      options: [
+        { id: 'A', text: '`calldata` is non-modifiable, read-only and cheaper gas-wise for external functions' },
+        { id: 'B', text: '`memory` is permanently stored on the blockchain ledger' },
+        { id: 'C', text: '`calldata` can be modified inside the function body' },
+        { id: 'D', text: 'There is no difference in modern Solidity versions' },
+      ],
+      correctOption: 'A',
+      explanation: '`calldata` is a read-only, non-allocatable memory area where transaction data is stored, saving gas over copying to `memory`.',
+      hint: 'calldata avoids expensive memory allocations for read-only args.',
+      level: 'Intermediate',
+    },
+    {
+      id: 'sol-3',
+      question: 'What does the low-level `call{value: x}("")` return upon failure compared to `transfer()`?',
+      options: [
+        { id: 'A', text: '`transfer` forwards all gas and returns a boolean; `call` reverts' },
+        { id: 'B', text: '`transfer` reverts with a 2300 gas stipend; `call` returns (bool, bytes) and forwards configurable gas' },
+        { id: 'C', text: '`transfer` is for ERC-20 tokens only; `call` is for native ETH' },
+        { id: 'D', text: '`transfer` can only be invoked by contract owners' },
+      ],
+      correctOption: 'B',
+      explanation: '`transfer` caps gas at 2300 and reverts automatically; low-level `call` forwards remaining gas and requires manual boolean checking.',
+      hint: 'call returns a tuple of (bool, bytes).',
+      level: 'Advanced',
+    },
+    {
+      id: 'sol-4',
+      question: 'What vulnerability occurs when using `tx.origin` for authorization instead of `msg.sender`?',
+      options: [
+        { id: 'A', text: 'Integer overflow' },
+        { id: 'B', text: 'Phishing attack via intermediate proxy contracts' },
+        { id: 'C', text: 'Frontrunning' },
+        { id: 'D', text: 'Reentrancy' },
+      ],
+      correctOption: 'B',
+      explanation: '`tx.origin` represents the original EOA that signed the transaction, allowing malicious contracts to trick authorized users into executing calls.',
+      hint: 'tx.origin traces back to the original EOA, not the immediate caller.',
+      level: 'Advanced',
+    },
+  ],
+  'react': [
+    {
+      id: 'react-1',
+      question: 'What is the primary purpose of the `useCallback` hook in React?',
+      options: [
+        { id: 'A', text: 'To run asynchronous fetch side effects on component mount' },
+        { id: 'B', text: 'To memoize callback function instances between re-renders and prevent unnecessary child re-renders' },
+        { id: 'C', text: 'To mutate the DOM tree directly' },
+        { id: 'D', text: 'To create global Redux stores' },
+      ],
+      correctOption: 'B',
+      explanation: '`useCallback` caches a function definition between renders unless its declared dependencies change.',
+      hint: 'Memoizes function reference between renders.',
+      level: 'Intermediate',
+    },
+    {
+      id: 'react-2',
+      question: 'Why should keys in React lists be stable and unique instead of array indexes?',
+      options: [
+        { id: 'A', text: 'Array indexes cause compilation syntax errors in JSX' },
+        { id: 'B', text: 'Using indexes causes component state corruption and reconciliation bugs during item reordering or deletion' },
+        { id: 'C', text: 'Keys are only required in class components' },
+        { id: 'D', text: 'Indexes exceed maximum memory capacity' },
+      ],
+      correctOption: 'B',
+      explanation: 'React uses keys to identify which items have changed, been added, or removed during reconciliation.',
+      hint: 'Consider what happens when items are reordered or removed.',
+      level: 'Beginner',
+    },
+    {
+      id: 'react-3',
+      question: 'In React 18, what does `useTransition` enable developers to do?',
+      options: [
+        { id: 'A', text: 'Apply CSS transitions during page navigation' },
+        { id: 'B', text: 'Mark state updates as non-urgent transitions to keep the UI responsive during intensive re-renders' },
+        { id: 'C', text: 'Convert server components into client components' },
+        { id: 'D', text: 'Manage WebSockets connections automatically' },
+      ],
+      correctOption: 'B',
+      explanation: '`useTransition` lets you mark state updates as non-urgent transitions, keeping current UI interactive while new state renders.',
+      hint: 'Distinguishes urgent user input from heavy background rendering.',
+      level: 'Advanced',
+    },
+    {
+      id: 'react-4',
+      question: 'What is the execution timing difference between `useEffect` and `useLayoutEffect`?',
+      options: [
+        { id: 'A', text: '`useLayoutEffect` runs synchronously after DOM mutations before browser paint; `useEffect` runs asynchronously after paint' },
+        { id: 'B', text: '`useEffect` runs before the DOM is created' },
+        { id: 'C', text: '`useLayoutEffect` only works on the server' },
+        { id: 'D', text: 'They execute at the exact same microtask tick' },
+      ],
+      correctOption: 'A',
+      explanation: '`useLayoutEffect` fires synchronously after all DOM mutations, useful for reading layout measurements before the browser paints.',
+      hint: 'One blocks visual browser paint to prevent flickering.',
+      level: 'Advanced',
+    },
+  ],
+  'ml': [
+    {
+      id: 'ml-1',
+      question: 'In deep learning, what is the primary purpose of an activation function in a neural network layer?',
+      options: [
+        { id: 'A', text: 'To normalize gradient updates across layers' },
+        { id: 'B', text: 'To introduce non-linearity enabling approximation of complex non-linear functions' },
+        { id: 'C', text: 'To prevent GPU memory allocation bottlenecks' },
+        { id: 'D', text: 'To calculate cross-entropy loss' },
+      ],
+      correctOption: 'B',
+      explanation: 'Without non-linear activation functions, deep neural networks collapse to a single linear transformation regardless of depth.',
+      hint: 'Enables networks to learn non-linear decision boundaries.',
+      level: 'Beginner',
+    },
+    {
+      id: 'ml-2',
+      question: 'What is the main difference between L1 (Lasso) and L2 (Ridge) regularization?',
+      options: [
+        { id: 'A', text: 'L1 produces sparse weights (feature selection) with absolute penalties; L2 penalizes squared weights' },
+        { id: 'B', text: 'L1 only works for binary classification' },
+        { id: 'C', text: 'L2 drives weights to exactly zero' },
+        { id: 'D', text: 'L1 cannot be optimized with gradient descent' },
+      ],
+      correctOption: 'A',
+      explanation: 'L1 regularization adds sum of absolute weights, driving irrelevant coefficients to exact zero for sparse feature selection.',
+      hint: 'L1 promotes sparsity by zeroing out coefficients.',
+      level: 'Intermediate',
+    },
+    {
+      id: 'ml-3',
+      question: 'In PyTorch, what does `loss.backward()` accomplish?',
+      options: [
+        { id: 'A', text: 'Computes gradients of the loss with respect to all graph tensors having `requires_grad=True`' },
+        { id: 'B', text: 'Updates the model weights using the configured optimizer learning rate' },
+        { id: 'C', text: 'Zeros all accumulated gradient buffers' },
+        { id: 'D', text: 'Inverts the neural network layer order' },
+      ],
+      correctOption: 'A',
+      explanation: '`loss.backward()` traverses the autograd computation graph backwards from the loss tensor and computes partial derivatives.',
+      hint: 'Autograd graph backpropagation.',
+      level: 'Intermediate',
+    },
+    {
+      id: 'ml-4',
+      question: 'When evaluating a classification model with severe class imbalance, which metric is most informative?',
+      options: [
+        { id: 'A', text: 'Standard Accuracy' },
+        { id: 'B', text: 'Precision-Recall AUC (PR-AUC) and F1-Score' },
+        { id: 'C', text: 'Mean Squared Error (MSE)' },
+        { id: 'D', text: 'R-Squared' },
+      ],
+      correctOption: 'B',
+      explanation: 'In highly imbalanced datasets (e.g. 99% negative), standard accuracy is misleading. PR-AUC and F1 focus on positive class precision and recall.',
+      hint: 'Focus on precision and recall rather than overall accuracy.',
+      level: 'Intermediate',
+    },
+  ],
+  'dsa': [
+    {
+      id: 'dsa-1',
+      question: 'What is the average and worst-case time complexity of QuickSort?',
+      options: [
+        { id: 'A', text: 'O(n log n) average, O(n^2) worst-case' },
+        { id: 'B', text: 'O(n) average, O(n log n) worst-case' },
+        { id: 'C', text: 'O(n^2) average, O(n^3) worst-case' },
+        { id: 'D', text: 'O(log n) average, O(n) worst-case' },
+      ],
+      correctOption: 'A',
+      explanation: 'QuickSort runs in O(n log n) average time but degrades to O(n^2) if poor pivot selections occur (e.g. already sorted array with first element as pivot).',
+      hint: 'Average case is n log n; worst case occurs on pathological pivots.',
+      level: 'Beginner',
+    },
+    {
+      id: 'dsa-2',
+      question: 'Which composite data structure is optimal for implementing an LRU (Least Recently Used) Cache with O(1) get and put operations?',
+      options: [
+        { id: 'A', text: 'Doubly Linked List combined with a Hash Map' },
+        { id: 'B', text: 'Binary Search Tree combined with an Array' },
+        { id: 'C', text: 'Min-Heap and Stack' },
+        { id: 'D', text: 'Trie and Queue' },
+      ],
+      correctOption: 'A',
+      explanation: 'The Hash Map provides O(1) key lookup, while the Doubly Linked List provides O(1) node removal and insertion at the head/tail.',
+      hint: 'Hash Map for O(1) lookup + Doubly Linked List for O(1) ordering.',
+      level: 'Intermediate',
+    },
+    {
+      id: 'dsa-3',
+      question: 'In dynamic programming, what two properties characterize a problem solvable by DP?',
+      options: [
+        { id: 'A', text: 'Optimal substructure and overlapping subproblems' },
+        { id: 'B', text: 'Greedy choice property and random walks' },
+        { id: 'C', text: 'Sorting invariance and hash collisions' },
+        { id: 'D', text: 'Linear independence and recursion depth' },
+      ],
+      correctOption: 'A',
+      explanation: 'Dynamic programming requires optimal substructure (optimal solution contains optimal sub-solutions) and overlapping subproblems (memoization reduces redundant computations).',
+      hint: 'Optimal substructure & overlapping subproblems.',
+      level: 'Intermediate',
+    },
+  ],
+  'ui-ux': [
+    {
+      id: 'ui-1',
+      question: 'What is the primary objective of WCAG 2.1 contrast ratio guidelines (e.g. 4.5:1 for normal text)?',
+      options: [
+        { id: 'A', text: 'To make websites look visually minimalistic' },
+        { id: 'B', text: 'To ensure readability and accessible perception for users with visual impairments' },
+        { id: 'C', text: 'To speed up browser rendering engine rasterization' },
+        { id: 'D', text: 'To comply with search engine keyword density rules' },
+      ],
+      correctOption: 'B',
+      explanation: 'WCAG contrast ratios guarantee that foreground text is clearly distinguishable against background colors for accessibility.',
+      hint: 'Ensures readable contrast for accessibility.',
+      level: 'Beginner',
+    },
+    {
+      id: 'ui-2',
+      question: 'In Fitts’s Law, what two factors determine the time required to rapidly move to a target area?',
+      options: [
+        { id: 'A', text: 'Distance to target and width/size of the target' },
+        { id: 'B', text: 'Color saturation and font size' },
+        { id: 'C', text: 'Screen resolution and DPI density' },
+        { id: 'D', text: 'User age and mouse sensitivity' },
+      ],
+      correctOption: 'A',
+      explanation: 'Fitts’s Law states MT = a + b * log2(2D / W), relating movement time directly to target distance and width.',
+      hint: 'Distance and target width.',
+      level: 'Intermediate',
+    },
+    {
+      id: 'ui-3',
+      question: 'What is the Atomic Design methodology hierarchy from smallest to largest component?',
+      options: [
+        { id: 'A', text: 'Atoms -> Molecules -> Organisms -> Templates -> Pages' },
+        { id: 'B', text: 'Pages -> Templates -> Organisms -> Molecules -> Atoms' },
+        { id: 'C', text: 'Tokens -> Styles -> Components -> Views' },
+        { id: 'D', text: 'Elements -> Groups -> Layouts -> Screens' },
+      ],
+      correctOption: 'A',
+      explanation: 'Brad Frost’s Atomic Design starts with Atoms (buttons, inputs), building into Molecules, Organisms, Templates, and Pages.',
+      hint: 'Atoms build into Molecules and Organisms.',
+      level: 'Beginner',
+    },
+  ],
+  'calculus': [
+    {
+      id: 'math-1',
+      question: 'What is the derivative of f(x) = e^(3x) with respect to x?',
+      options: [
+        { id: 'A', text: '3e^(3x)' },
+        { id: 'B', text: 'e^(3x)' },
+        { id: 'C', text: '(1/3)e^(3x)' },
+        { id: 'D', text: '3x * e^(3x-1)' },
+      ],
+      correctOption: 'A',
+      explanation: 'Using the chain rule: d/dx[e^(g(x))] = g\'(x) * e^(g(x)) = 3 * e^(3x).',
+      hint: 'Apply the chain rule with g(x) = 3x.',
+      level: 'Beginner',
+    },
+    {
+      id: 'math-2',
+      question: 'What does the dot product of two non-zero vectors equal to 0 indicate?',
+      options: [
+        { id: 'A', text: 'The vectors are orthogonal (perpendicular)' },
+        { id: 'B', text: 'The vectors are parallel' },
+        { id: 'C', text: 'The vectors have equal magnitude' },
+        { id: 'D', text: 'The vectors are collinear' },
+      ],
+      correctOption: 'A',
+      explanation: 'u · v = ||u|| ||v|| cos(θ). When dot product is 0 and magnitudes are non-zero, cos(θ) = 0, meaning θ = 90° (orthogonal).',
+      hint: 'cos(90°) = 0.',
+      level: 'Beginner',
+    },
+    {
+      id: 'math-3',
+      question: 'In multivariable calculus, what does the gradient vector ∇f(x, y) represent geometrically?',
+      options: [
+        { id: 'A', text: 'The direction of steepest ascent on the scalar field surface' },
+        { id: 'B', text: 'The area under the contour curves' },
+        { id: 'C', text: 'The tangent plane normal to the z-axis' },
+        { id: 'D', text: 'The second-order inflection curvature' },
+      ],
+      correctOption: 'A',
+      explanation: 'The gradient vector points in the direction of greatest rate of increase of the function, and its magnitude is the slope in that direction.',
+      hint: 'Points in direction of maximum rate of increase.',
+      level: 'Intermediate',
+    },
+  ],
+  'general': [
+    {
+      id: 'gen-1',
+      question: 'How do you structure an effective hands-on peer learning session for a novice student?',
+      options: [
+        { id: 'A', text: 'Lecture non-stop for 60 minutes without asking questions' },
+        { id: 'B', text: 'Assess prior knowledge, introduce concepts with real examples, practice together, and solicit active recall feedback' },
+        { id: 'C', text: 'Assign reading material and end the call immediately' },
+        { id: 'D', text: 'Only show code solutions without explaining reasoning' },
+      ],
+      correctOption: 'B',
+      explanation: 'Effective mentorship involves assessing learner needs, providing interactive examples, and guiding active recall.',
+      hint: 'Active recall and interactive practice.',
+      level: 'Beginner',
+    },
+    {
+      id: 'gen-2',
+      question: 'When debugging or diagnosing a complex error with a learner, what is the best pedagogical practice?',
+      options: [
+        { id: 'A', text: 'Take over their screen and fix the code silently' },
+        { id: 'B', text: 'Guide the student to read error stack traces, explain assumptions, and formulate test hypotheses' },
+        { id: 'C', text: 'Tell the student to switch to a different subject' },
+        { id: 'D', text: 'Ignore the error and skip to the end' },
+      ],
+      correctOption: 'B',
+      explanation: 'Teaching students how to systematically interpret errors and test hypotheses builds long-term problem solving autonomy.',
+      hint: 'Build problem-solving autonomy through hypothesis testing.',
+      level: 'Intermediate',
+    },
+  ],
+};
+
 // ============================================================
 // GEMINI SERVER-SIDE API CALLS & PROMPT INJECTION ISOLATION
 // ============================================================
 
-export async function generatePythonQuiz(params: {
+export async function generateSkillAssessment(params: {
+  skillName: string;
   proficiency: 'Beginner' | 'Intermediate' | 'Advanced' | 'Expert';
   questionCount?: number;
 }): Promise<GeneratedQuiz> {
-  const count = params.questionCount || 10;
+  const skillName = (params.skillName || 'Python').trim();
   const level = params.proficiency || 'Intermediate';
+  const count = params.questionCount || 5;
 
   const apiKey = process.env.GEMINI_API_KEY || process.env.AI_API_KEY;
   const model = process.env.GEMINI_MODEL || process.env.AI_MODEL_NAME || 'gemini-1.5-flash';
 
-  // If no Gemini API key configured, use curated local question bank
+  const normalized = skillName.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  const getLocalQuestions = (): AssessmentQuestion[] => {
+    if (normalized.includes('python')) {
+      return LOCAL_PYTHON_QUIZ_BANK[level] || LOCAL_PYTHON_QUIZ_BANK['Intermediate'];
+    }
+    for (const [key, questions] of Object.entries(LOCAL_SKILL_QUIZ_BANKS)) {
+      if (normalized.includes(key) || key.includes(normalized)) {
+        return questions;
+      }
+    }
+    if (normalized.includes('figma') || normalized.includes('design')) {
+      return LOCAL_SKILL_QUIZ_BANKS['ui-ux'];
+    }
+    if (normalized.includes('pytorch') || normalized.includes('ml') || normalized.includes('ai') || normalized.includes('learning')) {
+      return LOCAL_SKILL_QUIZ_BANKS['ml'];
+    }
+    if (normalized.includes('math') || normalized.includes('calculus') || normalized.includes('algebra')) {
+      return LOCAL_SKILL_QUIZ_BANKS['calculus'];
+    }
+    if (normalized.includes('data') || normalized.includes('algorithm') || normalized.includes('dsa') || normalized.includes('tree')) {
+      return LOCAL_SKILL_QUIZ_BANKS['dsa'];
+    }
+    if (normalized.includes('solidity') || normalized.includes('contract') || normalized.includes('web3') || normalized.includes('blockchain')) {
+      return LOCAL_SKILL_QUIZ_BANKS['solidity'];
+    }
+    if (normalized.includes('react') || normalized.includes('next') || normalized.includes('frontend') || normalized.includes('javascript') || normalized.includes('typescript')) {
+      return LOCAL_SKILL_QUIZ_BANKS['react'];
+    }
+    return LOCAL_SKILL_QUIZ_BANKS['general'];
+  };
+
+  // If no Gemini API key configured, use local curated question bank for this specific skill
   if (!apiKey || apiKey.trim() === '') {
-    console.log(`[AI Provider: LOCAL_FALLBACK] Gemini API key not provided. Serving curated ${level} Python assessment bank.`);
-    const bank = LOCAL_PYTHON_QUIZ_BANK[level] || LOCAL_PYTHON_QUIZ_BANK['Intermediate'];
+    console.log(`[AI Provider: LOCAL_FALLBACK] Gemini API key not provided. Serving curated ${level} assessment bank for ${skillName}.`);
+    const bank = getLocalQuestions();
     return {
       assessmentVersion: 'v1.0-curated',
-      skill: 'Python',
+      skill: skillName,
       difficulty: level,
       provider: 'LOCAL_FALLBACK',
       questions: bank.slice(0, count),
@@ -397,23 +770,26 @@ export async function generatePythonQuiz(params: {
   }
 
   try {
-    const systemInstruction = `You are an expert Python compiler and curriculum examiner for university computer science students.
-Generate an objective, strictly accurate multiple-choice skill assessment for Python Programming.
+    const systemInstruction = `You are a principal university computer science & domain assessment examiner.
+Generate an objective, strictly accurate multiple-choice skill assessment for the skill: "${skillName}".
 Rules:
 1. Target Difficulty Level: ${level}.
-2. Exactly ${count} questions.
+2. Exactly ${count} questions testing real concepts in ${skillName}.
 3. Every question must have exactly 4 choices (labeled A, B, C, D) and exactly ONE correct answer.
 4. Provide a clear, technical explanation and a hint.
-5. Strict structured JSON output following the schema provided. No conversational preamble.`;
+5. Strict structured JSON output following the schema provided. No conversational preamble or code blocks.`;
 
-    const userPrompt = `Generate a ${count}-question Python assessment for the "${level}" proficiency tier. Output pure JSON adhering to the specified schema.`;
+    const userPrompt = `Generate a ${count}-question assessment for "${skillName}" at the "${level}" proficiency tier. Output pure JSON adhering to the specified schema.`;
 
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        system_instruction: {
+          parts: [{ text: systemInstruction }]
+        },
         contents: [
-          { role: 'user', parts: [{ text: `${systemInstruction}\n\n${userPrompt}` }] }
+          { role: 'user', parts: [{ text: userPrompt }] }
         ],
         generationConfig: {
           responseMimeType: 'application/json',
@@ -423,11 +799,11 @@ Rules:
     });
 
     if (!response.ok) {
-      console.warn(`[Gemini API Error] Status: ${response.status}. Falling back to curated question bank.`);
-      const bank = LOCAL_PYTHON_QUIZ_BANK[level] || LOCAL_PYTHON_QUIZ_BANK['Intermediate'];
+      console.warn(`[Gemini API Error] Status: ${response.status}. Falling back to curated bank for ${skillName}.`);
+      const bank = getLocalQuestions();
       return {
         assessmentVersion: 'v1.0-fallback',
-        skill: 'Python',
+        skill: skillName,
         difficulty: level,
         provider: 'LOCAL_FALLBACK',
         questions: bank.slice(0, count),
@@ -436,9 +812,7 @@ Rules:
 
     const data = await response.json();
     const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!rawText) {
-      throw new Error('Empty Gemini response');
-    }
+    if (!rawText) throw new Error('Empty Gemini response');
 
     const parsedJson = JSON.parse(rawText);
     const validated = GeneratedQuizSchema.safeParse(parsedJson);
@@ -446,30 +820,42 @@ Rules:
     if (validated.success) {
       return {
         ...validated.data,
+        skill: skillName,
         provider: 'GEMINI_AI',
       };
     } else {
-      console.warn('[Gemini Schema Mismatch] Falling back to curated bank:', validated.error);
-      const bank = LOCAL_PYTHON_QUIZ_BANK[level] || LOCAL_PYTHON_QUIZ_BANK['Intermediate'];
+      console.warn(`[Gemini Schema Mismatch for ${skillName}] Falling back to curated bank:`, validated.error);
+      const bank = getLocalQuestions();
       return {
         assessmentVersion: 'v1.0-fallback',
-        skill: 'Python',
+        skill: skillName,
         difficulty: level,
         provider: 'LOCAL_FALLBACK',
         questions: bank.slice(0, count),
       };
     }
   } catch (err) {
-    console.error('[Gemini Request Exception] Fallback activated:', err);
-    const bank = LOCAL_PYTHON_QUIZ_BANK[level] || LOCAL_PYTHON_QUIZ_BANK['Intermediate'];
+    console.error(`[Gemini Request Exception for ${skillName}] Fallback activated:`, err);
+    const bank = getLocalQuestions();
     return {
       assessmentVersion: 'v1.0-fallback',
-      skill: 'Python',
+      skill: skillName,
       difficulty: level,
       provider: 'LOCAL_FALLBACK',
       questions: bank.slice(0, count),
     };
   }
+}
+
+export async function generatePythonQuiz(params: {
+  proficiency: 'Beginner' | 'Intermediate' | 'Advanced' | 'Expert';
+  questionCount?: number;
+}): Promise<GeneratedQuiz> {
+  return generateSkillAssessment({
+    skillName: 'Python',
+    proficiency: params.proficiency,
+    questionCount: params.questionCount,
+  });
 }
 
 // ============================================================

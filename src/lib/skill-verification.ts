@@ -241,7 +241,7 @@ export function getAssessmentQuestionsForSkill(skillName: string): AssessmentQue
   return GENERIC_QUESTIONS;
 }
 
-import { LOCAL_PYTHON_QUIZ_BANK } from './gemini';
+import { LOCAL_PYTHON_QUIZ_BANK, LOCAL_SKILL_QUIZ_BANKS } from './gemini';
 
 export interface EvaluateAssessmentParams {
   userId: string;
@@ -276,9 +276,8 @@ export function evaluateSkillAssessment(
   const questions = getAssessmentQuestionsForSkill(skillName);
   let correctCount = 0;
   const letterMap: Record<string, number> = { 'A': 0, 'B': 1, 'C': 2, 'D': 3 };
-  const numToLetter = ['A', 'B', 'C', 'D'];
 
-  // Check answers against both standard question bank and Python quiz bank
+  // Check answers against standard question bank, Python quiz bank, and skill quiz banks
   for (const userAns of params.answers) {
     const q = questions.find(question => question.id === userAns.questionId);
     if (q) {
@@ -290,8 +289,9 @@ export function evaluateSkillAssessment(
         correctCount++;
       }
     } else {
-      // Check in LOCAL_PYTHON_QUIZ_BANK
       let foundInLocal = false;
+
+      // Check in LOCAL_PYTHON_QUIZ_BANK
       const allLevels = ['Beginner', 'Intermediate', 'Advanced', 'Expert'];
       for (const lvl of allLevels) {
         const bank = LOCAL_PYTHON_QUIZ_BANK[lvl] || [];
@@ -309,6 +309,27 @@ export function evaluateSkillAssessment(
           }
           foundInLocal = true;
           break;
+        }
+      }
+
+      // Check in LOCAL_SKILL_QUIZ_BANKS
+      if (!foundInLocal) {
+        for (const bank of Object.values(LOCAL_SKILL_QUIZ_BANKS)) {
+          const matchedQ = bank.find(bq => bq.id === userAns.questionId);
+          if (matchedQ) {
+            const correctLetter = matchedQ.correctOption;
+            const correctIdx = letterMap[correctLetter] ?? 0;
+            const userChoiceStr = String(userAns.selectedOption).toUpperCase();
+            const userChoiceNum = typeof userAns.selectedOption === 'number'
+              ? userAns.selectedOption
+              : (letterMap[userChoiceStr] ?? Number(userAns.selectedOption));
+
+            if (userChoiceStr === correctLetter || userChoiceNum === correctIdx) {
+              correctCount++;
+            }
+            foundInLocal = true;
+            break;
+          }
         }
       }
     }

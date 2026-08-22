@@ -1,35 +1,59 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { requireAuth } from '@/lib/auth';
+import { generateStudyRoadmap } from '@/lib/gemini';
 
-const CURATED_ROADMAPS: Record<string, Array<{ step: number; title: string; desc: string; skillQuery: string }>> = {
-  'solidity': [
-    { step: 1, title: 'Blockchain & EVM Fundamentals', desc: 'Understanding state, accounts, gas, transactions, and consensus.', skillQuery: 'Solidity' },
-    { step: 2, title: 'Solidity Syntax & Data Types', desc: 'Mappings, structs, arrays, functions, view/pure modifiers, and events.', skillQuery: 'Solidity' },
-    { step: 3, title: 'ERC Standards & Tokenomics', desc: 'ERC20 fungible tokens, ERC721 non-fungible tokens, and soulbound certificates.', skillQuery: 'Solidity' },
-    { step: 4, title: 'Smart Contract Security & Audits', desc: 'Reentrancy guards, checks-effects-interactions, integer safety, and access control.', skillQuery: 'Solidity' },
-    { step: 5, title: 'Testing & Deployment with Hardhat', desc: 'Writing comprehensive unit tests, fork testing, and testnet deployment.', skillQuery: 'Solidity' },
-  ],
-  'python': [
-    { step: 1, title: 'Core Syntax & Idiomatic Python', desc: 'List comprehensions, generators, decorators, and OOP concepts.', skillQuery: 'Python' },
-    { step: 2, title: 'Data Structures & Algorithms in Python', desc: 'Complexity analysis, trees, recursion, hash tables, and dynamic programming.', skillQuery: 'Data Structures' },
-    { step: 3, title: 'Backend APIs with FastAPI / Django', desc: 'Building high-performance REST endpoints, dependency injection, and Pydantic schemas.', skillQuery: 'Python' },
-    { step: 4, title: 'Data Pipelines & Scientific Computing', desc: 'Manipulating tabular datasets with Pandas and NumPy matrices.', skillQuery: 'Python' },
-    { step: 5, title: 'Machine Learning Basics', desc: 'Training classification and regression models with scikit-learn and PyTorch.', skillQuery: 'Machine Learning' },
-  ],
-  'react': [
-    { step: 1, title: 'React 18 Component Architecture', desc: 'JSX, props, modular component hierarchy, and unidirectional data flow.', skillQuery: 'React' },
-    { step: 2, title: 'Hooks & State Management', desc: 'useState, useEffect, useMemo, custom hooks, and context.', skillQuery: 'React' },
-    { step: 3, title: 'Next.js App Router & SSR', desc: 'Server components, client boundaries, route handlers, and streaming UI.', skillQuery: 'React' },
-    { step: 4, title: 'Design Systems & UI Engineering', desc: 'TailwindCSS, responsive layouts, glassmorphism, and accessibility tokens.', skillQuery: 'UI/UX' },
-  ],
-  'design': [
-    { step: 1, title: 'UI/UX Foundations & User Research', desc: 'User personas, journey mapping, empathy maps, and problem framing.', skillQuery: 'Design' },
-    { step: 2, title: 'Figma Auto-Layout & Design Systems', desc: 'Atomic design tokens, typography scales, color palettes, and reusable component libraries.', skillQuery: 'Figma' },
-    { step: 3, title: 'Interactive Prototyping & Micro-interactions', desc: 'Smart animate transitions, state variants, and high-fidelity interaction flows.', skillQuery: 'Figma' },
-    { step: 4, title: 'Usability Testing & Accessibility (WCAG)', desc: 'Contrast ratios, screen reader compatibility, and user feedback iterations.', skillQuery: 'Design' },
-  ],
-};
+export async function GET(req: NextRequest) {
+  const authRes = requireAuth(req);
+  if ('errorResponse' in authRes) return authRes.errorResponse;
+
+  const { user } = authRes;
+  const db = getDb();
+
+  try {
+    // Get latest active roadmap for this user if available
+    const roadmap = db.prepare(`
+      SELECT * FROM study_roadmaps WHERE user_id = ? ORDER BY created_at DESC LIMIT 1
+    `).get(user.userId) as any;
+
+    if (!roadmap) {
+      return NextResponse.json({ roadmap: null });
+    }
+
+    const stages = db.prepare(`
+      SELECT * FROM roadmap_stages WHERE roadmap_id = ? ORDER BY stage_order ASC
+    `).all(roadmap.id) as any[];
+
+    return NextResponse.json({
+      success: true,
+      roadmap: {
+        id: roadmap.id,
+        title: roadmap.title,
+        goal: roadmap.goal,
+        currentLevel: roadmap.current_level,
+        targetLevel: roadmap.target_level,
+        weeklyHours: roadmap.weekly_hours,
+        estimatedDuration: roadmap.estimated_duration,
+        version: roadmap.version,
+        stages: stages.map(s => ({
+          id: s.id,
+          order: s.stage_order,
+          title: s.title,
+          description: s.description,
+          skillQuery: s.skill_query,
+          estimatedHours: s.estimated_hours,
+          status: s.status,
+          objectives: JSON.parse(s.objectives_json || '[]'),
+          practiceTasks: JSON.parse(s.practice_tasks_json || '[]'),
+          completionCriteria: JSON.parse(s.completion_criteria_json || '[]'),
+        })),
+      },
+    });
+  } catch (err: any) {
+    console.error('Fetch roadmap error:', err);
+    return NextResponse.json({ error: 'Failed to retrieve study roadmap' }, { status: 500 });
+  }
+}
 
 export async function POST(req: NextRequest) {
   const authRes = requireAuth(req);
@@ -39,35 +63,67 @@ export async function POST(req: NextRequest) {
   const db = getDb();
 
   try {
-    const { topic } = await req.json();
-    const cleanTopic = (topic || 'Python').trim();
-    const lowerTopic = cleanTopic.toLowerCase();
+    const body = await req.json();
+    const topic = (body.topic || 'Python Programming').trim();
+    const currentLevel = body.currentLevel || 'Beginner';
+    const targetLevel = body.targetLevel || 'Intermediate';
+    const weeklyHours = Number(body.weeklyHours) || 6;
 
-    // Match or generate roadmap
-    let roadmapSteps = CURATED_ROADMAPS['python'];
-    let skillQuery = cleanTopic;
+    // Generate structured roadmap via Gemini AI (with deterministic local fallback)
+    const generated = await generateStudyRoadmap({
+      goal: topic,
+      currentLevel,
+      targetLevel,
+      weeklyHours,
+    });
 
-    for (const [key, steps] of Object.entries(CURATED_ROADMAPS)) {
-      if (lowerTopic.includes(key)) {
-        roadmapSteps = steps;
-        skillQuery = key;
-        break;
-      }
+    const roadmapId = `rdm-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+
+    // Persist in study_roadmaps table
+    db.prepare(`
+      INSERT INTO study_roadmaps (
+        id, user_id, title, goal, current_level, target_level, weekly_hours, estimated_duration, version
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
+    `).run(
+      roadmapId,
+      user.userId,
+      generated.title,
+      generated.goal,
+      currentLevel,
+      targetLevel,
+      weeklyHours,
+      generated.estimatedDuration
+    );
+
+    // Persist each stage
+    const insertStage = db.prepare(`
+      INSERT INTO roadmap_stages (
+        id, roadmap_id, stage_order, title, description, skill_query,
+        estimated_hours, objectives_json, practice_tasks_json, completion_criteria_json, status
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'NOT_STARTED')
+    `);
+
+    for (const st of generated.stages) {
+      const stageId = `stg-${roadmapId}-${st.order}`;
+      insertStage.run(
+        stageId,
+        roadmapId,
+        st.order,
+        st.title,
+        st.description,
+        st.skillQuery,
+        st.estimatedHours || 5,
+        JSON.stringify(st.objectives || []),
+        JSON.stringify(st.practiceTasks || []),
+        JSON.stringify(st.completionCriteria || [])
+      );
     }
 
-    if (!roadmapSteps) {
-      roadmapSteps = [
-        { step: 1, title: `${cleanTopic} Foundations`, desc: `Core principles and syntax of ${cleanTopic}.`, skillQuery: cleanTopic },
-        { step: 2, title: `Intermediate Problem Solving`, desc: `Hands-on practical projects and design patterns in ${cleanTopic}.`, skillQuery: cleanTopic },
-        { step: 3, title: `Advanced Mastery & Architecture`, desc: `Production-ready workflows, testing, and performance optimization.`, skillQuery: cleanTopic },
-      ];
-    }
-
-    // Query REAL verified mentors from the database matching this roadmap topic (NO HALLUCINATED USERS!)
+    // Query REAL verified mentors from the database matching the primary topic & stage queries (NO HALLUCINATIONS!)
     const matchedMentors = db.prepare(`
       SELECT 
         u.id as user_id, p.display_name, p.avatar, p.college, p.major, p.is_verified_student,
-        s.name as skill_name, us.proficiency, us.experience_years, us.teaching_style,
+        s.name as skill_name, us.proficiency, us.experience_years, us.teaching_style, us.verification_status,
         COALESCE(r.bayesian_rating, 4.8) as bayesian_rating,
         COALESCE(r.total_sessions_taught, 0) as total_sessions_taught
       FROM user_skills us
@@ -77,15 +133,27 @@ export async function POST(req: NextRequest) {
       LEFT JOIN reputations r ON u.id = r.user_id
       WHERE u.status = 'ACTIVE' 
         AND u.id != ?
-        AND (LOWER(s.name) LIKE ? OR LOWER(s.category) LIKE ?)
-      ORDER BY r.bayesian_rating DESC, us.experience_years DESC
-      LIMIT 4
-    `).all(user.userId, `%${skillQuery}%`, `%${skillQuery}%`) as any[];
+        AND (LOWER(s.name) LIKE ? OR LOWER(s.category) LIKE ? OR LOWER(s.name) LIKE '%python%')
+      ORDER BY 
+        CASE WHEN us.verification_status IN ('PLATFORM_VERIFIED', 'ASSESSMENT_VERIFIED') THEN 1 ELSE 2 END,
+        r.bayesian_rating DESC,
+        us.experience_years DESC
+      LIMIT 6
+    `).all(user.userId, `%${topic.toLowerCase()}%`, `%${topic.toLowerCase()}%`) as any[];
 
     return NextResponse.json({
       success: true,
-      topic: cleanTopic,
-      roadmap: roadmapSteps,
+      roadmap: {
+        id: roadmapId,
+        title: generated.title,
+        goal: generated.goal,
+        estimatedDuration: generated.estimatedDuration,
+        provider: generated.provider,
+        stages: generated.stages.map(s => ({
+          ...s,
+          status: 'NOT_STARTED',
+        })),
+      },
       recommendedMentors: matchedMentors.map(m => ({
         userId: m.user_id,
         displayName: m.display_name,
@@ -97,13 +165,13 @@ export async function POST(req: NextRequest) {
         proficiency: m.proficiency,
         experienceYears: m.experience_years,
         teachingStyle: m.teaching_style,
+        verificationStatus: m.verification_status,
         bayesianRating: m.bayesian_rating,
         totalSessionsTaught: m.total_sessions_taught,
       })),
-      note: 'All mentor profiles and ratings are verified directly against campus records.',
     });
   } catch (err: any) {
-    console.error('AI Study Coach Error:', err);
+    console.error('Study Coach Generation Error:', err);
     return NextResponse.json({ error: 'Failed to generate study roadmap' }, { status: 500 });
   }
 }

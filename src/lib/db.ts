@@ -460,6 +460,38 @@ export function initDatabase(db: Database.Database) {
       FOREIGN KEY (skill_id) REFERENCES skills(id) ON DELETE CASCADE
     );
 
+    -- 17. AI Study Roadmaps & Structured Stages
+    CREATE TABLE IF NOT EXISTS study_roadmaps (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      goal TEXT NOT NULL,
+      current_level TEXT NOT NULL DEFAULT 'Beginner',
+      target_level TEXT NOT NULL DEFAULT 'Intermediate',
+      weekly_hours INTEGER DEFAULT 6,
+      estimated_duration TEXT,
+      version INTEGER NOT NULL DEFAULT 1,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS roadmap_stages (
+      id TEXT PRIMARY KEY,
+      roadmap_id TEXT NOT NULL,
+      stage_order INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT,
+      skill_query TEXT NOT NULL,
+      estimated_hours INTEGER DEFAULT 5,
+      objectives_json TEXT NOT NULL DEFAULT '[]',
+      practice_tasks_json TEXT NOT NULL DEFAULT '[]',
+      completion_criteria_json TEXT NOT NULL DEFAULT '[]',
+      status TEXT NOT NULL DEFAULT 'NOT_STARTED', -- 'NOT_STARTED', 'IN_PROGRESS', 'COMPLETED'
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (roadmap_id) REFERENCES study_roadmaps(id) ON DELETE CASCADE
+    );
+
     -- Indexes for High Performance Querying
     CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
     CREATE INDEX IF NOT EXISTS idx_profiles_user_id ON profiles(user_id);
@@ -481,6 +513,8 @@ export function initDatabase(db: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_skill_requests_skill ON skill_requests(skill_id);
     CREATE INDEX IF NOT EXISTS idx_skill_requests_learner ON skill_requests(learner_id);
     CREATE INDEX IF NOT EXISTS idx_skill_subs_user_skill ON skill_subscriptions(user_id, skill_id);
+    CREATE INDEX IF NOT EXISTS idx_study_roadmaps_user ON study_roadmaps(user_id);
+    CREATE INDEX IF NOT EXISTS idx_roadmap_stages_roadmap ON roadmap_stages(roadmap_id);
   `);
 
   // Safe runtime column migrations for existing DB

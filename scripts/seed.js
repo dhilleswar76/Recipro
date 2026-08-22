@@ -219,6 +219,37 @@ db.exec(`
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (skill_id) REFERENCES skills(id) ON DELETE CASCADE
   );
+
+  CREATE TABLE IF NOT EXISTS study_roadmaps (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    goal TEXT NOT NULL,
+    current_level TEXT NOT NULL DEFAULT 'Beginner',
+    target_level TEXT NOT NULL DEFAULT 'Intermediate',
+    weekly_hours INTEGER DEFAULT 6,
+    estimated_duration TEXT,
+    version INTEGER NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS roadmap_stages (
+    id TEXT PRIMARY KEY,
+    roadmap_id TEXT NOT NULL,
+    stage_order INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT,
+    skill_query TEXT NOT NULL,
+    estimated_hours INTEGER DEFAULT 5,
+    objectives_json TEXT NOT NULL DEFAULT '[]',
+    practice_tasks_json TEXT NOT NULL DEFAULT '[]',
+    completion_criteria_json TEXT NOT NULL DEFAULT '[]',
+    status TEXT NOT NULL DEFAULT 'NOT_STARTED',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (roadmap_id) REFERENCES study_roadmaps(id) ON DELETE CASCADE
+  );
 `);
 
 console.log('Seeding Skills Catalog...');

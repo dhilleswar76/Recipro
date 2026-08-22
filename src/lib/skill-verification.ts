@@ -245,7 +245,7 @@ export interface EvaluateAssessmentParams {
   userId: string;
   skillId: string;
   requestedProficiency: string;
-  answers: Array<{ questionId: string; selectedOption: number }>;
+  answers: Array<{ questionId: string; selectedOption: any }>;
 }
 
 export interface EvaluationResult {
@@ -273,15 +273,39 @@ export function evaluateSkillAssessment(
 
   const questions = getAssessmentQuestionsForSkill(skillName);
   let correctCount = 0;
+  const letterMap: Record<string, number> = { 'A': 0, 'B': 1, 'C': 2, 'D': 3 };
 
-  for (const q of questions) {
-    const userAns = params.answers.find(a => a.questionId === q.id);
-    if (userAns && userAns.selectedOption === q.correctOptionIndex) {
-      correctCount++;
+  // Check against standard bank and Python quiz bank
+  for (const userAns of params.answers) {
+    const q = questions.find(question => question.id === userAns.questionId);
+    if (q) {
+      const userChoice = typeof userAns.selectedOption === 'number'
+        ? userAns.selectedOption
+        : (letterMap[String(userAns.selectedOption).toUpperCase()] ?? Number(userAns.selectedOption));
+
+      if (userChoice === q.correctOptionIndex) {
+        correctCount++;
+      }
+    } else {
+      // Check if it's from LOCAL_PYTHON_QUIZ_BANK
+      const allLevels = ['Beginner', 'Intermediate', 'Advanced', 'Expert'];
+      for (const lvl of allLevels) {
+        const bank = (SKILL_QUESTION_BANKS['python'] || []);
+        const matchedQ = bank.find(bq => bq.id === userAns.questionId);
+        if (matchedQ) {
+          const userChoice = typeof userAns.selectedOption === 'number'
+            ? userAns.selectedOption
+            : (letterMap[String(userAns.selectedOption).toUpperCase()] ?? Number(userAns.selectedOption));
+          if (userChoice === matchedQ.correctOptionIndex) {
+            correctCount++;
+          }
+          break;
+        }
+      }
     }
   }
 
-  const maxScore = questions.length;
+  const maxScore = params.answers.length > 0 ? params.answers.length : questions.length;
   const score = correctCount;
   const percentage = maxScore > 0 ? Math.round((score / maxScore) * 100) : 0;
 

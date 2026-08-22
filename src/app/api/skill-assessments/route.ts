@@ -2,28 +2,37 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { requireAuth } from '@/lib/auth';
 import { SubmitAssessmentSchema } from '@/lib/validations';
-import { getAssessmentQuestionsForSkill, evaluateSkillAssessment } from '@/lib/skill-verification';
+import { evaluateSkillAssessment } from '@/lib/skill-verification';
 import { notifyLearnersOfNewMentor } from '@/lib/skill-gap';
+import { generatePythonQuiz, sanitizeAssessmentForClient } from '@/lib/gemini';
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const skillName = searchParams.get('skillName') || 'Python';
-  const questions = getAssessmentQuestionsForSkill(skillName);
+  const proficiency = (searchParams.get('proficiency') || 'Intermediate') as any;
 
-  // Return questions without the correct answers so frontend cannot cheat
-  const sanitized = questions.map(q => ({
-    id: q.id,
-    question: q.question,
-    codeSnippet: q.codeSnippet,
-    options: q.options,
-    level: q.level,
-  }));
+  try {
+    // Generate Python assessment via Gemini AI provider (with local curated fallback)
+    const quiz = await generatePythonQuiz({
+      proficiency: ['Beginner', 'Intermediate', 'Advanced', 'Expert'].includes(proficiency) ? proficiency : 'Intermediate',
+      questionCount: 10,
+    });
 
-  return NextResponse.json({
-    skillName,
-    questionsCount: sanitized.length,
-    questions: sanitized,
-  });
+    // Strip correctOption and explanation before sending to client
+    const sanitized = sanitizeAssessmentForClient(quiz);
+
+    return NextResponse.json({
+      success: true,
+      skillName,
+      difficulty: sanitized.difficulty,
+      provider: sanitized.provider,
+      questionsCount: sanitized.questionsCount,
+      questions: sanitized.questions,
+    });
+  } catch (err: any) {
+    console.error('Skill assessment generation failed:', err);
+    return NextResponse.json({ error: 'Failed to generate assessment' }, { status: 500 });
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -31,6 +40,7 @@ export async function POST(req: NextRequest) {
   if ('errorResponse' in authRes) return authRes.errorResponse;
 
   const { user } = authRes;
+  const db = getDb();
 
   try {
     const body = await req.json();
@@ -38,13 +48,39 @@ export async function POST(req: NextRequest) {
 
     if (!parsed.success) {
       return NextResponse.json(
-        { error: 'Invalid assessment submission', details: parsed.error.format() },
+        { error: 'Invalid assessment submission payload', details: parsed.error.format() },
         { status: 400 }
       );
     }
 
     const { skillId, targetLevel, answers } = parsed.data;
 
+    // Check attempt limits (Max 3 attempts per skill)
+    const attemptsCount = (db.prepare(`
+      SELECT COUNT(*) as count FROM skill_assessments
+      WHERE user_id = ? AND skill_id = ?
+    `).get(user.userId, skillId) as any)?.count || 0;
+
+    if (attemptsCount >= 3) {
+      const lastAttempt = db.prepare(`
+        SELECT created_at FROM skill_assessments
+        WHERE user_id = ? AND skill_id = ?
+        ORDER BY created_at DESC LIMIT 1
+      `).get(user.userId, skillId) as any;
+
+      if (lastAttempt) {
+        const lastTime = new Date(lastAttempt.created_at).getTime();
+        const now = Date.now();
+        const hoursPassed = (now - lastTime) / (1000 * 60 * 60);
+        if (hoursPassed < 24) {
+          return NextResponse.json({
+            error: `Maximum attempts reached (3/3). Please wait ${Math.ceil(24 - hoursPassed)} hours for cooldown before retaking.`
+          }, { status: 429 });
+        }
+      }
+    }
+
+    // Authoritative server-side evaluation
     const evaluation = evaluateSkillAssessment({
       userId: user.userId,
       skillId,
@@ -52,7 +88,7 @@ export async function POST(req: NextRequest) {
       answers,
     });
 
-    // If verified, trigger automatic notifications to learners waiting for this skill
+    // If verified, trigger automatic notifications to waiting learners
     if (evaluation.passed) {
       notifyLearnersOfNewMentor(user.userId, skillId);
     }

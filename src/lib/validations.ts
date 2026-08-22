@@ -17,18 +17,34 @@ export const SkillVerificationStatusEnum = z.enum([
 ]);
 
 export const RegisterSchema = z.object({
-  email: z.string().email('Please enter a valid email address').toLowerCase().trim(),
+  email: z.preprocess(
+    (val) => typeof val === 'string' ? val.trim().toLowerCase() : val,
+    z.string().email('Please enter a valid email address')
+  ),
   password: z.string().min(8, 'Password must be at least 8 characters long'),
-  displayName: z.string().min(2, 'Name must be at least 2 characters').max(50),
-  college: z.string().min(2, 'College name is required').max(100),
-  major: z.string().min(2, 'Major/Faculty is required').max(100),
-  year: z.enum(['Freshman', 'Sophomore', 'Junior', 'Senior', 'Graduate', 'PhD']),
+  name: z.string().min(2, 'Name must be at least 2 characters').max(50).optional(),
+  displayName: z.string().min(2, 'Name must be at least 2 characters').max(50).optional(),
+  college: z.string().max(100).optional().default('SkillSwap Campus'),
+  major: z.string().max(100).optional().default('General Studies'),
+  year: z.enum(['Freshman', 'Sophomore', 'Junior', 'Senior', 'Graduate', 'PhD']).optional().default('Freshman'),
   userType: UserTypeEnum.optional().default('TEACHER_LEARNER'),
   role: z.enum(['STUDENT', 'MODERATOR', 'ADMIN']).optional().default('STUDENT'),
 });
 
+export const OnboardingSchema = z.object({
+  userType: UserTypeEnum.default('TEACHER_LEARNER'),
+  college: z.string().min(2, 'College name is required').max(100),
+  major: z.string().min(2, 'Major/Faculty is required').max(100),
+  year: z.enum(['Freshman', 'Sophomore', 'Junior', 'Senior', 'Graduate', 'PhD']),
+  teachingPreference: TeachingPreferenceEnum.optional().default('Anyone'),
+  bio: z.string().max(500).optional(),
+});
+
 export const LoginSchema = z.object({
-  email: z.string().email('Please enter a valid email address').toLowerCase().trim(),
+  email: z.preprocess(
+    (val) => typeof val === 'string' ? val.trim().toLowerCase() : val,
+    z.string().email('Please enter a valid email address')
+  ),
   password: z.string().min(1, 'Password is required'),
 });
 

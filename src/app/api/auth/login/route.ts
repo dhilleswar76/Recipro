@@ -19,6 +19,7 @@ export async function POST(req: NextRequest) {
     const user = db.prepare(`
       SELECT 
         u.id, u.email, u.password_hash, u.role, u.status, u.campus_id, u.user_type,
+        COALESCE(u.email_verified, 0) as email_verified, COALESCE(u.is_academic_email, 0) as is_academic_email,
         p.display_name, p.avatar, p.college, p.major, p.year, p.is_verified_student,
         acc.balance, acc.escrow_balance
       FROM users u
@@ -62,6 +63,8 @@ export async function POST(req: NextRequest) {
         status: user.status,
         campusId: user.campus_id,
         isVerifiedStudent: Boolean(user.is_verified_student),
+        emailVerified: Boolean(user.email_verified),
+        isAcademicEmail: Boolean(user.is_academic_email),
         balance: user.balance || 0,
         escrowBalance: user.escrow_balance || 0,
       },

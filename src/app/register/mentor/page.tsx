@@ -1,15 +1,13 @@
 'use client';
 
-import React from 'react';
-import { RegisterForm } from '@/components/RegisterForm';
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 
 export default function MentorRegisterPage() {
-  return (
-    <RegisterForm 
-      initialUserType="TEACHER"
-      roleTitle="Register as Mentor"
-      roleBadge="Teacher Registration"
-      roleDescription="Create your campus mentor profile to list teaching topics, complete skill assessments, set availability, and earn zero-fee Skill Credits."
-    />
-  );
+  const router = useRouter();
+  useEffect(() => {
+    router.replace('/register');
+  }, [router]);
+
+  return null;
 }

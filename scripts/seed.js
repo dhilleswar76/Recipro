@@ -319,6 +319,25 @@ for (const s of skills) {
   insertSkill.run(s);
 }
 
+function safeAddColumn(database, table, column, definition) {
+  try {
+    const columns = database.prepare(`PRAGMA table_info(${table})`).all();
+    const exists = columns.some(c => c.name.toLowerCase() === column.toLowerCase());
+    if (!exists) {
+      database.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+    }
+  } catch (err) {
+    // Ignore if column exists
+  }
+}
+
+// Runtime migrations for existing DB
+safeAddColumn(db, 'users', 'user_type', "TEXT NOT NULL DEFAULT 'TEACHER_LEARNER'");
+safeAddColumn(db, 'users', 'email_verified', 'INTEGER NOT NULL DEFAULT 0');
+safeAddColumn(db, 'users', 'verification_token', 'TEXT');
+safeAddColumn(db, 'users', 'verification_token_expires', 'DATETIME');
+safeAddColumn(db, 'users', 'is_academic_email', 'INTEGER NOT NULL DEFAULT 0');
+
 // 2. Hash Seed Password
 const passwordHash = bcrypt.hashSync('Password123!', 10);
 
@@ -632,13 +651,15 @@ const students = [
 
 for (const stu of students) {
   db.prepare(`
-    INSERT INTO users (id, email, password_hash, role, status, campus_id, user_type)
-    VALUES (?, ?, ?, ?, 'ACTIVE', ?, ?)
+    INSERT INTO users (id, email, password_hash, role, status, campus_id, user_type, email_verified, is_academic_email)
+    VALUES (?, ?, ?, ?, 'ACTIVE', ?, ?, 1, 1)
     ON CONFLICT(id) DO UPDATE SET
       email = excluded.email,
       password_hash = excluded.password_hash,
       role = excluded.role,
-      user_type = excluded.user_type
+      user_type = excluded.user_type,
+      email_verified = 1,
+      is_academic_email = 1
   `).run(stu.id, stu.email, passwordHash, stu.role, `STU-${stu.id.replace('usr-', '').toUpperCase()}`, stu.userType || 'TEACHER_LEARNER');
 
   db.prepare(`

@@ -679,6 +679,10 @@ export function initDatabase(db: Database.Database) {
 
   // Safe runtime column migrations for existing DB
   safeAddColumn(db, 'users', 'user_type', "TEXT NOT NULL DEFAULT 'TEACHER_LEARNER'");
+  safeAddColumn(db, 'users', 'email_verified', 'INTEGER NOT NULL DEFAULT 0');
+  safeAddColumn(db, 'users', 'verification_token', 'TEXT');
+  safeAddColumn(db, 'users', 'verification_token_expires', 'DATETIME');
+  safeAddColumn(db, 'users', 'is_academic_email', 'INTEGER NOT NULL DEFAULT 0');
   safeAddColumn(db, 'profiles', 'teaching_preference', "TEXT DEFAULT 'Anyone'");
   safeAddColumn(db, 'profiles', 'portfolio_url', 'TEXT');
   safeAddColumn(db, 'profiles', 'skill_visibility', "TEXT DEFAULT 'PUBLIC'");
@@ -769,5 +773,27 @@ export function syncSessionParticipants(db: Database.Database) {
   } catch (err) {
     // Ignore sync error during initial table setup
   }
+}
+
+export function isAcademicEmail(email: string): boolean {
+  if (!email || typeof email !== 'string') return false;
+  const lower = email.trim().toLowerCase();
+  const parts = lower.split('@');
+  if (parts.length !== 2) return false;
+  const domain = parts[1];
+  if (!domain) return false;
+
+  return (
+    domain.endsWith('.edu') ||
+    domain.endsWith('.ac.in') ||
+    domain.endsWith('.ac.uk') ||
+    domain.endsWith('.edu.in') ||
+    domain.endsWith('.edu.au') ||
+    domain.endsWith('.ac.nz') ||
+    domain.endsWith('.ac.za') ||
+    domain.endsWith('.edu.sg') ||
+    domain.includes('.edu.') ||
+    domain.includes('.ac.')
+  );
 }
 

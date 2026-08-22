@@ -1,15 +1,13 @@
 'use client';
 
-import React from 'react';
-import { RegisterForm } from '@/components/RegisterForm';
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 
 export default function StudentRegisterPage() {
-  return (
-    <RegisterForm 
-      initialUserType="LEARNER"
-      roleTitle="Register as Student"
-      roleBadge="Learner Registration"
-      roleDescription="Create your student profile to find verified mentors, schedule sessions with Smart Slot Finder, and learn skills using starter credits."
-    />
-  );
+  const router = useRouter();
+  useEffect(() => {
+    router.replace('/register');
+  }, [router]);
+
+  return null;
 }

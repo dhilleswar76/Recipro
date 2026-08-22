@@ -14,6 +14,7 @@ export async function GET(req: NextRequest) {
   const fullUser = db.prepare(`
     SELECT 
       u.id, u.email, u.role, u.status, u.campus_id, COALESCE(u.user_type, 'TEACHER_LEARNER') as user_type,
+      COALESCE(u.email_verified, 0) as email_verified, COALESCE(u.is_academic_email, 0) as is_academic_email,
       p.display_name, p.avatar, p.bio, p.college, p.major, p.year,
       p.is_verified_student, p.trust_score, p.completion_rate, p.cancellation_rate,
       p.hourly_rate_credits, p.teaching_style, p.languages, p.profile_visibility,

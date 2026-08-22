@@ -1544,55 +1544,413 @@ export const LOCAL_CURRICULUM_ROADMAPS: Record<string, GeneratedRoadmap> = {
       },
     ],
   },
-  'solidity': {
-    title: 'Solidity Smart Contract Engineering',
-    goal: 'Design, test, and deploy secure EVM smart contracts, token standards, and escrow protocols',
+  'java': {
+    title: 'Java Enterprise & System Architecture',
+    goal: 'Master Core Java, JVM internals, Object-Oriented Design Patterns, and Spring Boot',
+    estimatedDuration: '8 weeks',
+    provider: 'LOCAL_FALLBACK',
+    stages: [
+      {
+        order: 1,
+        title: 'Java Core Syntax & Object-Oriented Principles',
+        description: 'Deep-dive into class design, interfaces, abstract classes, encapsulation, and exception handling.',
+        skillQuery: 'Java',
+        estimatedHours: 8,
+        objectives: ['OOP pillars and solid design patterns', 'Checked vs Unchecked Exceptions', 'Garbage collection basics'],
+        practiceTasks: ['Build a student banking system with custom exceptions', 'Implement interface polymorphism patterns'],
+        completionCriteria: ['Zero compile errors, idiomatic clean Java conventions'],
+      },
+      {
+        order: 2,
+        title: 'Java Collections Framework & Generics',
+        description: 'Understand ArrayList, HashMap, ConcurrentHashMap, TreeSet, and generic type parameters.',
+        skillQuery: 'Java',
+        estimatedHours: 8,
+        objectives: ['List, Set, Map hierarchies', 'Equals and HashCode contracts', 'Custom generic data structures'],
+        practiceTasks: ['Implement a generic binary search tree', 'Benchmark HashMap vs TreeMap performance'],
+        completionCriteria: ['Pass unit tests verifying custom generic collections'],
+      },
+      {
+        order: 3,
+        title: 'Concurrency, Streams & JVM Internals',
+        description: 'Leverage multithreading, ExecutorService, functional Streams API, and memory optimization.',
+        skillQuery: 'Java',
+        estimatedHours: 10,
+        objectives: ['Thread synchronization and locks', 'Java 8+ Streams and Lambdas', 'JVM heap, stack, and GC tuning'],
+        practiceTasks: ['Build a multithreaded web scraper with thread pools', 'Process parallel streams across large datasets'],
+        completionCriteria: ['Demonstrate thread safety and zero deadlocks under load'],
+      },
+      {
+        order: 4,
+        title: 'Spring Boot REST APIs & Microservices',
+        description: 'Build production-ready backend services with Spring Data JPA, dependency injection, and security.',
+        skillQuery: 'Java',
+        estimatedHours: 12,
+        objectives: ['Spring Inversion of Control (IoC)', 'RESTful API controllers and DTOs', 'Spring Security and database transactions'],
+        practiceTasks: ['Develop a microservice with CRUD operations', 'Write integration tests with MockMvc and Testcontainers'],
+        completionCriteria: ['Deploy functional REST API with passing integration test suite'],
+      },
+    ],
+  },
+  'javascript': {
+    title: 'Modern Full-Stack JavaScript Engineering',
+    goal: 'Master ES6+, Asynchronous Programming, Node.js runtime, and Full-Stack Web Development',
+    estimatedDuration: '8 weeks',
+    provider: 'LOCAL_FALLBACK',
+    stages: [
+      {
+        order: 1,
+        title: 'Modern JavaScript (ES6+) Core & Scoping',
+        description: 'Master closures, scope chain, destructuring, modules, and event loop mechanics.',
+        skillQuery: 'JavaScript',
+        estimatedHours: 6,
+        objectives: ['Var, let, const lexical scoping', 'Closures and higher-order functions', 'Spread, rest, and array manipulation'],
+        practiceTasks: ['Build a custom event emitter utility', 'Implement functional array transformations'],
+        completionCriteria: ['Code clean, linted ES6+ modules without runtime exceptions'],
+      },
+      {
+        order: 2,
+        title: 'Asynchronous JavaScript & Event Loop',
+        description: 'Master Promises, async/await, Microtasks vs Macrotasks, and Fetch APIs.',
+        skillQuery: 'JavaScript',
+        estimatedHours: 8,
+        objectives: ['Event loop execution phases', 'Promise chaining and error handling', 'Parallel async execution with Promise.allSettled'],
+        practiceTasks: ['Build a rate-limited API client', 'Handle concurrent async network requests'],
+        completionCriteria: ['Pass async test suite with zero unhandled rejections'],
+      },
+      {
+        order: 3,
+        title: 'DOM Manipulation & Web APIs',
+        description: 'Build reactive browser interfaces using DOM events, local storage, and custom components.',
+        skillQuery: 'JavaScript',
+        estimatedHours: 8,
+        objectives: ['Event delegation and bubbling', 'Web Storage and cookies', 'Fetch API and FormData handling'],
+        practiceTasks: ['Create an interactive dashboard with dynamic DOM updates', 'Implement client-side data persistence'],
+        completionCriteria: ['Build responsive web application with zero UI jank'],
+      },
+      {
+        order: 4,
+        title: 'Node.js Backend & API Development',
+        description: 'Develop RESTful services with Express, middleware, file systems, and authentication.',
+        skillQuery: 'JavaScript',
+        estimatedHours: 10,
+        objectives: ['Node.js CommonJS vs ESM', 'Express routing and middleware architecture', 'JWT authentication and secure cookies'],
+        practiceTasks: ['Build an authentication microservice', 'Write unit tests with Jest/Supertest'],
+        completionCriteria: ['Deploy secure API with verified authentication tokens'],
+      },
+    ],
+  },
+  'typescript': {
+    title: 'TypeScript Full-Stack Architecture',
+    goal: 'Master static typing, advanced generics, conditional types, and scalable application architecture',
     estimatedDuration: '6 weeks',
     provider: 'LOCAL_FALLBACK',
     stages: [
       {
         order: 1,
-        title: 'Blockchain & Ethereum Virtual Machine (EVM)',
-        description: 'Understand state transitions, accounts, gas mechanics, and consensus fundamentals.',
-        skillQuery: 'Solidity',
+        title: 'TypeScript Type System & Type Inference',
+        description: 'Understand primitives, union/intersection types, interfaces, type aliases, and strict mode.',
+        skillQuery: 'TypeScript',
         estimatedHours: 6,
-        objectives: ['EVM execution model', 'Gas optimization principles', 'Accounts vs Contract addresses'],
-        practiceTasks: ['Calculate transaction gas costs', 'Inspect block headers on Etherscan'],
-        completionCriteria: ['Explain state transition lifecycle and gas calculation accurately'],
+        objectives: ['Interfaces vs Type aliases', 'Type narrowing and type guards', 'Strict compiler flags and tsconfig'],
+        practiceTasks: ['Refactor a JavaScript utility library to strict TypeScript', 'Build custom type guard functions'],
+        completionCriteria: ['Zero type assertions (`any`), 100% strict type safety'],
       },
       {
         order: 2,
-        title: 'Solidity Syntax, Types & State Variables',
-        description: 'Write clean contracts using structs, mappings, view/pure modifiers, and custom errors.',
-        skillQuery: 'Solidity',
+        title: 'Generics & Utility Types',
+        description: 'Build flexible, reusable components using generics, Pick, Omit, Partial, and Record.',
+        skillQuery: 'TypeScript',
         estimatedHours: 8,
-        objectives: ['Storage vs Memory vs Calldata', 'Mappings and dynamic arrays', 'Events and custom error handlers'],
-        practiceTasks: ['Implement an on-chain student registry contract', 'Emit events for contract state updates'],
-        completionCriteria: ['Compile contracts with zero compiler warnings'],
+        objectives: ['Generic functions and classes', 'Built-in utility types', 'Generic constraints with `extends`'],
+        practiceTasks: ['Implement a generic typed repository pattern', 'Build type-safe state machine reducers'],
+        completionCriteria: ['Pass compile checks for complex polymorphic data structures'],
       },
       {
         order: 3,
-        title: 'Token Standards (ERC-20 & ERC-721)',
-        description: 'Implement fungible tokens and verifiable credential NFTs using OpenZeppelin standards.',
-        skillQuery: 'Solidity',
+        title: 'Advanced Types: Conditional, Mapped & Template Literals',
+        description: 'Master `infer`, `keyof`, `typeof`, template literal types, and custom mapped transformations.',
+        skillQuery: 'TypeScript',
         estimatedHours: 8,
-        objectives: ['ERC-20 tokenomics & allowance patterns', 'ERC-721 non-fungible & soulbound credentials', 'Safe transfers and metadata URIs'],
-        practiceTasks: ['Deploy a campus skill credit token', 'Mint a Soulbound Skill Certificate NFT'],
-        completionCriteria: ['Pass standard ERC compliance verification tests'],
+        objectives: ['Conditional types and `infer` keyword', 'Mapped types and key remapping', 'Template literal types for route validation'],
+        practiceTasks: ['Build a typed event bus with strict payload types', 'Create deep readonly/partial mapped types'],
+        completionCriteria: ['Demonstrate zero runtime type mismatch errors'],
       },
       {
         order: 4,
-        title: 'Security Auditing & Hardhat Testing',
-        description: 'Prevent reentrancy attacks, integer overflow, and implement Checks-Effects-Interactions pattern.',
-        skillQuery: 'Solidity',
+        title: 'Production Next.js / Node.js with TypeScript',
+        description: 'Architect full-stack applications with type-safe APIs, Zod validation, and ORM schemas.',
+        skillQuery: 'TypeScript',
         estimatedHours: 10,
-        objectives: ['Reentrancy guards and access control', 'Checks-Effects-Interactions invariant', 'Unit testing and fork simulations with Hardhat/Foundry'],
-        practiceTasks: ['Audit and patch a deliberately vulnerable escrow contract', 'Write 100% code coverage test suite'],
-        completionCriteria: ['Prevent reentrancy and unauthorized privilege escalation in audit suite'],
+        objectives: ['End-to-end type safety with Zod', 'Next.js App Router server components', 'Typed database schemas and migrations'],
+        practiceTasks: ['Build an end-to-end typed application with API contracts', 'Validate incoming payloads with schema inference'],
+        completionCriteria: ['Deliver complete type-checked full stack project'],
+      },
+    ],
+  },
+  'react': {
+    title: 'React & Next.js Modern Frontend Engineering',
+    goal: 'Master component architecture, custom hooks, state management, and Server Components',
+    estimatedDuration: '8 weeks',
+    provider: 'LOCAL_FALLBACK',
+    stages: [
+      {
+        order: 1,
+        title: 'React Fundamentals & Component Architecture',
+        description: 'Understand JSX, props, state, unidirectional data flow, and synthetic events.',
+        skillQuery: 'React',
+        estimatedHours: 6,
+        objectives: ['Component lifecycle and rendering', 'Props vs State', 'Lifting state up and modular components'],
+        practiceTasks: ['Build an interactive task tracker with filters', 'Create reusable UI button and modal components'],
+        completionCriteria: ['Code modular, clean functional components'],
+      },
+      {
+        order: 2,
+        title: 'Hooks Mastery & Performance Optimization',
+        description: 'Master useState, useEffect, useMemo, useCallback, useRef, and custom hooks.',
+        skillQuery: 'React',
+        estimatedHours: 8,
+        objectives: ['Effect dependencies and cleanup functions', 'Memoization and re-render prevention', 'Building reusable custom hooks'],
+        practiceTasks: ['Create a `useLocalStorage` and `useDebounce` hook', 'Optimize list rendering with virtualized lists'],
+        completionCriteria: ['Eliminate unnecessary re-renders in performance profiling'],
+      },
+      {
+        order: 3,
+        title: 'Global State Management & Routing',
+        description: 'Manage complex application state with Context API, Zustand, and client-side routing.',
+        skillQuery: 'React',
+        estimatedHours: 8,
+        objectives: ['Context API with reducers', 'Lightweight state management with Zustand', 'Protected routes and navigation state'],
+        practiceTasks: ['Build a global shopping cart / session state store', 'Implement multi-step form workflows with validation'],
+        completionCriteria: ['Seamless state transitions across dynamic views'],
+      },
+      {
+        order: 4,
+        title: 'Next.js App Router & Server Components',
+        description: 'Build high-performance web apps with SSR, SSG, Server Actions, and API Routes.',
+        skillQuery: 'React',
+        estimatedHours: 10,
+        objectives: ['Server vs Client components', 'Data fetching and caching strategies', 'Server Actions and form mutations'],
+        practiceTasks: ['Deploy a full-stack Next.js web application', 'Implement optimistic UI updates with Server Actions'],
+        completionCriteria: ['Achieve 95+ Lighthouse performance score on deployed build'],
+      },
+    ],
+  },
+  'machine learning': {
+    title: 'Machine Learning & Deep Learning Mastery',
+    goal: 'Master classical algorithms, feature engineering, neural networks, and model deployment',
+    estimatedDuration: '10 weeks',
+    provider: 'LOCAL_FALLBACK',
+    stages: [
+      {
+        order: 1,
+        title: 'Mathematics & Data Foundations for ML',
+        description: 'Review Linear Algebra, Multivariate Calculus, Probability, and NumPy/Pandas data wrangling.',
+        skillQuery: 'Machine Learning',
+        estimatedHours: 8,
+        objectives: ['Matrix operations and eigenvalues', 'Gradients and loss function optimization', 'Feature normalization and categorical encoding'],
+        practiceTasks: ['Implement gradient descent from scratch in NumPy', 'Clean and standardize raw real-world datasets'],
+        completionCriteria: ['Verify mathematical convergence of custom gradient descent'],
+      },
+      {
+        order: 2,
+        title: 'Supervised Learning Algorithms',
+        description: 'Train Linear/Logistic Regression, Decision Trees, Random Forests, and Gradient Boosting (XGBoost).',
+        skillQuery: 'Machine Learning',
+        estimatedHours: 10,
+        objectives: ['Bias-Variance tradeoff', 'Ensemble methods and bagging/boosting', 'Cross-validation and hyperparameter search'],
+        practiceTasks: ['Train an XGBoost credit risk prediction model', 'Evaluate precision, recall, and ROC-AUC metrics'],
+        completionCriteria: ['Achieve >85% F1-score on benchmark dataset'],
+      },
+      {
+        order: 3,
+        title: 'Deep Learning Foundations (PyTorch)',
+        description: 'Build Multi-Layer Perceptrons, Convolutional Neural Networks (CNNs), and loss backpropagation.',
+        skillQuery: 'Machine Learning',
+        estimatedHours: 12,
+        objectives: ['Tensors, Autograd, and computational graphs', 'CNN architectures for computer vision', 'Dropout, batch normalization, and optimizers'],
+        practiceTasks: ['Train an image classifier on CIFAR-10 in PyTorch', 'Visualize loss curves and learning rate schedules'],
+        completionCriteria: ['Train neural network with converging validation loss'],
+      },
+      {
+        order: 4,
+        title: 'Model Deployment & MLOps',
+        description: 'Package models into FastAPI endpoints, containerize with Docker, and monitor inference metrics.',
+        skillQuery: 'Machine Learning',
+        estimatedHours: 10,
+        objectives: ['Model serialization (ONNX / TorchScript)', 'FastAPI prediction microservices', 'Batch inference vs streaming predictions'],
+        practiceTasks: ['Deploy a model inference REST API in Docker', 'Benchmark latency under concurrent requests'],
+        completionCriteria: ['Serve predictions with <50ms p95 latency'],
+      },
+    ],
+  },
+  'data structures': {
+    title: 'Data Structures & Algorithms Mastery',
+    goal: 'Master algorithmic problem solving, time/space complexity analysis, and technical interview patterns',
+    estimatedDuration: '8 weeks',
+    provider: 'LOCAL_FALLBACK',
+    stages: [
+      {
+        order: 1,
+        title: 'Asymptotic Analysis, Arrays & Two Pointers',
+        description: 'Master Big-O notation, array sliding window, two pointers, and binary search.',
+        skillQuery: 'Data Structures',
+        estimatedHours: 6,
+        objectives: ['Big-O time and space complexity', 'Two-pointer technique', 'Sliding window maximum/minimum'],
+        practiceTasks: ['Solve 10 LeetCode array and two-pointer problems', 'Implement binary search on rotated arrays'],
+        completionCriteria: ['Analyze time and space complexity for all solutions'],
+      },
+      {
+        order: 2,
+        title: 'Linked Lists, Stacks & Queues',
+        description: 'Implement singly/doubly linked lists, monotonic stacks, and priority queues/heaps.',
+        skillQuery: 'Data Structures',
+        estimatedHours: 8,
+        objectives: ['Pointer manipulation without memory leaks', 'Monotonic stack for next greater element', 'Min-Heap and Max-Heap implementations'],
+        practiceTasks: ['Implement an LRU cache from scratch', 'Solve median in a stream using two heaps'],
+        completionCriteria: ['Pass all test cases with optimal O(1) or O(log N) operations'],
+      },
+      {
+        order: 3,
+        title: 'Trees, Binary Search Trees & Graphs',
+        description: 'Traverse trees with DFS/BFS, binary search tree validation, Dijkstra and topological sort.',
+        skillQuery: 'Data Structures',
+        estimatedHours: 10,
+        objectives: ['In-order, Pre-order, Post-order traversals', 'Graph representation (Adjacency List vs Matrix)', 'Dijkstra shortest path and BFS cycles'],
+        practiceTasks: ['Implement Course Schedule topological sort', 'Serialize and deserialize binary trees'],
+        completionCriteria: ['Solve graph problems with clean O(V + E) complexity'],
+      },
+      {
+        order: 4,
+        title: 'Dynamic Programming & Backtracking',
+        description: 'Break down subproblems with memoization, tabulation, and recursive state exploration.',
+        skillQuery: 'Data Structures',
+        estimatedHours: 12,
+        objectives: ['1D and 2D DP state transitions', 'Knapsack, LIS, and LCS problem patterns', 'Backtracking with pruning'],
+        practiceTasks: ['Solve 0/1 Knapsack and Edit Distance', 'Implement N-Queens solver with pruning'],
+        completionCriteria: ['Derive optimal subproblems and state equations accurately'],
       },
     ],
   },
 };
+
+function cleanJsonText(raw: string): string {
+  let cleaned = raw.trim();
+  if (cleaned.startsWith('```json')) {
+    cleaned = cleaned.substring(7);
+  } else if (cleaned.startsWith('```')) {
+    cleaned = cleaned.substring(3);
+  }
+  if (cleaned.endsWith('```')) {
+    cleaned = cleaned.substring(0, cleaned.length - 3);
+  }
+  return cleaned.trim();
+}
+
+/**
+ * Returns a high-quality curated curriculum or dynamically synthesizes a custom roadmap for any goal
+ */
+export function getCuratedRoadmap(
+  goal: string, 
+  currentLevel: string = 'Beginner', 
+  targetLevel: string = 'Intermediate', 
+  weeklyHours: number = 6
+): GeneratedRoadmap {
+  const lowerGoal = goal.toLowerCase();
+
+  for (const [key, roadmap] of Object.entries(LOCAL_CURRICULUM_ROADMAPS)) {
+    if (lowerGoal.includes(key)) {
+      return roadmap;
+    }
+  }
+
+  // Dynamic Synthesis for any unlisted custom topic
+  const capitalizedTopic = goal.charAt(0).toUpperCase() + goal.slice(1);
+  return {
+    title: `${capitalizedTopic} Learning Roadmap`,
+    goal: `Accelerate from ${currentLevel} to ${targetLevel} in ${capitalizedTopic} with structured milestones`,
+    estimatedDuration: `${Math.max(4, Math.min(12, Math.round(30 / (weeklyHours || 6))))} weeks`,
+    provider: 'LOCAL_FALLBACK',
+    stages: [
+      {
+        order: 1,
+        title: `Phase 1: Foundations & Core Concepts of ${capitalizedTopic}`,
+        description: `Establish strong mental models, foundational terminology, syntax, and development environment.`,
+        skillQuery: goal,
+        estimatedHours: Math.round(weeklyHours * 1.2),
+        objectives: [
+          `Master core building blocks and terminology of ${capitalizedTopic}`,
+          `Configure development environment and tooling`,
+          `Write first functional scripts and unit exercises`,
+        ],
+        practiceTasks: [
+          `Build a simple introductory project applying core concepts`,
+          `Analyze and refactor code samples for best practices`,
+        ],
+        completionCriteria: [
+          `Demonstrate understanding of fundamental concepts without syntax or conceptual errors`,
+        ],
+      },
+      {
+        order: 2,
+        title: `Phase 2: Core Architecture & Hands-on Implementation`,
+        description: `Deepen practical skills by tackling intermediate patterns, modules, and data handling.`,
+        skillQuery: goal,
+        estimatedHours: Math.round(weeklyHours * 1.5),
+        objectives: [
+          `Implement intermediate design patterns in ${capitalizedTopic}`,
+          `Handle asynchronous workflows, data transformations, and state`,
+          `Write modular, testable components and functions`,
+        ],
+        practiceTasks: [
+          `Develop a multi-feature application implementing core patterns`,
+          `Write unit test suites verifying expected behavior`,
+        ],
+        completionCriteria: [
+          `Pass 100% of functional tests and follow idiomatic standards`,
+        ],
+      },
+      {
+        order: 3,
+        title: `Phase 3: Integration, Performance & Real-World Workflows`,
+        description: `Connect with external services, optimize efficiency, debug edge cases, and enforce security.`,
+        skillQuery: goal,
+        estimatedHours: Math.round(weeklyHours * 1.5),
+        objectives: [
+          `Integrate with external APIs, databases, and third-party libraries`,
+          `Optimize performance and eliminate bottlenecks`,
+          `Handle error recovery, validation, and edge cases gracefully`,
+        ],
+        practiceTasks: [
+          `Conduct performance profiling and eliminate high-latency operations`,
+          `Implement end-to-end validation across all data boundaries`,
+        ],
+        completionCriteria: [
+          `Deploy an integrated system meeting performance and reliability benchmarks`,
+        ],
+      },
+      {
+        order: 4,
+        title: `Phase 4: Advanced Capstone Project & Mentor Review`,
+        description: `Design, build, and deploy an end-to-end production-grade capstone project for peer and mentor review.`,
+        skillQuery: goal,
+        estimatedHours: Math.round(weeklyHours * 2.0),
+        objectives: [
+          `Architect a full production-ready capstone project`,
+          `Apply enterprise security, clean architecture, and documentation`,
+          `Participate in peer code reviews and mentor feedback sessions`,
+        ],
+        practiceTasks: [
+          `Deploy the complete capstone project to a live campus staging environment`,
+          `Conduct an architectural walkthrough with a verified campus mentor`,
+        ],
+        completionCriteria: [
+          `Achieve verified mentor sign-off on capstone functionality and code quality`,
+        ],
+      },
+    ],
+  };
+}
 
 export async function generateStudyRoadmap(params: {
   goal: string;
@@ -1608,14 +1966,9 @@ export async function generateStudyRoadmap(params: {
   const apiKey = process.env.GEMINI_API_KEY || process.env.AI_API_KEY;
   const model = process.env.GEMINI_MODEL || process.env.AI_MODEL_NAME || 'gemini-1.5-flash';
 
-  const lowerGoal = goal.toLowerCase();
-
-  // If no API key configured, fallback to curated roadmaps if available or throw configuration error
+  // If no API key configured, return high-quality curated curriculum
   if (!apiKey || apiKey.trim() === '') {
-    if (lowerGoal.includes('solidity') || lowerGoal.includes('web3') || lowerGoal.includes('blockchain')) {
-      return LOCAL_CURRICULUM_ROADMAPS['solidity'];
-    }
-    return LOCAL_CURRICULUM_ROADMAPS['python'];
+    return getCuratedRoadmap(goal, currentLevel, targetLevel, weeklyHours);
   }
 
   try {
@@ -1663,15 +2016,16 @@ Available Study Time: ${weeklyHours} hours per week`;
     });
 
     if (!response.ok) {
-      console.warn(`[Gemini API Roadmap Error] Status: ${response.status}. Serving curated curriculum.`);
-      return lowerGoal.includes('solidity') ? LOCAL_CURRICULUM_ROADMAPS['solidity'] : LOCAL_CURRICULUM_ROADMAPS['python'];
+      console.warn(`[Gemini API Roadmap Error] Status: ${response.status}. Serving curated curriculum for ${goal}.`);
+      return getCuratedRoadmap(goal, currentLevel, targetLevel, weeklyHours);
     }
 
     const data = await response.json();
     const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!rawText) throw new Error('Empty Gemini roadmap text');
 
-    const parsedJson = JSON.parse(rawText);
+    const cleaned = cleanJsonText(rawText);
+    const parsedJson = JSON.parse(cleaned);
     const validated = GeneratedRoadmapSchema.safeParse(parsedJson);
 
     if (validated.success) {
@@ -1680,12 +2034,12 @@ Available Study Time: ${weeklyHours} hours per week`;
         provider: 'GEMINI_AI',
       };
     } else {
-      console.warn('[Gemini Roadmap Schema Mismatch] Falling back to local curriculum:', validated.error);
-      return lowerGoal.includes('solidity') ? LOCAL_CURRICULUM_ROADMAPS['solidity'] : LOCAL_CURRICULUM_ROADMAPS['python'];
+      console.warn('[Gemini Roadmap Schema Mismatch] Falling back to curated curriculum:', validated.error);
+      return getCuratedRoadmap(goal, currentLevel, targetLevel, weeklyHours);
     }
   } catch (err) {
     console.error('[Gemini Roadmap Request Exception] Fallback activated:', err);
-    return lowerGoal.includes('solidity') ? LOCAL_CURRICULUM_ROADMAPS['solidity'] : LOCAL_CURRICULUM_ROADMAPS['python'];
+    return getCuratedRoadmap(goal, currentLevel, targetLevel, weeklyHours);
   }
 }
 

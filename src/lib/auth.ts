@@ -109,3 +109,8 @@ export function requireRole(req: NextRequest, allowedRoles: ('STUDENT' | 'MODERA
 
   return { user };
 }
+
+export function requireAdmin(req: NextRequest): { user: TokenPayload } | { errorResponse: NextResponse } {
+  return requireRole(req, ['ADMIN']);
+}
+

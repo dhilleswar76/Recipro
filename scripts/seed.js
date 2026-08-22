@@ -155,6 +155,19 @@ db.exec(`
     FOREIGN KEY (learner_id) REFERENCES users(id)
   );
 
+  CREATE TABLE IF NOT EXISTS session_participants (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    session_role TEXT NOT NULL,
+    confirmed INTEGER NOT NULL DEFAULT 0,
+    joined_at DATETIME,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(session_id, user_id),
+    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
   CREATE TABLE IF NOT EXISTS session_exchange_agreements (
     id TEXT PRIMARY KEY,
     session_id TEXT UNIQUE NOT NULL,
@@ -855,5 +868,204 @@ db.prepare(`
   '/explore'
 );
 
-console.log('Database seeded successfully with verified Python demo personas & Smart Slot availability.');
+// 7. Seed Diverse Historical & Today's Demo Sessions with Full Audit Trails
+const historicalSessions = [
+  {
+    id: 'sess-hist-101',
+    title: 'Python Pandas & Data Wrangling',
+    skill_id: 'skill-python',
+    teacher_id: 'usr-alex',
+    learner_id: 'usr-maya',
+    status: 'CREDIT_SETTLED',
+    scheduled_start: '2026-08-23 10:00:00',
+    scheduled_end: '2026-08-23 11:00:00',
+    duration_hours: 1.0,
+    credits_amount: 1,
+    exchange_return: 'CREDITS',
+    return_skill: 'Solidity & Smart Contracts',
+    credit_tx: { from: 'usr-maya', to: 'usr-alex', amount: 1, type: 'ESCROW_RELEASE', reason: 'Completed Python teaching session' }
+  },
+  {
+    id: 'sess-hist-102',
+    title: 'React Components & Hooks Architecture',
+    skill_id: 'skill-react',
+    teacher_id: 'usr-priya',
+    learner_id: 'usr-alex',
+    status: 'CREDIT_SETTLED',
+    scheduled_start: '2026-08-23 14:00:00',
+    scheduled_end: '2026-08-23 15:00:00',
+    duration_hours: 1.0,
+    credits_amount: 1,
+    exchange_return: 'SKILL',
+    return_skill: 'Python Programming',
+    reciprocal_note: 'Alex teaches Python to Priya in reciprocal exchange'
+  },
+  {
+    id: 'sess-hist-103',
+    title: 'Solidity Smart Contract Security & Reentrancy',
+    skill_id: 'skill-solidity',
+    teacher_id: 'usr-rahul',
+    learner_id: 'usr-elena',
+    status: 'CREDIT_SETTLED',
+    scheduled_start: '2026-08-23 16:00:00',
+    scheduled_end: '2026-08-23 17:00:00',
+    duration_hours: 1.0,
+    credits_amount: 1,
+    exchange_return: 'SKILL',
+    return_skill: 'UI/UX Design & Figma'
+  },
+  {
+    id: 'sess-hist-104',
+    title: 'Calculus Proofs & Matrix Algebra',
+    skill_id: 'skill-calculus',
+    teacher_id: 'usr-david',
+    learner_id: 'usr-marcus',
+    status: 'CANCELLED',
+    scheduled_start: '2026-08-23 18:00:00',
+    scheduled_end: '2026-08-23 19:00:00',
+    duration_hours: 1.0,
+    credits_amount: 1,
+    cancellation_reason: 'Student rescheduled before start window',
+    credit_tx: { from: 'usr-marcus', to: 'usr-marcus', amount: 1, type: 'ESCROW_REFUND', reason: 'Refund on session cancellation' }
+  },
+  {
+    id: 'sess-hist-105',
+    title: 'Financial Modeling & DCF Valuation',
+    skill_id: 'skill-finance',
+    teacher_id: 'usr-marcus',
+    learner_id: 'usr-rahul',
+    status: 'DISPUTED',
+    scheduled_start: '2026-08-23 19:00:00',
+    scheduled_end: '2026-08-23 20:00:00',
+    duration_hours: 1.0,
+    credits_amount: 1,
+    dispute: { reason: 'NO_SHOW', initiator: 'usr-rahul', details: 'Instructor did not join meeting room.' }
+  },
+  // Earlier dates (e.g. 15 Aug, 18 Aug) for First Session tracking
+  {
+    id: 'sess-hist-001',
+    title: 'First Python Introduction & Environment Setup',
+    skill_id: 'skill-python',
+    teacher_id: 'usr-alex',
+    learner_id: 'usr-rahul',
+    status: 'CREDIT_SETTLED',
+    scheduled_start: '2026-08-15 17:00:00',
+    scheduled_end: '2026-08-15 18:00:00',
+    duration_hours: 1.0,
+    credits_amount: 1,
+    exchange_return: 'CREDITS',
+    return_skill: 'Solidity & Smart Contracts',
+    credit_tx: { from: 'usr-rahul', to: 'usr-alex', amount: 1, type: 'ESCROW_RELEASE', reason: 'Completed first Python session' }
+  }
+];
+
+const insertSess = db.prepare(`
+  INSERT INTO sessions (
+    id, title, skill_id, teacher_id, learner_id, status, scheduled_start, scheduled_end,
+    duration_hours, credits_amount, mode, location_or_url, idempotency_key, notes, cancellation_reason, created_at
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  ON CONFLICT(id) DO UPDATE SET status = excluded.status
+`);
+
+const insertAgreement = db.prepare(`
+  INSERT INTO session_exchange_agreements (
+    id, session_id, mentor_id, learner_id, taught_skill_id, requested_return_skill_name, return_type, credit_amount, status, proposal_count, proposed_by, accepted_by, created_at, accepted_at
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ACCEPTED', 1, ?, ?, ?, ?)
+  ON CONFLICT(session_id) DO NOTHING
+`);
+
+const insertCreditTx = db.prepare(`
+  INSERT INTO credit_transactions (
+    id, reference_session_id, sender_id, receiver_id, amount, transaction_type, status, idempotency_key, created_at
+  ) VALUES (?, ?, ?, ?, ?, ?, 'SETTLED', ?, ?)
+  ON CONFLICT(id) DO NOTHING
+`);
+
+const insertDispute = db.prepare(`
+  INSERT INTO disputes (
+    id, session_id, initiator_id, reason, status, resolution_notes, created_at
+  ) VALUES (?, ?, ?, ?, 'UNDER_REVIEW', 'Under moderator investigation', ?)
+  ON CONFLICT(session_id) DO NOTHING
+`);
+
+for (const hs of historicalSessions) {
+  insertSess.run(
+    hs.id,
+    hs.title,
+    hs.skill_id,
+    hs.teacher_id,
+    hs.learner_id,
+    hs.status,
+    hs.scheduled_start,
+    hs.scheduled_end,
+    hs.duration_hours,
+    hs.credits_amount,
+    'ONLINE',
+    'https://meet.skillswap.internal/room-' + hs.id,
+    'idemp-' + hs.id,
+    hs.title,
+    hs.cancellation_reason || null,
+    hs.scheduled_start
+  );
+
+  if (hs.exchange_return) {
+    insertAgreement.run(
+      'sea-' + hs.id,
+      hs.id,
+      hs.teacher_id,
+      hs.learner_id,
+      hs.skill_id,
+      hs.return_skill || 'Solidity',
+      hs.exchange_return,
+      hs.credits_amount,
+      hs.teacher_id,
+      hs.learner_id,
+      hs.scheduled_start,
+      hs.scheduled_start
+    );
+  }
+
+  if (hs.credit_tx) {
+    insertCreditTx.run(
+      'ctx-' + hs.id,
+      hs.id,
+      hs.credit_tx.from,
+      hs.credit_tx.to,
+      hs.credit_tx.amount,
+      hs.credit_tx.type,
+      'idemp-ctx-' + hs.id,
+      hs.scheduled_start
+    );
+  }
+
+  if (hs.dispute) {
+    insertDispute.run(
+      'disp-' + hs.id,
+      hs.id,
+      hs.dispute.initiator,
+      hs.dispute.reason,
+      hs.scheduled_start
+    );
+  }
+}
+
+// 8. Auto-populate session_participants for all sessions
+const allSessions = db.prepare(`SELECT id, teacher_id, learner_id, created_at FROM sessions`).all();
+const insertParticipant = db.prepare(`
+  INSERT INTO session_participants (id, session_id, user_id, session_role, confirmed, created_at)
+  VALUES (?, ?, ?, ?, 1, ?)
+  ON CONFLICT(session_id, user_id) DO NOTHING
+`);
+
+for (const s of allSessions) {
+  if (s.teacher_id) {
+    insertParticipant.run(`sp-${s.id}-trainer`, s.id, s.teacher_id, 'TRAINER', s.created_at);
+  }
+  if (s.learner_id) {
+    insertParticipant.run(`sp-${s.id}-learner`, s.id, s.learner_id, 'LEARNER', s.created_at);
+  }
+}
+
+console.log('Database seeded successfully with verified Python demo personas, historical session audit trails, & Smart Slot availability.');
 db.close();
+

@@ -144,6 +144,20 @@ export function initDatabase(db: Database.Database) {
       FOREIGN KEY (learner_id) REFERENCES users(id)
     );
 
+    -- 7a. Session Participants (Discrete per-session roles: LEARNER vs TRAINER)
+    CREATE TABLE IF NOT EXISTS session_participants (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      session_role TEXT NOT NULL, -- 'LEARNER', 'TRAINER'
+      confirmed INTEGER NOT NULL DEFAULT 0,
+      joined_at DATETIME,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(session_id, user_id),
+      FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
     -- 7b. Pre-Session Skill Return Exchange Agreements
     CREATE TABLE IF NOT EXISTS session_exchange_agreements (
       id TEXT PRIMARY KEY,
@@ -545,7 +559,15 @@ export function initDatabase(db: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_exchange_session ON session_exchange_agreements(session_id);
     CREATE INDEX IF NOT EXISTS idx_exchange_mentor ON session_exchange_agreements(mentor_id);
     CREATE INDEX IF NOT EXISTS idx_exchange_learner ON session_exchange_agreements(learner_id);
+    CREATE INDEX IF NOT EXISTS idx_session_participants_session ON session_participants(session_id);
+    CREATE INDEX IF NOT EXISTS idx_session_participants_user ON session_participants(user_id, session_role);
+    CREATE INDEX IF NOT EXISTS idx_sessions_sched_start ON sessions(scheduled_start);
+    CREATE INDEX IF NOT EXISTS idx_credit_tx_date ON credit_transactions(created_at);
+    CREATE INDEX IF NOT EXISTS idx_credit_tx_ref_session ON credit_transactions(reference_session_id);
   `);
+
+  // Auto-sync session_participants from sessions table
+  syncSessionParticipants(db);
 
   // Safe runtime column migrations for existing DB
   safeAddColumn(db, 'users', 'user_type', "TEXT NOT NULL DEFAULT 'TEACHER_LEARNER'");
@@ -599,3 +621,42 @@ function safeAddColumn(db: Database.Database, table: string, column: string, def
     // Ignore if column already added or table missing during initial bootstrap
   }
 }
+
+export function syncSessionParticipants(db: Database.Database) {
+  try {
+    const sessions = db.prepare(`
+      SELECT s.id, s.teacher_id, s.learner_id, s.teacher_confirmed, s.learner_confirmed, s.created_at
+      FROM sessions s
+      LEFT JOIN session_participants sp ON s.id = sp.session_id
+      WHERE sp.id IS NULL
+    `).all() as Array<{
+      id: string;
+      teacher_id: string;
+      learner_id: string;
+      teacher_confirmed: number;
+      learner_confirmed: number;
+      created_at: string;
+    }>;
+
+    if (sessions.length > 0) {
+      const insert = db.prepare(`
+        INSERT OR IGNORE INTO session_participants (id, session_id, user_id, session_role, confirmed, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `);
+
+      db.transaction(() => {
+        for (const s of sessions) {
+          if (s.teacher_id) {
+            insert.run(`sp-${s.id}-trainer`, s.id, s.teacher_id, 'TRAINER', s.teacher_confirmed || 0, s.created_at);
+          }
+          if (s.learner_id) {
+            insert.run(`sp-${s.id}-learner`, s.id, s.learner_id, 'LEARNER', s.learner_confirmed || 0, s.created_at);
+          }
+        }
+      })();
+    }
+  } catch (err) {
+    // Ignore sync error during initial table setup
+  }
+}
+

@@ -104,8 +104,8 @@ export function Navbar() {
             </>
           )}
 
-          {/* Moderator / Admin Access */}
-          {(user?.role === 'MODERATOR' || user?.role === 'ADMIN') && (
+          {/* Moderator Access */}
+          {user?.role === 'MODERATOR' && (
             <Link 
               href="/moderator" 
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
@@ -114,18 +114,6 @@ export function Navbar() {
             >
               <ShieldAlert className="w-3.5 h-3.5" />
               <span>Moderation</span>
-            </Link>
-          )}
-
-          {user?.role === 'ADMIN' && (
-            <Link 
-              href="/admin" 
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                pathname === '/admin' ? 'bg-rose-600 text-white' : 'text-rose-400 hover:bg-rose-500/20'
-              }`}
-            >
-              <Activity className="w-3.5 h-3.5" />
-              <span>Admin</span>
             </Link>
           )}
         </nav>

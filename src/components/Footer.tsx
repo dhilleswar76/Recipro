@@ -58,8 +58,7 @@ export function Footer() {
         <div className="border-t border-slate-900 mt-8 pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-[11px] text-slate-500">
           <p>© 2026 SkillSwap Campus. All rights reserved.</p>
           <div className="flex gap-4">
-            <Link href="/admin" className="hover:text-slate-400">Admin</Link>
-            <Link href="/moderator" className="hover:text-slate-400">Moderator</Link>
+            <Link href="/moderator" className="hover:text-slate-400">Campus Moderator</Link>
           </div>
         </div>
       </div>

@@ -117,6 +117,19 @@ export async function POST(req: NextRequest) {
         notes || ''
       );
 
+      // 3b. Insert Session Participants (Explicit Session Roles)
+      db.prepare(`
+        INSERT OR IGNORE INTO session_participants (id, session_id, user_id, session_role, confirmed)
+        VALUES (?, ?, ?, 'TRAINER', 0), (?, ?, ?, 'LEARNER', 0)
+      `).run(
+        `sp-${sessionId}-trainer`,
+        sessionId,
+        teacherId,
+        `sp-${sessionId}-learner`,
+        sessionId,
+        user.userId
+      );
+
       // 4. Notify Teacher
       db.prepare(`
         INSERT INTO notifications (id, user_id, title, message, type, link)

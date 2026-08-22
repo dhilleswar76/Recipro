@@ -1,431 +1,625 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { 
   Activity, 
-  Database, 
-  Cpu, 
+  Calendar, 
   CheckCircle2, 
   AlertTriangle, 
+  Clock, 
+  Coins, 
+  Search, 
+  Filter, 
+  Download, 
+  ArrowRight, 
+  ShieldAlert, 
+  Users, 
+  BookOpen, 
   RefreshCw, 
-  ShieldCheck, 
-  Server,
   Lock,
-  BookOpen,
-  Award,
-  Users,
-  Send,
-  Check,
-  AlertCircle
+  ChevronRight,
+  TrendingUp,
+  Award
 } from 'lucide-react';
-import { getSkillStatusDisplay } from '@/lib/skill-verification';
 
-export default function AdminPage() {
-  const { user } = useAuth();
-  const [systemData, setSystemData] = useState<any | null>(null);
-  const [verificationData, setVerificationData] = useState<{ skills: any[]; assessments: any[] }>({ skills: [], assessments: [] });
-  const [demandData, setDemandData] = useState<any[]>([]);
-  const [selectedSkillGap, setSelectedSkillGap] = useState<string | null>(null);
-  const [potentialMentors, setPotentialMentors] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'VERIFICATION' | 'DEMAND'>('VERIFICATION');
-  const [loading, setLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
+export default function AdminDashboardPage() {
+  const { user, loading: authLoading } = useAuth();
+  const router = useRouter();
 
-  const fetchAdminData = async () => {
-    setLoading(true);
+  // Date selection state (Defaults to canonical date 2026-08-23 or today)
+  const [selectedDate, setSelectedDate] = useState<string>('2026-08-23');
+  const [dailyReport, setDailyReport] = useState<any | null>(null);
+  const [reportLoading, setReportLoading] = useState(true);
+
+  // User search & filters
+  const [searchTerm, setSearchTerm] = useState('');
+  const [roleFilter, setRoleFilter] = useState('ALL');
+  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [userPage, setUserPage] = useState(1);
+  const [usersData, setUsersData] = useState<any | null>(null);
+  const [usersLoading, setUsersLoading] = useState(false);
+
+  // Active View Tab
+  const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'USERS' | 'SESSIONS'>('OVERVIEW');
+
+  // Fetch Daily Report
+  const fetchDailyReport = async (dateStr: string) => {
+    setReportLoading(true);
     try {
-      const [sysRes, verRes, demRes] = await Promise.all([
-        fetch('/api/admin/system'),
-        fetch('/api/admin/verification'),
-        fetch('/api/admin/demand'),
-      ]);
-
-      if (sysRes.ok) setSystemData(await sysRes.json());
-      if (verRes.ok) setVerificationData(await verRes.json());
-      if (demRes.ok) {
-        const dJson = await demRes.json();
-        setDemandData(dJson.demand || []);
+      const res = await fetch(`/api/admin/reports/daily?date=${dateStr}`);
+      if (res.ok) {
+        const data = await res.json();
+        setDailyReport(data);
+      } else if (res.status === 403) {
+        // Not admin
       }
     } catch (err) {
-      console.error('Admin data fetch error:', err);
+      console.error('Failed to load daily report:', err);
     } finally {
-      setLoading(false);
+      setReportLoading(false);
+    }
+  };
+
+  // Fetch User Activity List
+  const fetchUsers = async () => {
+    setUsersLoading(true);
+    try {
+      const query = new URLSearchParams({
+        search: searchTerm,
+        role: roleFilter,
+        status: statusFilter,
+        page: userPage.toString(),
+        limit: '15',
+      });
+      const res = await fetch(`/api/admin/reports/users?${query.toString()}`);
+      if (res.ok) {
+        const data = await res.json();
+        setUsersData(data);
+      }
+    } catch (err) {
+      console.error('Failed to load users report:', err);
+    } finally {
+      setUsersLoading(false);
     }
   };
 
   useEffect(() => {
-    if (user?.role === 'ADMIN' || user?.role === 'MODERATOR') {
-      fetchAdminData();
+    if (user?.role === 'ADMIN') {
+      fetchDailyReport(selectedDate);
+      fetchUsers();
     }
   }, [user]);
 
-  // Handle Admin Verification Action
-  const handleVerificationAction = async (userId: string, skillId: string, action: string) => {
-    setActionLoading(`${userId}:${skillId}`);
-    try {
-      const res = await fetch('/api/admin/verification', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, skillId, action }),
-      });
-
-      if (res.ok) {
-        await fetchAdminData();
-      } else {
-        const data = await res.json();
-        alert(data.error || 'Action failed');
-      }
-    } catch (err) {
-      console.error('Verification action error:', err);
-    } finally {
-      setActionLoading(null);
-    }
+  const handleGenerateReport = (e: React.FormEvent) => {
+    e.preventDefault();
+    fetchDailyReport(selectedDate);
   };
 
-  // Inspect Potential Mentors for a Skill Gap
-  const handleInspectGap = async (skillName: string) => {
-    setSelectedSkillGap(skillName);
-    try {
-      const res = await fetch(`/api/admin/demand?skill=${encodeURIComponent(skillName)}`);
-      if (res.ok) {
-        const json = await res.json();
-        setPotentialMentors(json.potentialMentors || []);
-      }
-    } catch (err) {
-      console.error('Potential mentors fetch error:', err);
-    }
+  const handleUserSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    setUserPage(1);
+    fetchUsers();
   };
 
-  // Invite Potential Mentor to Assessment
-  const handleInviteMentor = async (targetUserId: string, skillName: string) => {
-    try {
-      const res = await fetch('/api/admin/demand', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ targetUserId, requestedSkillName: skillName }),
-      });
-
-      if (res.ok) {
-        alert(`Invitation sent to student for "${skillName}"!`);
-      }
-    } catch (err) {
-      console.error('Invite mentor error:', err);
-    }
-  };
-
-  if (user?.role !== 'ADMIN' && user?.role !== 'MODERATOR') {
+  // Authorization Guard
+  if (authLoading) {
     return (
-      <div className="max-w-4xl mx-auto py-20 text-center space-y-3">
-        <Activity className="w-12 h-12 text-rose-500 mx-auto" />
-        <h2 className="text-xl font-bold text-white">Campus Principal Admin Access Required</h2>
-        <p className="text-xs text-slate-400">
-          Use the demo persona switcher in the navbar to switch to Campus Admin.
+      <div className="min-h-[70vh] flex items-center justify-center text-xs text-slate-400">
+        Verifying administrative authorization...
+      </div>
+    );
+  }
+
+  if (!user || user.role !== 'ADMIN') {
+    return (
+      <div className="max-w-xl mx-auto px-4 py-20 text-center space-y-4">
+        <div className="w-14 h-14 rounded-2xl bg-rose-500/20 text-rose-400 border border-rose-500/30 flex items-center justify-center mx-auto">
+          <Lock className="w-7 h-7" />
+        </div>
+        <h2 className="text-xl font-bold text-white">403 — Unauthorized Admin Route</h2>
+        <p className="text-xs text-slate-400 leading-relaxed">
+          Access to <code className="text-rose-400 bg-slate-900 px-1.5 py-0.5 rounded">/admin</code> is restricted strictly to authenticated administrative accounts. Your session does not possess backend-authoritative admin credentials.
         </p>
+        <div className="pt-2">
+          <Link
+            href="/"
+            className="inline-flex px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs border border-slate-700 transition-colors"
+          >
+            Return to Campus Home
+          </Link>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 lg:px-8 py-8 space-y-8">
+    <div className="max-w-7xl mx-auto px-4 lg:px-8 py-8 space-y-6">
       
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl sm:text-3xl font-display font-extrabold text-white">
-              Campus SRE &amp; Admin Dashboard
-            </h1>
-            <span className="text-xs px-2.5 py-0.5 rounded-full bg-rose-500/20 text-rose-400 font-semibold border border-rose-500/30">
-              {user.role} Level
-            </span>
+      {/* Header & Date Selector */}
+      <div className="glass-panel p-6 rounded-3xl border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-rose-500/20 text-rose-400 border border-rose-500/30 flex items-center justify-center font-bold text-xl">
+            <Activity className="w-6 h-6" />
           </div>
-          <p className="text-xs sm:text-sm text-slate-400 mt-1">
-            Skill verification queue, demand aggregation analytics, and system observability.
-          </p>
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl font-extrabold text-white">SkillSwap Campus Admin</h1>
+              <span className="text-[10px] px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 font-bold border border-rose-500/30">
+                Authoritative Mode
+              </span>
+            </div>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Real-time operational reporting, session state auditing, and credit flow visibility
+            </p>
+          </div>
         </div>
 
-        <button
-          onClick={fetchAdminData}
-          className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-colors flex items-center gap-1.5 self-start sm:self-auto"
-        >
-          <RefreshCw className="w-3.5 h-3.5" /> Refresh Dashboard
-        </button>
+        {/* Date Filter Form & Export */}
+        <form onSubmit={handleGenerateReport} className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2 bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5">
+            <Calendar className="w-4 h-4 text-slate-400" />
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="bg-transparent text-xs text-white focus:outline-none"
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={reportLoading}
+            className="px-4 py-2 rounded-xl bg-brand-500 hover:bg-brand-400 text-dark-bg font-bold text-xs shadow-glow-brand transition-all flex items-center gap-1.5"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${reportLoading ? 'animate-spin' : ''}`} />
+            <span>Generate Day Report</span>
+          </button>
+
+          <a
+            href={`/api/admin/reports/export?type=daily&date=${selectedDate}`}
+            download
+            className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs border border-slate-700 transition-colors flex items-center gap-1.5"
+            title="Download CSV report"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>Export CSV</span>
+          </a>
+        </form>
       </div>
 
       {/* Navigation Tabs */}
-      <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
-        <button
-          onClick={() => setActiveTab('VERIFICATION')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 ${
-            activeTab === 'VERIFICATION' ? 'bg-sky-500 text-dark-bg' : 'text-slate-400 hover:text-white'
-          }`}
-        >
-          <Award className="w-4 h-4" /> Skill Verification Queue ({verificationData.skills.length})
-        </button>
-        <button
-          onClick={() => setActiveTab('DEMAND')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 ${
-            activeTab === 'DEMAND' ? 'bg-amber-500 text-dark-bg' : 'text-slate-400 hover:text-white'
-          }`}
-        >
-          <Users className="w-4 h-4" /> Demand &amp; Skill Gaps ({demandData.filter(d => d.status === 'ZERO_SUPPLY').length} zero-supply)
-        </button>
+      <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
         <button
           onClick={() => setActiveTab('OVERVIEW')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 ${
-            activeTab === 'OVERVIEW' ? 'bg-brand-500 text-dark-bg' : 'text-slate-400 hover:text-white'
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors ${
+            activeTab === 'OVERVIEW'
+              ? 'bg-slate-800 text-white border border-slate-700'
+              : 'text-slate-400 hover:text-white hover:bg-slate-900'
           }`}
         >
-          <Activity className="w-4 h-4" /> SRE Health Overview
+          Daily Overview ({selectedDate})
+        </button>
+        <button
+          onClick={() => {
+            setActiveTab('USERS');
+            fetchUsers();
+          }}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors ${
+            activeTab === 'USERS'
+              ? 'bg-slate-800 text-white border border-slate-700'
+              : 'text-slate-400 hover:text-white hover:bg-slate-900'
+          }`}
+        >
+          User Activity Reports
+        </button>
+        <button
+          onClick={() => setActiveTab('SESSIONS')}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors ${
+            activeTab === 'SESSIONS'
+              ? 'bg-slate-800 text-white border border-slate-700'
+              : 'text-slate-400 hover:text-white hover:bg-slate-900'
+          }`}
+        >
+          Daily Sessions ({dailyReport?.sessions?.length || 0})
         </button>
       </div>
 
-      {/* ============================================================ */}
-      {/* TAB 1: SKILL VERIFICATION QUEUE */}
-      {/* ============================================================ */}
-      {activeTab === 'VERIFICATION' && (
+      {/* TAB 1: DAILY OVERVIEW & METRICS */}
+      {activeTab === 'OVERVIEW' && (
         <div className="space-y-6">
-          <div>
-            <h2 className="text-base font-bold text-white">Skill Verification Review Queue</h2>
-            <p className="text-xs text-slate-400">Review self-declared skills, automated assessment results, and grant Platform Verified badges.</p>
+          
+          {/* Main Stat Counters Grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+            <div className="glass-panel p-4 rounded-2xl border border-slate-800 space-y-1">
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Total Sessions</span>
+              <div className="text-2xl font-extrabold text-white">{dailyReport?.overview?.totalSessions ?? 0}</div>
+            </div>
+
+            <div className="glass-panel p-4 rounded-2xl border border-slate-800 space-y-1">
+              <span className="text-[11px] font-bold text-brand-400 uppercase tracking-wider">Completed</span>
+              <div className="text-2xl font-extrabold text-brand-300">{dailyReport?.overview?.completedSessions ?? 0}</div>
+            </div>
+
+            <div className="glass-panel p-4 rounded-2xl border border-slate-800 space-y-1">
+              <span className="text-[11px] font-bold text-rose-400 uppercase tracking-wider">Cancelled</span>
+              <div className="text-2xl font-extrabold text-rose-300">{dailyReport?.overview?.cancelledSessions ?? 0}</div>
+            </div>
+
+            <div className="glass-panel p-4 rounded-2xl border border-slate-800 space-y-1">
+              <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider">Disputed</span>
+              <div className="text-2xl font-extrabold text-amber-300">{dailyReport?.overview?.disputedSessions ?? 0}</div>
+            </div>
+
+            <div className="glass-panel p-4 rounded-2xl border border-slate-800 space-y-1">
+              <span className="text-[11px] font-bold text-cyan-400 uppercase tracking-wider">Skill Exchanges</span>
+              <div className="text-2xl font-extrabold text-cyan-300">{dailyReport?.overview?.successfulSkillExchanges ?? 0}</div>
+            </div>
+
+            <div className="glass-panel p-4 rounded-2xl border border-slate-800 space-y-1">
+              <span className="text-[11px] font-bold text-indigo-400 uppercase tracking-wider">Credit Sessions</span>
+              <div className="text-2xl font-extrabold text-indigo-300">{dailyReport?.overview?.creditBasedSessions ?? 0}</div>
+            </div>
+
+            <div className="glass-panel p-4 rounded-2xl border border-slate-800 space-y-1">
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Pending</span>
+              <div className="text-2xl font-extrabold text-slate-200">{dailyReport?.overview?.pendingSessions ?? 0}</div>
+            </div>
           </div>
 
-          <div className="glass-panel rounded-2xl border border-slate-800 overflow-x-auto shadow-xl">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-900/80 border-b border-slate-800 text-slate-400 text-[11px] uppercase tracking-wider">
-                <tr>
-                  <th className="p-4">Student</th>
-                  <th className="p-4">Skill Topic</th>
-                  <th className="p-4">Level &amp; Exp</th>
-                  <th className="p-4">Status</th>
-                  <th className="p-4">Assessment Score</th>
-                  <th className="p-4 text-right">Moderation Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800/60 text-slate-300">
-                {verificationData.skills.map((item: any) => {
-                  const statusInfo = getSkillStatusDisplay(item.verification_status);
-                  const isProcessing = actionLoading === `${item.user_id}:${item.skill_id}`;
+          {/* Detailed Two-Col Breakdown: Session Outcomes & Credit Activity */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            
+            {/* Box A: Daily Session Classification */}
+            <div className="glass-panel p-5 rounded-3xl border border-slate-800 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <BookOpen className="w-4 h-4 text-brand-400" />
+                  <span>Session Outcome &amp; Settlement Classification</span>
+                </h3>
+                <span className="text-xs text-slate-400">{selectedDate}</span>
+              </div>
 
-                  return (
-                    <tr key={`${item.user_id}-${item.skill_id}`} className="hover:bg-slate-900/40 transition-colors">
-                      <td className="p-4">
-                        <div className="font-bold text-white">{item.display_name}</div>
-                        <div className="text-[11px] text-slate-400">{item.college} • {item.email}</div>
-                      </td>
-                      <td className="p-4">
-                        <span className="font-semibold text-white">{item.skill_name}</span>
-                        <div className="text-[11px] text-slate-400">{item.skill_category}</div>
-                      </td>
-                      <td className="p-4">
-                        <span className="font-medium text-slate-200">{item.proficiency}</span>
-                        <div className="text-[11px] text-slate-400">{item.experience_years} yrs exp</div>
-                      </td>
-                      <td className="p-4">
-                        <span className={`px-2 py-0.5 rounded-full border text-[10px] font-semibold ${statusInfo.badgeColor}`}>
-                          {statusInfo.icon} {statusInfo.label}
-                        </span>
-                      </td>
-                      <td className="p-4">
-                        {item.assessment_score ? (
-                          <span className="font-bold text-sky-400">{item.assessment_score}%</span>
-                        ) : (
-                          <span className="text-slate-500 italic">Not taken</span>
-                        )}
-                      </td>
-                      <td className="p-4 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <button
-                            onClick={() => handleVerificationAction(item.user_id, item.skill_id, 'APPROVE_PLATFORM_VERIFIED')}
-                            disabled={isProcessing || item.verification_status === 'PLATFORM_VERIFIED'}
-                            className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] disabled:opacity-40 transition-colors flex items-center gap-1"
-                          >
-                            <Check className="w-3 h-3" /> Approve
-                          </button>
-                          <button
-                            onClick={() => handleVerificationAction(item.user_id, item.skill_id, 'REQUEST_REASSESSMENT')}
-                            disabled={isProcessing}
-                            className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-rose-500/20 text-rose-300 border border-slate-700 font-semibold text-[11px] transition-colors"
-                          >
-                            Reassess
-                          </button>
-                        </div>
-                      </td>
+              <div className="space-y-2.5 text-xs">
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/80 border border-slate-800">
+                  <span className="text-slate-300">Total Scheduled Sessions</span>
+                  <strong className="text-white font-mono text-sm">{dailyReport?.sessionStats?.totalScheduled ?? 0}</strong>
+                </div>
+
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/80 border border-slate-800">
+                  <span className="text-slate-300">Total Started / Live Sessions</span>
+                  <strong className="text-cyan-300 font-mono text-sm">{dailyReport?.sessionStats?.totalStarted ?? 0}</strong>
+                </div>
+
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/80 border border-slate-800">
+                  <span className="text-slate-300">Direct Skill-for-Skill Exchanges</span>
+                  <strong className="text-brand-300 font-mono text-sm">{dailyReport?.sessionStats?.directSkillExchanges ?? 0}</strong>
+                </div>
+
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/80 border border-slate-800">
+                  <span className="text-slate-300">Credit-Compensated Sessions</span>
+                  <strong className="text-indigo-300 font-mono text-sm">{dailyReport?.sessionStats?.creditSettledSessions ?? 0}</strong>
+                </div>
+
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/80 border border-slate-800">
+                  <span className="text-slate-300">No-Shows / Participant Fault</span>
+                  <strong className="text-rose-300 font-mono text-sm">{dailyReport?.sessionStats?.totalNoShows ?? 0}</strong>
+                </div>
+              </div>
+            </div>
+
+            {/* Box B: Credit Activity Ledger */}
+            <div className="glass-panel p-5 rounded-3xl border border-slate-800 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <Coins className="w-4 h-4 text-brand-400" />
+                  <span>Daily Skill Credit Flows &amp; Escrow</span>
+                </h3>
+                <span className="text-xs text-slate-400">{dailyReport?.creditActivity?.transactionCount ?? 0} Transactions</span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div className="p-3 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-1">
+                  <span className="text-slate-400 text-[11px]">Credits Earned</span>
+                  <div className="text-lg font-bold text-brand-400">+{dailyReport?.creditActivity?.creditsEarned ?? 0}</div>
+                </div>
+
+                <div className="p-3 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-1">
+                  <span className="text-slate-400 text-[11px]">Credits Spent</span>
+                  <div className="text-lg font-bold text-indigo-400">-{dailyReport?.creditActivity?.creditsSpent ?? 0}</div>
+                </div>
+
+                <div className="p-3 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-1">
+                  <span className="text-slate-400 text-[11px]">Credits Refunded</span>
+                  <div className="text-lg font-bold text-cyan-400">{dailyReport?.creditActivity?.creditsRefunded ?? 0}</div>
+                </div>
+
+                <div className="p-3 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-1">
+                  <span className="text-slate-400 text-[11px]">Disputed Credits (Frozen)</span>
+                  <div className="text-lg font-bold text-rose-400">{dailyReport?.creditActivity?.creditsDisputed ?? 0}</div>
+                </div>
+              </div>
+
+              <div className="p-3 rounded-xl bg-brand-500/10 border border-brand-500/30 flex items-center justify-between text-xs">
+                <span className="text-slate-300 font-medium">Total Volume Transferred:</span>
+                <strong className="text-brand-300 text-sm">{dailyReport?.creditActivity?.totalTransferred ?? 0} Skill Credits</strong>
+              </div>
+            </div>
+
+          </div>
+
+          {/* Quick Recent Sessions Table */}
+          <div className="glass-panel p-5 rounded-3xl border border-slate-800 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-white">Daily Sessions Feed ({dailyReport?.sessions?.length || 0})</h3>
+              <button
+                onClick={() => setActiveTab('SESSIONS')}
+                className="text-brand-400 font-semibold text-xs hover:underline flex items-center gap-1"
+              >
+                View Full Table <ArrowRight className="w-3 h-3" />
+              </button>
+            </div>
+
+            {(!dailyReport?.sessions || dailyReport.sessions.length === 0) ? (
+              <div className="py-12 text-center text-xs text-slate-400">
+                No session activity recorded for {selectedDate}.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="text-[11px] text-slate-400 uppercase border-b border-slate-800 bg-slate-900/40">
+                    <tr>
+                      <th className="py-2.5 px-3">Session ID</th>
+                      <th className="py-2.5 px-3">Skill</th>
+                      <th className="py-2.5 px-3">Participants</th>
+                      <th className="py-2.5 px-3">Time</th>
+                      <th className="py-2.5 px-3">Status</th>
+                      <th className="py-2.5 px-3">Settlement</th>
+                      <th className="py-2.5 px-3 text-right">Action</th>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60">
+                    {dailyReport.sessions.slice(0, 5).map((sess: any) => (
+                      <tr key={sess.id} className="hover:bg-slate-900/30 transition-colors">
+                        <td className="py-3 px-3 font-mono text-[11px] text-slate-300">{sess.id}</td>
+                        <td className="py-3 px-3 font-bold text-white">{sess.skill_name}</td>
+                        <td className="py-3 px-3 text-slate-300">
+                          <div><strong className="text-brand-400">T:</strong> {sess.teacher_name}</div>
+                          <div><strong className="text-indigo-400">L:</strong> {sess.learner_name}</div>
+                        </td>
+                        <td className="py-3 px-3 text-slate-300">{sess.scheduled_start.substring(11, 16)}</td>
+                        <td className="py-3 px-3">
+                          <span className={`text-[10px] px-2 py-0.5 rounded font-bold border ${
+                            sess.status === 'CREDIT_SETTLED' ? 'bg-brand-500/20 text-brand-400 border-brand-500/30' :
+                            sess.status === 'DISPUTED' ? 'bg-rose-500/20 text-rose-400 border-rose-500/30' :
+                            'bg-slate-800 text-slate-300 border-slate-700'
+                          }`}>
+                            {sess.status}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 text-slate-300 font-semibold">{sess.settlement_classification}</td>
+                        <td className="py-3 px-3 text-right">
+                          <Link
+                            href={`/admin/sessions/${sess.id}`}
+                            className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-[11px] border border-slate-700 inline-flex items-center gap-1"
+                          >
+                            Inspect <ChevronRight className="w-3 h-3" />
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
+
         </div>
       )}
 
-      {/* ============================================================ */}
-      {/* TAB 2: DEMAND AGGREGATION & SKILL GAP RESOLUTION */}
-      {/* ============================================================ */}
-      {activeTab === 'DEMAND' && (
+      {/* TAB 2: USER-WISE ACTIVITY REPORTS */}
+      {activeTab === 'USERS' && (
         <div className="space-y-6">
-          <div>
-            <h2 className="text-base font-bold text-white">Campus Skill Demand &amp; Gap Analytics</h2>
-            <p className="text-xs text-slate-400">Track high learner demand with zero mentors, and invite students with related competencies to mentor.</p>
+          
+          {/* User Search & Filters Bar */}
+          <form onSubmit={handleUserSearch} className="glass-panel p-4 rounded-2xl border border-slate-800 flex flex-wrap items-center gap-3">
+            <div className="flex-1 min-w-[240px] relative">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search user name, email, or user ID..."
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl pl-9 pr-3 py-2 text-xs text-white focus:outline-none focus:border-brand-500"
+              />
+            </div>
+
+            <div className="flex items-center gap-2">
+              <select
+                value={roleFilter}
+                onChange={(e) => setRoleFilter(e.target.value)}
+                className="bg-slate-900 border border-slate-700 text-xs text-slate-300 rounded-xl px-3 py-2"
+              >
+                <option value="ALL">All Roles</option>
+                <option value="STUDENT">Student</option>
+                <option value="MODERATOR">Moderator</option>
+                <option value="ADMIN">Admin</option>
+              </select>
+
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="bg-slate-900 border border-slate-700 text-xs text-slate-300 rounded-xl px-3 py-2"
+              >
+                <option value="ALL">All Statuses</option>
+                <option value="ACTIVE">Active</option>
+                <option value="SUSPENDED">Suspended</option>
+              </select>
+
+              <button
+                type="submit"
+                className="px-4 py-2 rounded-xl bg-brand-500 hover:bg-brand-400 text-dark-bg font-bold text-xs shadow-glow-brand"
+              >
+                Filter Users
+              </button>
+            </div>
+          </form>
+
+          {/* User List Table */}
+          <div className="glass-panel p-5 rounded-3xl border border-slate-800 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-white">Platform Members ({usersData?.pagination?.totalUsers ?? 0})</h3>
+            </div>
+
+            {usersLoading ? (
+              <div className="py-16 text-center text-xs text-slate-400">Loading user activity data...</div>
+            ) : (!usersData?.users || usersData.users.length === 0) ? (
+              <div className="py-16 text-center text-xs text-slate-400">No users found matching your criteria.</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="text-[11px] text-slate-400 uppercase border-b border-slate-800 bg-slate-900/40">
+                    <tr>
+                      <th className="py-2.5 px-3">User</th>
+                      <th className="py-2.5 px-3 text-center">Total Sessions</th>
+                      <th className="py-2.5 px-3 text-center">Learner</th>
+                      <th className="py-2.5 px-3 text-center">Trainer</th>
+                      <th className="py-2.5 px-3 text-center">Completed</th>
+                      <th className="py-2.5 px-3 text-center">Cancelled</th>
+                      <th className="py-2.5 px-3 text-center">Disputed</th>
+                      <th className="py-2.5 px-3 text-center">Credits (E / S)</th>
+                      <th className="py-2.5 px-3 text-right">Report</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60">
+                    {usersData.users.map((u: any) => (
+                      <tr key={u.id} className="hover:bg-slate-900/30 transition-colors">
+                        <td className="py-3 px-3">
+                          <div className="font-bold text-white">{u.display_name || 'Anonymous User'}</div>
+                          <div className="text-[11px] text-slate-400">{u.email} • <span className="text-brand-400">{u.role}</span></div>
+                        </td>
+                        <td className="py-3 px-3 text-center font-bold text-white">{u.total_sessions}</td>
+                        <td className="py-3 px-3 text-center text-indigo-300 font-semibold">{u.learner_sessions}</td>
+                        <td className="py-3 px-3 text-center text-brand-300 font-semibold">{u.trainer_sessions}</td>
+                        <td className="py-3 px-3 text-center text-emerald-400">{u.completed_sessions}</td>
+                        <td className="py-3 px-3 text-center text-rose-400">{u.cancelled_sessions}</td>
+                        <td className="py-3 px-3 text-center text-amber-400">{u.disputed_sessions}</td>
+                        <td className="py-3 px-3 text-center font-mono">
+                          <span className="text-brand-400">+{u.credits_earned}</span> / <span className="text-indigo-400">-{u.credits_spent}</span>
+                        </td>
+                        <td className="py-3 px-3 text-right">
+                          <Link
+                            href={`/admin/users/${u.id}`}
+                            className="px-3 py-1.5 rounded-lg bg-brand-500 hover:bg-brand-400 text-dark-bg font-bold text-xs shadow-glow-brand inline-flex items-center gap-1"
+                          >
+                            <span>View Report</span>
+                            <ArrowRight className="w-3 h-3" />
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Pagination Controls */}
+            {usersData?.pagination && usersData.pagination.totalPages > 1 && (
+              <div className="pt-3 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
+                <span>Page {usersData.pagination.page} of {usersData.pagination.totalPages}</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    disabled={userPage <= 1}
+                    onClick={() => { setUserPage(p => p - 1); fetchUsers(); }}
+                    className="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-white disabled:opacity-40"
+                  >
+                    Previous
+                  </button>
+                  <button
+                    disabled={userPage >= usersData.pagination.totalPages}
+                    onClick={() => { setUserPage(p => p + 1); fetchUsers(); }}
+                    className="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-white disabled:opacity-40"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            
-            {/* Demand Table */}
-            <div className="lg:col-span-2 glass-panel rounded-2xl border border-slate-800 overflow-x-auto shadow-xl">
+        </div>
+      )}
+
+      {/* TAB 3: ALL SESSIONS TABLE */}
+      {activeTab === 'SESSIONS' && (
+        <div className="glass-panel p-5 rounded-3xl border border-slate-800 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-white">All Sessions on {selectedDate}</h3>
+            <a
+              href={`/api/admin/reports/export?type=daily&date=${selectedDate}`}
+              download
+              className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 font-semibold border border-slate-700 flex items-center gap-1.5"
+            >
+              <Download className="w-3.5 h-3.5" /> Export Table CSV
+            </a>
+          </div>
+
+          {(!dailyReport?.sessions || dailyReport.sessions.length === 0) ? (
+            <div className="py-16 text-center text-xs text-slate-400">
+              No sessions scheduled for {selectedDate}.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
-                <thead className="bg-slate-900/80 border-b border-slate-800 text-slate-400 text-[11px] uppercase tracking-wider">
+                <thead className="text-[11px] text-slate-400 uppercase border-b border-slate-800 bg-slate-900/40">
                   <tr>
-                    <th className="p-4">Skill Topic</th>
-                    <th className="p-4">Learner Demand</th>
-                    <th className="p-4">Verified Teachers</th>
-                    <th className="p-4">Supply Status</th>
-                    <th className="p-4 text-right">Potential Mentors</th>
+                    <th className="py-2.5 px-3">Session ID</th>
+                    <th className="py-2.5 px-3">Title &amp; Skill</th>
+                    <th className="py-2.5 px-3">Teaching Mentor</th>
+                    <th className="py-2.5 px-3">Learner</th>
+                    <th className="py-2.5 px-3">Duration</th>
+                    <th className="py-2.5 px-3">Status</th>
+                    <th className="py-2.5 px-3">Settlement</th>
+                    <th className="py-2.5 px-3 text-right">Details</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800/60 text-slate-300">
-                  {demandData.map((d: any) => (
-                    <tr key={d.skillId} className="hover:bg-slate-900/40 transition-colors">
-                      <td className="p-4 font-bold text-white">{d.skillName}</td>
-                      <td className="p-4 font-bold text-brand-400">{d.learnerDemandCount} learners</td>
-                      <td className="p-4 font-semibold text-slate-200">{d.verifiedTeacherCount} verified</td>
-                      <td className="p-4">
+                <tbody className="divide-y divide-slate-800/60">
+                  {dailyReport.sessions.map((sess: any) => (
+                    <tr key={sess.id} className="hover:bg-slate-900/30 transition-colors">
+                      <td className="py-3 px-3 font-mono text-[11px] text-slate-300">{sess.id}</td>
+                      <td className="py-3 px-3">
+                        <div className="font-bold text-white">{sess.title}</div>
+                        <div className="text-[11px] text-brand-400">{sess.skill_name}</div>
+                      </td>
+                      <td className="py-3 px-3 text-slate-200">{sess.teacher_name}</td>
+                      <td className="py-3 px-3 text-slate-200">{sess.learner_name}</td>
+                      <td className="py-3 px-3 text-slate-300">{sess.duration_hours}h</td>
+                      <td className="py-3 px-3">
                         <span className={`text-[10px] px-2 py-0.5 rounded font-bold border ${
-                          d.status === 'ZERO_SUPPLY' ? 'bg-rose-500/20 text-rose-400 border-rose-500/30 animate-pulse' :
-                          d.status === 'LOW_SUPPLY' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' :
-                          'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                          sess.status === 'CREDIT_SETTLED' ? 'bg-brand-500/20 text-brand-400 border-brand-500/30' :
+                          sess.status === 'DISPUTED' ? 'bg-rose-500/20 text-rose-400 border-rose-500/30' :
+                          'bg-slate-800 text-slate-300 border-slate-700'
                         }`}>
-                          {d.status.replace('_', ' ')}
+                          {sess.status}
                         </span>
                       </td>
-                      <td className="p-4 text-right">
-                        <button
-                          onClick={() => handleInspectGap(d.skillName)}
-                          className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-[11px] transition-colors"
+                      <td className="py-3 px-3 font-semibold text-slate-300">{sess.settlement_classification}</td>
+                      <td className="py-3 px-3 text-right">
+                        <Link
+                          href={`/admin/sessions/${sess.id}`}
+                          className="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-[11px] border border-slate-700 inline-flex items-center gap-1"
                         >
-                          Find Mentors
-                        </button>
+                          Audit <ChevronRight className="w-3 h-3" />
+                        </Link>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-
-            {/* Potential Mentors Panel */}
-            <div className="glass-panel p-5 rounded-2xl border border-slate-800 space-y-4">
-              <div>
-                <h3 className="font-bold text-white text-sm">Potential Mentor Discovery</h3>
-                <p className="text-xs text-slate-400">
-                  {selectedSkillGap ? `Students with skills related to "${selectedSkillGap}"` : 'Select a skill to inspect potential mentors'}
-                </p>
-              </div>
-
-              {selectedSkillGap ? (
-                potentialMentors.length === 0 ? (
-                  <div className="py-6 text-center text-xs text-slate-500">
-                    No related candidates currently found.
-                  </div>
-                ) : (
-                  <div className="space-y-3 max-h-96 overflow-y-auto">
-                    {potentialMentors.map((cand, idx) => (
-                      <div key={idx} className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-xs space-y-2">
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <div className="font-bold text-white">{cand.displayName}</div>
-                            <div className="text-[11px] text-slate-400">{cand.college}</div>
-                          </div>
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-brand-500/20 text-brand-300">
-                            {cand.proficiency}
-                          </span>
-                        </div>
-                        <div className="text-[11px] text-slate-400">
-                          Expertise in: <strong className="text-slate-200">{cand.relatedSkillName}</strong>
-                        </div>
-                        <button
-                          onClick={() => handleInviteMentor(cand.userId, selectedSkillGap)}
-                          className="w-full py-1 rounded-lg bg-brand-500 hover:bg-brand-400 text-dark-bg font-bold text-[11px] transition-colors flex items-center justify-center gap-1"
-                        >
-                          <Send className="w-3 h-3" /> Invite to Skill Assessment
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )
-              ) : (
-                <div className="py-8 text-center text-xs text-slate-500">
-                  Click &ldquo;Find Mentors&rdquo; on any skill gap row to scan candidates with adjacent proficiencies.
-                </div>
-              )}
-            </div>
-
-          </div>
-        </div>
-      )}
-
-      {/* ============================================================ */}
-      {/* TAB 3: SRE HEALTH OVERVIEW */}
-      {/* ============================================================ */}
-      {activeTab === 'OVERVIEW' && (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-            {/* Database Health */}
-            <div className="glass-panel p-5 rounded-2xl border border-slate-800 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 font-bold text-white text-sm">
-                  <Database className="w-4 h-4 text-brand-400" />
-                  <span>Relational Persistence</span>
-                </div>
-                <span className="text-[10px] px-2 py-0.5 rounded bg-brand-500/20 text-brand-400 font-bold">
-                  {systemData?.components?.database?.status || 'HEALTHY'}
-                </span>
-              </div>
-              <p className="text-xs text-slate-400">{systemData?.components?.database?.driver}</p>
-              <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-xs space-y-1">
-                <div className="flex justify-between"><span>Users:</span><strong>{systemData?.components?.database?.stats?.users || 0}</strong></div>
-                <div className="flex justify-between"><span>Sessions:</span><strong>{systemData?.components?.database?.stats?.sessions || 0}</strong></div>
-                <div className="flex justify-between"><span>Skills:</span><strong>{systemData?.components?.database?.stats?.skills || 0}</strong></div>
-              </div>
-            </div>
-
-            {/* ML Service Health */}
-            <div className="glass-panel p-5 rounded-2xl border border-slate-800 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 font-bold text-white text-sm">
-                  <Cpu className="w-4 h-4 text-accent-400" />
-                  <span>ML Microservice</span>
-                </div>
-                <span className="text-[10px] px-2 py-0.5 rounded bg-accent-500/20 text-accent-300 font-bold">
-                  {systemData?.components?.mlIntelligence?.status || 'ONLINE'}
-                </span>
-              </div>
-              <p className="text-xs text-slate-400">Isolation Forest, Hybrid Vector Matcher, NetworkX</p>
-              <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-xs space-y-1">
-                <div className="flex justify-between"><span>Fallback Engine:</span><strong className="text-brand-400">Active / Ready</strong></div>
-                <div className="flex justify-between"><span>Zero-Downtime Guarantee:</span><strong>100%</strong></div>
-              </div>
-            </div>
-
-            {/* Blockchain Node Health */}
-            <div className="glass-panel p-5 rounded-2xl border border-slate-800 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 font-bold text-white text-sm">
-                  <Server className="w-4 h-4 text-indigo-400" />
-                  <span>Blockchain Anchor</span>
-                </div>
-                <span className="text-[10px] px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-bold">
-                  {systemData?.components?.blockchain?.status || 'ONLINE'}
-                </span>
-              </div>
-              <p className="text-xs text-slate-400">Campus EVM DevNet (Chain ID: {systemData?.components?.blockchain?.chainId || 31337})</p>
-              <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-xs space-y-1">
-                <div className="flex justify-between"><span>Current Block:</span><strong>#{systemData?.components?.blockchain?.blockNumber || 12480}</strong></div>
-                <div className="flex justify-between"><span>Reconciled Txs:</span><strong className="text-brand-400">100%</strong></div>
-              </div>
-            </div>
-          </div>
+          )}
         </div>
       )}
 

@@ -378,8 +378,8 @@ test('5. Study Roadmap: Generates structured multi-stage curriculum and links to
   `).all();
 
   assert.ok(mentors.length >= 2, 'Must find real Python mentors in DB');
-  assert.ok(mentors.some(m => m.display_name === 'Alex Rivera'));
-  assert.ok(mentors.some(m => m.display_name === 'Rahul Kumar'));
+  assert.ok(mentors.some(m => m.display_name === 'Rahul Reddy'));
+  assert.ok(mentors.some(m => m.display_name === 'Sai Kiran'));
 
   // Test study_roadmaps and roadmap_stages tables exist in DB
   const roadmapTable = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='study_roadmaps'").get();

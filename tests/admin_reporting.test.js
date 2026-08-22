@@ -42,10 +42,10 @@ test('Admin Reporting & Security Test Suite', async (t) => {
     ('${learnerId}', 'learner-${runId}@campus.edu', 'hash123', 'STUDENT', 'TEACHER_LEARNER');
 
     INSERT INTO profiles (id, user_id, display_name, college) VALUES
-    ('p-admin-${runId}', '${adminId}', 'Campus Admin', 'IT Services'),
-    ('p-student-${runId}', '${studentId}', 'Alice Trainer', 'Engineering'),
-    ('p-mod-${runId}', '${moderatorId}', 'Sarah Moderator', 'Administration'),
-    ('p-learner-${runId}', '${learnerId}', 'Bob Learner', 'Science');
+    ('p-admin-${runId}', '${adminId}', 'Srinivas Rao (Campus Admin)', 'IT Services'),
+    ('p-student-${runId}', '${studentId}', 'Rahul Reddy', 'Andhra Institute of Technology'),
+    ('p-mod-${runId}', '${moderatorId}', 'Sirisha (Campus Moderator)', 'Student Affairs'),
+    ('p-learner-${runId}', '${learnerId}', 'Ananya Reddy', 'Godavari Institute of Computer Science');
 
     INSERT INTO skill_credit_accounts (id, user_id, balance, escrow_balance) VALUES
     ('sca-admin-${runId}', '${adminId}', 10, 0),
@@ -422,7 +422,7 @@ test('Admin Reporting & Security Test Suite', async (t) => {
     assert.strictEqual(userReport.firstSession.sessionId, firstSessId);
     assert.strictEqual(userReport.firstSession.scheduledStart, '2026-08-10 10:00:00');
     assert.strictEqual(userReport.firstSession.userRole, 'TRAINER');
-    assert.match(userReport.firstSession.partnerName, /Bob Learner/i);
+    assert.match(userReport.firstSession.partnerName, /Ananya Reddy/i);
     assert.strictEqual(userReport.firstSession.partnerRole, 'LEARNER');
   });
 
@@ -430,14 +430,14 @@ test('Admin Reporting & Security Test Suite', async (t) => {
     const userReport = getUserActivityReport(studentId);
     const s2 = userReport.sessionTimeline.find(s => s.sessionId === sess2Id);
     assert.ok(s2.creditDirection);
-    assert.match(s2.creditDirection.from, /Bob Learner/i);
-    assert.match(s2.creditDirection.to, /Alice Trainer/i);
+    assert.match(s2.creditDirection.from, /Ananya Reddy/i);
+    assert.match(s2.creditDirection.to, /Rahul Reddy/i);
     assert.strictEqual(s2.creditDirection.amount, 1);
 
     const s3 = userReport.sessionTimeline.find(s => s.sessionId === sess3Id);
     assert.ok(s3.creditDirection);
     assert.match(s3.creditDirection.from, /Escrow Reserve/i);
-    assert.match(s3.creditDirection.to, /Alice Trainer/i);
+    assert.match(s3.creditDirection.to, /Rahul Reddy/i);
   });
 
   await t.test('6. Time-Slot Schedule Visualization: Hourly occupied vs free matrix', () => {

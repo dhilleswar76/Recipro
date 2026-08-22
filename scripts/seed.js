@@ -76,18 +76,6 @@ db.exec(`
     teaching_style TEXT DEFAULT 'Hands-on project based',
     verification_status TEXT NOT NULL DEFAULT 'CLAIMED',
     evidence_url TEXT,
-    assessment_score REAL,
-    verified_at DATETIME,
-    verified_by TEXT,
-    reassessment_required INTEGER DEFAULT 0,
-    teaching_days TEXT DEFAULT '["Monday","Wednesday","Friday"]',
-    available_start_time TEXT DEFAULT '17:00',
-    available_end_time TEXT DEFAULT '20:00',
-    preferred_start_time TEXT DEFAULT '18:00',
-    preferred_end_time TEXT DEFAULT '20:00',
-    session_duration_minutes INTEGER DEFAULT 60,
-    timezone TEXT DEFAULT 'Asia/Kolkata',
-    is_flexible INTEGER DEFAULT 1,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(user_id, skill_id),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
@@ -101,14 +89,6 @@ db.exec(`
     target_proficiency TEXT NOT NULL DEFAULT 'Intermediate',
     priority TEXT NOT NULL DEFAULT 'MEDIUM',
     notes TEXT,
-    learning_days TEXT DEFAULT '["Tuesday","Thursday","Saturday"]',
-    available_start_time TEXT DEFAULT '18:00',
-    available_end_time TEXT DEFAULT '21:00',
-    preferred_start_time TEXT DEFAULT '19:00',
-    preferred_end_time TEXT DEFAULT '21:00',
-    session_duration_minutes INTEGER DEFAULT 60,
-    timezone TEXT DEFAULT 'Asia/Kolkata',
-    is_flexible INTEGER DEFAULT 1,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(user_id, skill_id),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
@@ -122,10 +102,6 @@ db.exec(`
     start_time TEXT NOT NULL,
     end_time TEXT NOT NULL,
     timezone TEXT NOT NULL DEFAULT 'UTC',
-    buffer_minutes INTEGER DEFAULT 15,
-    is_preferred INTEGER DEFAULT 0,
-    skill_id TEXT,
-    window_label TEXT DEFAULT 'General',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );
@@ -149,7 +125,6 @@ db.exec(`
     notes TEXT,
     cancellation_reason TEXT,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (skill_id) REFERENCES skills(id),
     FOREIGN KEY (teacher_id) REFERENCES users(id),
     FOREIGN KEY (learner_id) REFERENCES users(id)
@@ -161,7 +136,6 @@ db.exec(`
     user_id TEXT NOT NULL,
     session_role TEXT NOT NULL,
     confirmed INTEGER NOT NULL DEFAULT 0,
-    joined_at DATETIME,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(session_id, user_id),
     FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
@@ -174,24 +148,18 @@ db.exec(`
     mentor_id TEXT NOT NULL,
     learner_id TEXT NOT NULL,
     taught_skill_id TEXT NOT NULL,
-    requested_return_skill_id TEXT,
-    requested_return_skill_name TEXT NOT NULL,
-    return_type TEXT NOT NULL DEFAULT 'SKILL',
-    credit_amount INTEGER NOT NULL DEFAULT 1,
-    status TEXT NOT NULL DEFAULT 'PROPOSED',
-    proposal_count INTEGER NOT NULL DEFAULT 1,
+    requested_return_skill_name TEXT,
+    return_type TEXT NOT NULL,
+    credit_amount INTEGER DEFAULT 1,
+    status TEXT NOT NULL DEFAULT 'PENDING_LEARNER',
+    proposal_count INTEGER DEFAULT 1,
     proposed_by TEXT NOT NULL,
     accepted_by TEXT,
-    notes TEXT,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     accepted_at DATETIME,
-    expires_at DATETIME,
     FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
-    FOREIGN KEY (mentor_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (learner_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (taught_skill_id) REFERENCES skills(id),
-    FOREIGN KEY (requested_return_skill_id) REFERENCES skills(id)
+    FOREIGN KEY (mentor_id) REFERENCES users(id),
+    FOREIGN KEY (learner_id) REFERENCES users(id)
   );
 
   CREATE TABLE IF NOT EXISTS skill_credit_accounts (
@@ -201,8 +169,25 @@ db.exec(`
     escrow_balance INTEGER NOT NULL DEFAULT 0,
     lifetime_earned INTEGER NOT NULL DEFAULT 0,
     lifetime_spent INTEGER NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS credit_transactions (
+    id TEXT PRIMARY KEY,
+    reference_session_id TEXT,
+    sender_id TEXT NOT NULL,
+    receiver_id TEXT NOT NULL,
+    amount INTEGER NOT NULL DEFAULT 1,
+    transaction_type TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'PENDING',
+    idempotency_key TEXT UNIQUE NOT NULL,
+    notes TEXT,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (reference_session_id) REFERENCES sessions(id),
+    FOREIGN KEY (sender_id) REFERENCES users(id),
+    FOREIGN KEY (receiver_id) REFERENCES users(id)
   );
 
   CREATE TABLE IF NOT EXISTS reputations (
@@ -213,10 +198,52 @@ db.exec(`
     total_sessions_learned INTEGER NOT NULL DEFAULT 0,
     bayesian_rating REAL NOT NULL DEFAULT 4.5,
     reliability_score REAL NOT NULL DEFAULT 95.0,
-    teaching_score REAL NOT NULL DEFAULT 90.0,
-    reciprocal_rating_ratio REAL NOT NULL DEFAULT 0.0,
+    badge_level TEXT DEFAULT 'BRONZE',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS ratings (
+    id TEXT PRIMARY KEY,
+    session_id TEXT UNIQUE NOT NULL,
+    rater_id TEXT NOT NULL,
+    ratee_id TEXT NOT NULL,
+    role_rated TEXT NOT NULL,
+    score INTEGER NOT NULL CHECK (score >= 1 AND score <= 5),
+    tags TEXT,
+    review TEXT,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (session_id) REFERENCES sessions(id),
+    FOREIGN KEY (rater_id) REFERENCES users(id),
+    FOREIGN KEY (ratee_id) REFERENCES users(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS disputes (
+    id TEXT PRIMARY KEY,
+    session_id TEXT UNIQUE NOT NULL,
+    initiator_id TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'OPEN',
+    resolution_notes TEXT,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    resolved_at DATETIME,
+    FOREIGN KEY (session_id) REFERENCES sessions(id),
+    FOREIGN KEY (initiator_id) REFERENCES users(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS fraud_alerts (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    session_id TEXT,
+    alert_type TEXT NOT NULL,
+    severity TEXT NOT NULL DEFAULT 'MEDIUM',
+    score REAL NOT NULL,
+    details TEXT,
+    status TEXT NOT NULL DEFAULT 'UNRESOLVED',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    FOREIGN KEY (session_id) REFERENCES sessions(id)
   );
 
   CREATE TABLE IF NOT EXISTS notifications (
@@ -235,62 +262,134 @@ db.exec(`
     id TEXT PRIMARY KEY,
     learner_id TEXT NOT NULL,
     skill_id TEXT NOT NULL,
-    requested_proficiency TEXT NOT NULL DEFAULT 'Beginner',
+    requested_proficiency TEXT NOT NULL DEFAULT 'Intermediate',
     current_proficiency TEXT NOT NULL DEFAULT 'Beginner',
-    learning_goal TEXT,
+    learning_goal TEXT NOT NULL,
     preferred_schedule TEXT,
-    preferred_session_mode TEXT NOT NULL DEFAULT 'ONLINE',
-    urgency TEXT NOT NULL DEFAULT 'MEDIUM',
+    preferred_session_mode TEXT DEFAULT 'ONLINE',
+    urgency TEXT DEFAULT 'MEDIUM',
     status TEXT NOT NULL DEFAULT 'OPEN',
-    matched_teacher_id TEXT,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (learner_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (skill_id) REFERENCES skills(id) ON DELETE CASCADE
   );
 
-  CREATE TABLE IF NOT EXISTS skill_subscriptions (
+  CREATE TABLE IF NOT EXISTS learning_requests (
     id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL,
-    skill_id TEXT NOT NULL,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(user_id, skill_id),
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (skill_id) REFERENCES skills(id) ON DELETE CASCADE
-  );
-
-  CREATE TABLE IF NOT EXISTS study_roadmaps (
-    id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL,
-    title TEXT NOT NULL,
-    goal TEXT NOT NULL,
-    current_level TEXT NOT NULL DEFAULT 'Beginner',
-    target_level TEXT NOT NULL DEFAULT 'Intermediate',
-    weekly_hours INTEGER DEFAULT 6,
-    estimated_duration TEXT,
-    version INTEGER NOT NULL DEFAULT 1,
+    learner_id TEXT NOT NULL,
+    skill_id TEXT,
+    skill_name TEXT NOT NULL,
+    category TEXT NOT NULL DEFAULT 'General',
+    requested_proficiency TEXT NOT NULL DEFAULT 'Beginner',
+    preferred_days TEXT NOT NULL DEFAULT '[]',
+    preferred_time_start TEXT,
+    preferred_time_end TEXT,
+    duration_hours REAL NOT NULL DEFAULT 1.0,
+    learning_goal TEXT,
+    search_scope TEXT NOT NULL DEFAULT 'ALL',
+    status TEXT NOT NULL DEFAULT 'OPEN',
+    matched_mentor_id TEXT,
+    matched_at DATETIME,
+    match_score REAL,
+    match_reasons_json TEXT DEFAULT '[]',
+    session_id TEXT,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (learner_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (matched_mentor_id) REFERENCES users(id) ON DELETE SET NULL,
+    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE SET NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS learning_request_matches (
+    id TEXT PRIMARY KEY,
+    request_id TEXT NOT NULL,
+    mentor_id TEXT NOT NULL,
+    match_score REAL NOT NULL,
+    reasons_json TEXT NOT NULL DEFAULT '[]',
+    status TEXT NOT NULL DEFAULT 'POTENTIAL',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (request_id) REFERENCES learning_requests(id) ON DELETE CASCADE,
+    FOREIGN KEY (mentor_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS learning_request_events (
+    id TEXT PRIMARY KEY,
+    request_id TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (request_id) REFERENCES learning_requests(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS notification_deliveries (
+    id TEXT PRIMARY KEY,
+    notification_id TEXT,
+    user_id TEXT NOT NULL,
+    request_id TEXT,
+    type TEXT NOT NULL,
+    channel TEXT NOT NULL,
+    recipient TEXT NOT NULL,
+    subject TEXT,
+    content TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'SENT',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    sent_at DATETIME,
+    delivered_at DATETIME,
+    error_message TEXT,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );
 
-  CREATE TABLE IF NOT EXISTS roadmap_stages (
+  CREATE TABLE IF NOT EXISTS session_attendance (
     id TEXT PRIMARY KEY,
-    roadmap_id TEXT NOT NULL,
-    stage_order INTEGER NOT NULL,
-    title TEXT NOT NULL,
-    description TEXT,
-    skill_query TEXT NOT NULL,
-    estimated_hours INTEGER DEFAULT 5,
-    objectives_json TEXT NOT NULL DEFAULT '[]',
-    practice_tasks_json TEXT NOT NULL DEFAULT '[]',
-    completion_criteria_json TEXT NOT NULL DEFAULT '[]',
-    status TEXT NOT NULL DEFAULT 'NOT_STARTED',
+    session_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    joined_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    left_at DATETIME,
+    metadata_json TEXT DEFAULT '{}',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (roadmap_id) REFERENCES study_roadmaps(id) ON DELETE CASCADE
+    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS chat_messages (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    sender_id TEXT NOT NULL,
+    message TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'SENT',
+    is_system INTEGER NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
+    FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE
   );
 `);
 
+function safeAddColumn(database, table, column, definition) {
+  try {
+    const columns = database.prepare(`PRAGMA table_info(${table})`).all();
+    const exists = columns.some(c => c.name.toLowerCase() === column.toLowerCase());
+    if (!exists) {
+      database.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+    }
+  } catch (err) {}
+}
+
+// Runtime migrations
+safeAddColumn(db, 'users', 'user_type', "TEXT NOT NULL DEFAULT 'TEACHER_LEARNER'");
+safeAddColumn(db, 'users', 'email_verified', 'INTEGER NOT NULL DEFAULT 0');
+safeAddColumn(db, 'users', 'verification_token', 'TEXT');
+safeAddColumn(db, 'users', 'verification_token_expires', 'DATETIME');
+safeAddColumn(db, 'users', 'is_academic_email', 'INTEGER NOT NULL DEFAULT 0');
+safeAddColumn(db, 'user_skills', 'assessment_score', 'REAL');
+safeAddColumn(db, 'user_skills', 'teaching_days', "TEXT DEFAULT '[\"Monday\",\"Wednesday\",\"Friday\"]'");
+safeAddColumn(db, 'user_skills', 'available_start_time', "TEXT DEFAULT '17:00'");
+safeAddColumn(db, 'user_skills', 'available_end_time', "TEXT DEFAULT '20:00'");
+safeAddColumn(db, 'user_skills', 'preferred_start_time', "TEXT DEFAULT '18:00'");
+safeAddColumn(db, 'user_skills', 'preferred_end_time', "TEXT DEFAULT '20:00'");
+
+// Seed Skills
 console.log('Seeding Skills Catalog...');
 const skills = [
   { id: 'skill-python', name: 'Python Programming', category: 'Computer Science', icon: 'Code', description: 'Core Python, scripting, data pipelines, and backend APIs' },
@@ -319,38 +418,19 @@ for (const s of skills) {
   insertSkill.run(s);
 }
 
-function safeAddColumn(database, table, column, definition) {
-  try {
-    const columns = database.prepare(`PRAGMA table_info(${table})`).all();
-    const exists = columns.some(c => c.name.toLowerCase() === column.toLowerCase());
-    if (!exists) {
-      database.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
-    }
-  } catch (err) {
-    // Ignore if column exists
-  }
-}
-
-// Runtime migrations for existing DB
-safeAddColumn(db, 'users', 'user_type', "TEXT NOT NULL DEFAULT 'TEACHER_LEARNER'");
-safeAddColumn(db, 'users', 'email_verified', 'INTEGER NOT NULL DEFAULT 0');
-safeAddColumn(db, 'users', 'verification_token', 'TEXT');
-safeAddColumn(db, 'users', 'verification_token_expires', 'DATETIME');
-safeAddColumn(db, 'users', 'is_academic_email', 'INTEGER NOT NULL DEFAULT 0');
-
 // 2. Hash Seed Password
 const passwordHash = bcrypt.hashSync('Password123!', 10);
 
-// 3. Seed Personas
+// 3. Seed Realistic Indian / Telugu Campus Personas
 const students = [
-  // SCENARIO A: STUDENT ONLY (Python Learner)
+  // PERSONA 1: STUDENT ONLY (Python Learner)
   {
-    id: 'usr-maya',
-    email: 'maya.lin@campus.edu',
+    id: 'usr-ananya',
+    email: 'ananya.reddy@campus.edu',
     role: 'STUDENT',
     userType: 'LEARNER',
-    displayName: 'Maya Lin',
-    college: 'School of Engineering',
+    displayName: 'Ananya Reddy',
+    college: 'Godavari Institute of Computer Science',
     major: 'Data Science & Statistics',
     year: 'Sophomore',
     bio: 'Sophomore data science student eager to learn Python for pandas data analysis, automation scripts, and regression models.',
@@ -369,17 +449,17 @@ const students = [
     reputation: { taught: 0, learned: 6, rating: 4.8, reliability: 98, reviews: 5 },
   },
 
-  // SCENARIO B: MENTOR ONLY (Verified Python Mentor)
+  // PERSONA 2: MENTOR ONLY (Verified Python Mentor)
   {
-    id: 'usr-alex',
-    email: 'alex.rivera@campus.edu',
+    id: 'usr-rahul',
+    email: 'rahul.reddy@campus.edu',
     role: 'STUDENT',
     userType: 'TEACHER',
-    displayName: 'Alex Rivera',
-    college: 'School of Engineering',
+    displayName: 'Rahul Reddy',
+    college: 'Andhra Institute of Technology',
     major: 'Computer Science & Software Systems',
     year: 'Senior',
-    bio: 'Senior software engineering TA specializing in Python architecture, concurrency, FastAPIs, and clean code practices.',
+    bio: 'Senior software engineering TA specializing in Python architecture, concurrency, FastAPIs, and clean backend practices.',
     isVerified: 1,
     trustScore: 97.0,
     balance: 8,
@@ -407,14 +487,14 @@ const students = [
     reputation: { taught: 32, learned: 0, rating: 4.95, reliability: 99, reviews: 29 },
   },
 
-  // SCENARIO C1: MENTOR + STUDENT (Verified Python Mentor & Web3 Learner)
+  // PERSONA 3: MENTOR + STUDENT (Verified Python Mentor & Web3 Learner)
   {
-    id: 'usr-rahul',
-    email: 'rahul.kumar@campus.edu',
+    id: 'usr-saikiran',
+    email: 'sai.kiran@campus.edu',
     role: 'STUDENT',
     userType: 'TEACHER_LEARNER',
-    displayName: 'Rahul Kumar',
-    college: 'School of Engineering',
+    displayName: 'Sai Kiran',
+    college: 'Krishna Valley Engineering College',
     major: 'Computer Science & AI',
     year: 'Senior',
     bio: 'Senior developer specializing in Python data engineering, ML pipelines, and Solidity smart contracts.',
@@ -460,14 +540,14 @@ const students = [
     reputation: { taught: 27, learned: 12, rating: 4.9, reliability: 99, reviews: 24 },
   },
 
-  // SCENARIO C2: MENTOR + STUDENT (Pending Verification Python Mentor — For Verification Filter Testing)
+  // PERSONA 4: MENTOR + STUDENT (Pending Verification Python Mentor)
   {
-    id: 'usr-priya',
-    email: 'priya.patel@campus.edu',
+    id: 'usr-sravani',
+    email: 'sravani@campus.edu',
     role: 'STUDENT',
     userType: 'TEACHER_LEARNER',
-    displayName: 'Priya Patel',
-    college: 'School of Engineering',
+    displayName: 'Sravani',
+    college: 'Andhra Institute of Technology',
     major: 'Information Technology',
     year: 'Junior',
     bio: 'Junior IT student. Self-taught in Python scripting and automating campus tasks. Ready to swap with React mentors.',
@@ -500,14 +580,14 @@ const students = [
     reputation: { taught: 4, learned: 3, rating: 4.6, reliability: 92, reviews: 4 },
   },
 
-  // Additional Personas
+  // PERSONA 5: Fullstack Web3 Developer (Keerthana Rao)
   {
-    id: 'usr-alice',
-    email: 'alice@campus.edu',
+    id: 'usr-keerthana',
+    email: 'keerthana.rao@campus.edu',
     role: 'STUDENT',
     userType: 'TEACHER_LEARNER',
-    displayName: 'Alice Chen',
-    college: 'School of Engineering',
+    displayName: 'Keerthana Rao',
+    college: 'Krishna Valley Engineering College',
     major: 'Computer Science',
     year: 'Junior',
     bio: 'Junior CS student passionate about fullstack web apps and decentralized systems. Looking to master Solidity!',
@@ -529,13 +609,14 @@ const students = [
     reputation: { taught: 8, learned: 5, rating: 4.8, reliability: 98, reviews: 7 },
   },
 
+  // PERSONA 6: Design & UI/UX Specialist (Bhavya Reddy)
   {
-    id: 'usr-elena',
-    email: 'elena.rostova@campus.edu',
+    id: 'usr-bhavya',
+    email: 'bhavya.reddy@campus.edu',
     role: 'STUDENT',
     userType: 'TEACHER_LEARNER',
-    displayName: 'Elena Rostova',
-    college: 'Faculty of Arts & Media',
+    displayName: 'Bhavya Reddy',
+    college: 'Coastal Andhra University',
     major: 'Digital Media & UI/UX',
     year: 'Senior',
     bio: 'Product designer focusing on accessible design systems and sleek web interfaces. Looking to learn Python for data visualization!',
@@ -556,16 +637,17 @@ const students = [
     reputation: { taught: 19, learned: 8, rating: 4.9, reliability: 97, reviews: 18 },
   },
 
+  // PERSONA 7: Mathematics & DSA Specialist (Vamsi Krishna)
   {
-    id: 'usr-david',
-    email: 'david.kim@campus.edu',
+    id: 'usr-vamsi',
+    email: 'vamsi.krishna@campus.edu',
     role: 'STUDENT',
     userType: 'TEACHER_LEARNER',
-    displayName: 'David Kim',
-    college: 'Faculty of Mathematics',
+    displayName: 'Vamsi Krishna',
+    college: 'Vijaya Engineering College',
     major: 'Applied Mathematics',
     year: 'Junior',
-    bio: 'Math and stats tutor. I simplify complex calculus proofs, matrix algebra, and algorithmic foundations.',
+    bio: 'Math and algorithms mentor. I simplify complex calculus proofs, matrix algebra, and algorithmic foundations.',
     isVerified: 1,
     trustScore: 90.0,
     balance: 3,
@@ -584,13 +666,14 @@ const students = [
     reputation: { taught: 14, learned: 6, rating: 4.7, reliability: 95, reviews: 12 },
   },
 
+  // PERSONA 8: Finance & Quantitative Learner (Pavan Kumar)
   {
-    id: 'usr-marcus',
-    email: 'marcus.vance@campus.edu',
+    id: 'usr-pavan',
+    email: 'pavan.kumar@campus.edu',
     role: 'STUDENT',
     userType: 'LEARNER',
-    displayName: 'Marcus Vance',
-    college: 'School of Business',
+    displayName: 'Pavan Kumar',
+    college: 'Sri Vasavi Institute of Technology',
     major: 'Finance & Analytics',
     year: 'Senior',
     bio: 'Finance major preparing for quantitative roles. Looking for mentors in Python algorithmic trading scripts.',
@@ -610,15 +693,15 @@ const students = [
     reputation: { taught: 11, learned: 7, rating: 4.8, reliability: 94, reviews: 10 },
   },
 
-  // SCENARIO D: MODERATOR & ADMIN
+  // PERSONA 9: Campus Moderator (Sirisha)
   {
-    id: 'usr-mod-sarah',
-    email: 'moderator.sarah@campus.edu',
+    id: 'usr-mod-sirisha',
+    email: 'moderator.sirisha@campus.edu',
     role: 'MODERATOR',
     userType: 'TEACHER_LEARNER',
-    displayName: 'Sarah Jenkins (Campus Moderator)',
-    college: 'Student Affairs & Honor Council',
-    major: 'Campus Leadership',
+    displayName: 'Sirisha (Campus Moderator)',
+    college: 'Andhra Institute of Technology',
+    major: 'Student Affairs & Honor Council',
     year: 'Graduate',
     bio: 'Official Campus Peer Learning Moderator. Reviewing dispute evidence, fraud signals, and credential standards.',
     isVerified: 1,
@@ -629,12 +712,14 @@ const students = [
     availability: [],
     reputation: { taught: 0, learned: 0, rating: 5.0, reliability: 100, reviews: 0 },
   },
+
+  // PERSONA 10: Campus Admin (Srinivas Rao)
   {
     id: 'usr-admin',
     email: 'admin@skillswap.campus.edu',
     role: 'ADMIN',
     userType: 'TEACHER_LEARNER',
-    displayName: 'Campus Admin & SRE',
+    displayName: 'Srinivas Rao (Campus Admin)',
     college: 'IT & Infrastructure Services',
     major: 'System Administration',
     year: 'Staff',
@@ -798,8 +883,8 @@ db.prepare(`
     status = excluded.status,
     learning_goal = excluded.learning_goal
 `).run(
-  'req-maya-python',
-  'usr-maya',
+  'req-ananya-python',
+  'usr-ananya',
   'skill-python',
   'Intermediate',
   'Beginner',
@@ -819,8 +904,8 @@ db.prepare(`
     status = excluded.status,
     learning_goal = excluded.learning_goal
   `).run(
-  'req-marcus-python',
-  'usr-marcus',
+  'req-pavan-python',
+  'usr-pavan',
   'skill-python',
   'Intermediate',
   'Beginner',
@@ -831,7 +916,7 @@ db.prepare(`
   'OPEN'
 );
 
-// 5. Seed Next Monday Blocked Session for Alex Rivera (blocks 17:00-18:00 window)
+// 5. Seed Next Monday Blocked Session for Rahul Reddy (blocks 17:00-18:00 window)
 const nextMonday = new Date();
 const currentDay = nextMonday.getDay();
 const diff = nextMonday.getDate() + (currentDay === 0 ? 1 : (8 - currentDay));
@@ -846,19 +931,19 @@ db.prepare(`
   ON CONFLICT(id) DO UPDATE SET
     status = excluded.status
 `).run(
-  'sess-alex-blocked-1',
+  'sess-rahul-blocked-1',
   'Python Async Architectures & FastAPIs',
   'skill-python',
-  'usr-alex',
-  'usr-maya',
+  'usr-rahul',
+  'usr-ananya',
   'SCHEDULED',
   `${sessionDateStr}T17:00:00Z`,
   `${sessionDateStr}T18:00:00Z`,
   1.0,
   1,
   'ONLINE',
-  'https://meet.skillswap.internal/room-alex-maya',
-  `idemp-alex-session-${sessionDateStr}`,
+  'https://meet.skillswap.internal/room-rahul-ananya',
+  `idemp-rahul-session-${sessionDateStr}`,
   'Core Python backend architectures. Blocks 17:00-18:00 window.'
 );
 
@@ -868,8 +953,8 @@ db.prepare(`
   VALUES (?, ?, ?, ?, ?, ?)
   ON CONFLICT(id) DO UPDATE SET message = excluded.message
 `).run(
-  'notif-alex-1',
-  'usr-alex',
+  'notif-rahul-1',
+  'usr-rahul',
   'Python Assessment Platform Verified',
   'Your Python skill assessment scored 95.0% and has been verified on-chain.',
   'CREDENTIAL_ISSUED',
@@ -881,8 +966,8 @@ db.prepare(`
   VALUES (?, ?, ?, ?, ?, ?)
   ON CONFLICT(id) DO UPDATE SET message = excluded.message
 `).run(
-  'notif-maya-1',
-  'usr-maya',
+  'notif-ananya-1',
+  'usr-ananya',
   'Python Learner Request Active',
   'Your request for Python Programming is broadcast to campus mentors.',
   'INFO',
@@ -895,8 +980,8 @@ const historicalSessions = [
     id: 'sess-hist-101',
     title: 'Python Pandas & Data Wrangling',
     skill_id: 'skill-python',
-    teacher_id: 'usr-alex',
-    learner_id: 'usr-maya',
+    teacher_id: 'usr-rahul',
+    learner_id: 'usr-ananya',
     status: 'CREDIT_SETTLED',
     scheduled_start: '2026-08-23 10:00:00',
     scheduled_end: '2026-08-23 11:00:00',
@@ -904,14 +989,14 @@ const historicalSessions = [
     credits_amount: 1,
     exchange_return: 'CREDITS',
     return_skill: 'Solidity & Smart Contracts',
-    credit_tx: { from: 'usr-maya', to: 'usr-alex', amount: 1, type: 'ESCROW_RELEASE', reason: 'Completed Python teaching session' }
+    credit_tx: { from: 'usr-ananya', to: 'usr-rahul', amount: 1, type: 'ESCROW_RELEASE', reason: 'Completed Python teaching session' }
   },
   {
     id: 'sess-hist-102',
     title: 'React Components & Hooks Architecture',
     skill_id: 'skill-react',
-    teacher_id: 'usr-priya',
-    learner_id: 'usr-alex',
+    teacher_id: 'usr-sravani',
+    learner_id: 'usr-rahul',
     status: 'CREDIT_SETTLED',
     scheduled_start: '2026-08-23 14:00:00',
     scheduled_end: '2026-08-23 15:00:00',
@@ -919,14 +1004,14 @@ const historicalSessions = [
     credits_amount: 1,
     exchange_return: 'SKILL',
     return_skill: 'Python Programming',
-    reciprocal_note: 'Alex teaches Python to Priya in reciprocal exchange'
+    reciprocal_note: 'Rahul teaches Python to Sravani in reciprocal exchange'
   },
   {
     id: 'sess-hist-103',
     title: 'Solidity Smart Contract Security & Reentrancy',
     skill_id: 'skill-solidity',
-    teacher_id: 'usr-rahul',
-    learner_id: 'usr-elena',
+    teacher_id: 'usr-saikiran',
+    learner_id: 'usr-bhavya',
     status: 'CREDIT_SETTLED',
     scheduled_start: '2026-08-23 16:00:00',
     scheduled_end: '2026-08-23 17:00:00',
@@ -939,36 +1024,35 @@ const historicalSessions = [
     id: 'sess-hist-104',
     title: 'Calculus Proofs & Matrix Algebra',
     skill_id: 'skill-calculus',
-    teacher_id: 'usr-david',
-    learner_id: 'usr-marcus',
+    teacher_id: 'usr-vamsi',
+    learner_id: 'usr-pavan',
     status: 'CANCELLED',
     scheduled_start: '2026-08-23 18:00:00',
     scheduled_end: '2026-08-23 19:00:00',
     duration_hours: 1.0,
     credits_amount: 1,
     cancellation_reason: 'Student rescheduled before start window',
-    credit_tx: { from: 'usr-marcus', to: 'usr-marcus', amount: 1, type: 'ESCROW_REFUND', reason: 'Refund on session cancellation' }
+    credit_tx: { from: 'usr-pavan', to: 'usr-pavan', amount: 1, type: 'ESCROW_REFUND', reason: 'Refund on session cancellation' }
   },
   {
     id: 'sess-hist-105',
     title: 'Financial Modeling & DCF Valuation',
     skill_id: 'skill-finance',
-    teacher_id: 'usr-marcus',
-    learner_id: 'usr-rahul',
+    teacher_id: 'usr-pavan',
+    learner_id: 'usr-saikiran',
     status: 'DISPUTED',
     scheduled_start: '2026-08-23 19:00:00',
     scheduled_end: '2026-08-23 20:00:00',
     duration_hours: 1.0,
     credits_amount: 1,
-    dispute: { reason: 'NO_SHOW', initiator: 'usr-rahul', details: 'Instructor did not join meeting room.' }
+    dispute: { reason: 'NO_SHOW', initiator: 'usr-saikiran', details: 'Instructor did not join meeting room.' }
   },
-  // Earlier dates (e.g. 15 Aug, 18 Aug) for First Session tracking
   {
     id: 'sess-hist-001',
     title: 'First Python Introduction & Environment Setup',
     skill_id: 'skill-python',
-    teacher_id: 'usr-alex',
-    learner_id: 'usr-rahul',
+    teacher_id: 'usr-rahul',
+    learner_id: 'usr-saikiran',
     status: 'CREDIT_SETTLED',
     scheduled_start: '2026-08-15 17:00:00',
     scheduled_end: '2026-08-15 18:00:00',
@@ -976,7 +1060,7 @@ const historicalSessions = [
     credits_amount: 1,
     exchange_return: 'CREDITS',
     return_skill: 'Solidity & Smart Contracts',
-    credit_tx: { from: 'usr-rahul', to: 'usr-alex', amount: 1, type: 'ESCROW_RELEASE', reason: 'Completed first Python session' }
+    credit_tx: { from: 'usr-saikiran', to: 'usr-rahul', amount: 1, type: 'ESCROW_RELEASE', reason: 'Completed first Python session' }
   }
 ];
 
@@ -1113,10 +1197,10 @@ const insertNotifDelivery = db.prepare(`
   ON CONFLICT(id) DO NOTHING
 `);
 
-// Sample 1: Maya Lin's Open Python request (Waiting for Mentor)
+// Sample 1: Ananya Reddy's Open Python request (Waiting for Mentor)
 insertLearningReq.run(
-  'lreq-maya-python',
-  'usr-maya',
+  'lreq-ananya-python',
+  'usr-ananya',
   'skill-python',
   'Python',
   'Computer Science',
@@ -1136,13 +1220,13 @@ insertLearningReq.run(
   '2026-08-20 10:00:00'
 );
 
-insertReqEvent.run('ev-maya-1', 'lreq-maya-python', 'REQUEST_CREATED', 'Learning Request Created', 'Requested Beginner mentorship for Python on Tue/Thu (17:00 - 20:00)', '2026-08-20 10:00:00');
-insertReqEvent.run('ev-maya-2', 'lreq-maya-python', 'COLLEGE_SEARCH_EMPTY', 'College Search Completed', 'Searched inside Stanford University. No available mentor found.', '2026-08-20 10:00:05');
+insertReqEvent.run('ev-ananya-1', 'lreq-ananya-python', 'REQUEST_CREATED', 'Learning Request Created', 'Requested Beginner mentorship for Python on Tue/Thu (17:00 - 20:00)', '2026-08-20 10:00:00');
+insertReqEvent.run('ev-ananya-2', 'lreq-ananya-python', 'COLLEGE_SEARCH_EMPTY', 'College Search Completed', 'Searched inside Godavari Institute of Computer Science. No available mentor found.', '2026-08-20 10:00:05');
 
-// Sample 2: Marcus Vance's Matched Solidity request
+// Sample 2: Pavan Kumar's Matched Solidity request
 insertLearningReq.run(
-  'lreq-marcus-solidity',
-  'usr-marcus',
+  'lreq-pavan-solidity',
+  'usr-pavan',
   'skill-solidity',
   'Solidity',
   'Computer Science',
@@ -1154,34 +1238,34 @@ insertLearningReq.run(
   'Smart contract security auditing and reentrancy attack analysis',
   'ALL',
   'MENTOR_FOUND',
-  'usr-alex',
+  'usr-rahul',
   '2026-08-22 14:00:00',
   94,
   JSON.stringify([
     '✓ Solidity skill verified via PLATFORM VERIFIED',
     '✓ Available on your preferred days (Monday, Wednesday, Friday)',
     '✓ Overlapping teaching window (17:00 – 20:00)',
-    '✓ Attends your campus (School of Engineering)'
+    '✓ Attends Andhra Institute of Technology'
   ]),
   '2026-08-21 09:00:00',
   '2026-08-22 14:00:00'
 );
 
-insertReqEvent.run('ev-marcus-1', 'lreq-marcus-solidity', 'REQUEST_CREATED', 'Learning Request Created', 'Requested Advanced mentorship for Solidity', '2026-08-21 09:00:00');
-insertReqEvent.run('ev-marcus-2', 'lreq-marcus-solidity', 'MENTOR_REGISTERED_VERIFIED', 'Verified Mentor Joined', 'Alex Rivera verified for Solidity at School of Engineering', '2026-08-22 14:00:00');
-insertReqEvent.run('ev-marcus-3', 'lreq-marcus-solidity', 'MENTOR_MATCHED', 'Mentor Matched Your Request', 'Matched with Alex Rivera (94% compatibility score)', '2026-08-22 14:00:01');
-insertReqEvent.run('ev-marcus-4', 'lreq-marcus-solidity', 'NOTIFICATION_SENT', 'Notification Dispatched', 'Sent in-app and email alert to learner', '2026-08-22 14:00:05');
+insertReqEvent.run('ev-pavan-1', 'lreq-pavan-solidity', 'REQUEST_CREATED', 'Learning Request Created', 'Requested Advanced mentorship for Solidity', '2026-08-21 09:00:00');
+insertReqEvent.run('ev-pavan-2', 'lreq-pavan-solidity', 'MENTOR_REGISTERED_VERIFIED', 'Verified Mentor Joined', 'Rahul Reddy verified for Solidity at Andhra Institute of Technology', '2026-08-22 14:00:00');
+insertReqEvent.run('ev-pavan-3', 'lreq-pavan-solidity', 'MENTOR_MATCHED', 'Mentor Matched Your Request', 'Matched with Rahul Reddy (94% compatibility score)', '2026-08-22 14:00:01');
+insertReqEvent.run('ev-pavan-4', 'lreq-pavan-solidity', 'NOTIFICATION_SENT', 'Notification Dispatched', 'Sent in-app and email alert to learner', '2026-08-22 14:00:05');
 
 insertNotifDelivery.run(
-  'del-marcus-email-1',
-  'notif-marcus-1',
-  'usr-marcus',
-  'lreq-marcus-solidity',
+  'del-pavan-email-1',
+  'notif-pavan-1',
+  'usr-pavan',
+  'lreq-pavan-solidity',
   'MENTOR_FOUND',
   'EMAIL',
-  'marcus.vance@campus.edu',
+  'pavan.kumar@campus.edu',
   'A Solidity mentor is now available on SkillSwap Campus',
-  'Good news! Alex Rivera is now available to teach Solidity.',
+  'Good news! Rahul Reddy is now available to teach Solidity.',
   'DELIVERED',
   '2026-08-22 14:00:05',
   '2026-08-22 14:00:05',
@@ -1189,15 +1273,15 @@ insertNotifDelivery.run(
 );
 
 insertNotifDelivery.run(
-  'del-marcus-inapp-1',
-  'notif-marcus-1',
-  'usr-marcus',
-  'lreq-marcus-solidity',
+  'del-pavan-inapp-1',
+  'notif-pavan-1',
+  'usr-pavan',
+  'lreq-pavan-solidity',
   'MENTOR_FOUND',
   'IN_APP',
-  'usr-marcus',
+  'usr-pavan',
   '🎉 Mentor Found for Solidity!',
-  'Alex Rivera is now available to teach Solidity (Advanced).',
+  'Rahul Reddy is now available to teach Solidity (Advanced).',
   'DELIVERED',
   '2026-08-22 14:00:05',
   '2026-08-22 14:00:05',
@@ -1217,14 +1301,13 @@ const insertChatMessage = db.prepare(`
   ON CONFLICT(id) DO NOTHING
 `);
 
-insertAttendance.run('att-demo-1', 'sess-hist-001', 'usr-alex', 'JOINED', '2026-08-15 17:00:00', '{"role":"TRAINER"}', '2026-08-15 17:00:00');
-insertAttendance.run('att-demo-2', 'sess-hist-001', 'usr-rahul', 'JOINED', '2026-08-15 17:01:00', '{"role":"LEARNER"}', '2026-08-15 17:01:00');
-insertAttendance.run('att-demo-3', 'sess-hist-001', 'usr-alex', 'LEFT', '2026-08-15 18:00:00', '{"durationMinutes":60}', '2026-08-15 18:00:00');
-insertAttendance.run('att-demo-4', 'sess-hist-001', 'usr-rahul', 'LEFT', '2026-08-15 18:00:05', '{"durationMinutes":59}', '2026-08-15 18:00:05');
+insertAttendance.run('att-demo-1', 'sess-hist-001', 'usr-rahul', 'JOINED', '2026-08-15 17:00:00', '{"role":"TRAINER"}', '2026-08-15 17:00:00');
+insertAttendance.run('att-demo-2', 'sess-hist-001', 'usr-saikiran', 'JOINED', '2026-08-15 17:01:00', '{"role":"LEARNER"}', '2026-08-15 17:01:00');
+insertAttendance.run('att-demo-3', 'sess-hist-001', 'usr-rahul', 'LEFT', '2026-08-15 18:00:00', '{"durationMinutes":60}', '2026-08-15 18:00:00');
+insertAttendance.run('att-demo-4', 'sess-hist-001', 'usr-saikiran', 'LEFT', '2026-08-15 18:00:05', '{"durationMinutes":59}', '2026-08-15 18:00:05');
 
-insertChatMessage.run('msg-demo-1', 'sess-hist-001', 'usr-alex', 'Welcome Rahul! Ready to dive into Python data pipelines?', 0, '2026-08-15 17:02:00');
-insertChatMessage.run('msg-demo-2', 'sess-hist-001', 'usr-rahul', 'Yes, excited to review the generator expressions and memory usage.', 0, '2026-08-15 17:03:00');
+insertChatMessage.run('msg-demo-1', 'sess-hist-001', 'usr-rahul', 'Welcome Sai Kiran! Ready to dive into Python data pipelines?', 0, '2026-08-15 17:02:00');
+insertChatMessage.run('msg-demo-2', 'sess-hist-001', 'usr-saikiran', 'Yes, excited to review the generator expressions and memory usage.', 0, '2026-08-15 17:03:00');
 
-console.log('Database seeded successfully with verified Python demo personas, historical session audit trails, Smart Slot availability, & Learner Requests.');
+console.log('Database seeded successfully with authentic Indian / Telugu campus demo personas, historical session audit trails, Smart Slot availability, & Learner Requests.');
 db.close();
-

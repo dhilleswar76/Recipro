@@ -55,16 +55,16 @@ SkillSwap Campus is a production-grade campus peer-learning platform and decentr
 
 | Role / Scenario | Email | Password | Campus Details & Demonstration Purpose |
 | :--- | :--- | :--- | :--- |
-| **Student Only** (Python Learner) | `maya.lin@campus.edu` | `Password123!` | Sophomore Data Science. Has Python learning goal & open Python learner request. Has 4 Skill Credits. Cannot teach; sees *Upgrade to Mentor + Student*. |
-| **Mentor Only** (Verified Python Mentor) | `alex.rivera@campus.edu` | `Password123!` | Senior CS Mentor. Teaches Python (`Expert`, `PLATFORM_VERIFIED`, 95% score). Availability Mon/Wed/Fri 5 PM–8 PM. Has existing booked session on Monday 5 PM–6 PM to demonstrate Smart Slot Finder (returning 6 PM–7 PM & 7 PM–8 PM). |
-| **Mentor + Student** (Verified Python Mentor & Web3) | `rahul.kumar@campus.edu` | `Password123!` | Senior CS & AI. Teaches Python (`Advanced`, `ASSESSMENT_VERIFIED`) & Solidity (`Expert`, `PLATFORM_VERIFIED`). Learning Figma. Can both earn and spend credits. |
-| **Mentor + Student** (Pending Python Mentor) | `priya.patel@campus.edu` | `Password123!` | Junior IT. Teaches Python (`Advanced`, `SELF_DECLARED` / Verification Pending). Allows testing the *Verified Only* filter toggle. |
-| **Student Only** (Finance & Python Request) | `marcus.vance@campus.edu` | `Password123!` | Senior Finance. Seeking Python for quantitative trading scripts. Has open Python Learner Request in database. |
-| **Mentor + Student** (Design Specialist) | `elena.rostova@campus.edu` | `Password123!` | Senior Digital Media. Top Figma UI/UX Mentor (`PLATFORM_VERIFIED`). Seeking Python for UX analytics. |
-| **Mentor + Student** (Math Specialist) | `david.kim@campus.edu` | `Password123!` | Junior Applied Math. Calculus & DSA Mentor (`PLATFORM_VERIFIED`). Seeking React. |
-| **Mentor + Student** (React Mentor) | `alice@campus.edu` | `Password123!` | Junior CS. React Mentor (`PLATFORM_VERIFIED`). Seeking Solidity. |
-| **Campus Moderator** | `moderator.sarah@campus.edu` | `Password123!` | Graduate Student Affairs. Access to Dispute Resolution, Verification Queue & Moderation Dashboard. |
-| **Campus Admin** | `admin@skillswap.campus.edu` | `Password123!` | Platform Administrator & SRE. Access to `/admin`, Emergency Pause, Escrow Overrides & Audit Logs. |
+| **Student Only** (Python Learner) | `ananya.reddy@campus.edu` | `Password123!` | Sophomore Data Science at Godavari Institute of Computer Science. Has Python learning goal & open Python learner request. Has 4 Skill Credits. |
+| **Mentor Only** (Verified Python Mentor) | `rahul.reddy@campus.edu` | `Password123!` | Senior CS Mentor at Andhra Institute of Technology. Teaches Python (`Expert`, `PLATFORM_VERIFIED`, 95% score). Availability Mon/Wed/Fri 5 PM–8 PM. Has existing booked session on Monday 5 PM–6 PM to demonstrate Smart Slot Finder (returning 6 PM–7 PM & 7 PM–8 PM). |
+| **Mentor + Student** (Verified Python Mentor & Web3) | `sai.kiran@campus.edu` | `Password123!` | Senior CS & AI at Krishna Valley Engineering College. Teaches Python (`Advanced`, `ASSESSMENT_VERIFIED`) & Solidity (`Expert`, `PLATFORM_VERIFIED`). Learning Figma. Can both earn and spend credits. |
+| **Mentor + Student** (Pending Python Mentor) | `sravani@campus.edu` | `Password123!` | Junior IT at Andhra Institute of Technology. Teaches Python (`Advanced`, `SELF_DECLARED` / Verification Pending). Allows testing the *Verified Only* filter toggle. |
+| **Student Only** (Finance & Python Request) | `pavan.kumar@campus.edu` | `Password123!` | Senior Finance at Sri Vasavi Institute of Technology. Seeking Python for quantitative trading scripts. Has open Python Learner Request in database. |
+| **Mentor + Student** (Design Specialist) | `bhavya.reddy@campus.edu` | `Password123!` | Senior Digital Media at Coastal Andhra University. Top Figma UI/UX Mentor (`PLATFORM_VERIFIED`). Seeking Python for UX analytics. |
+| **Mentor + Student** (Math & DSA Specialist) | `vamsi.krishna@campus.edu` | `Password123!` | Junior Applied Math at Vijaya Engineering College. Calculus & DSA Mentor (`PLATFORM_VERIFIED`). Seeking React. |
+| **Mentor + Student** (React & Web3) | `keerthana.rao@campus.edu` | `Password123!` | Junior CS at Krishna Valley Engineering College. React Mentor (`PLATFORM_VERIFIED`). Seeking Solidity. |
+| **Campus Moderator** | `moderator.sirisha@campus.edu` | `Password123!` | Graduate Student Affairs at Andhra Institute of Technology. Access to Dispute Resolution, Verification Queue & Moderation Dashboard. |
+| **Campus Admin** | `admin@skillswap.campus.edu` | `Password123!` | Srinivas Rao (Campus Admin). Access to `/admin`, Emergency Pause, Escrow Overrides, Session Reports & Audit Logs. |
 
 ---
 

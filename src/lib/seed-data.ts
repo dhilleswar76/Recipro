@@ -5,7 +5,7 @@ import Database from 'better-sqlite3';
 export async function seedDatabase(customDb?: Database.Database) {
   const db = customDb || getDb();
 
-  console.log('Seeding SkillSwap Campus database with verified campus personas & Python demo scenarios...');
+  console.log('Seeding SkillSwap Campus database with authentic Indian / Telugu campus personas & Python demo scenarios...');
 
   const passwordHash = await bcrypt.hash('Password123!', 10);
 
@@ -37,16 +37,16 @@ export async function seedDatabase(customDb?: Database.Database) {
     insertSkill.run(s);
   }
 
-  // 2. Synthetic Student Personas (Role & Python Scenario Aware)
+  // 2. Synthetic Student Personas (Indian / Telugu Campus Personas)
   const students = [
-    // SCENARIO A: STUDENT ONLY (Python Learner)
+    // PERSONA 1: STUDENT ONLY (Python Learner - Ananya Reddy)
     {
-      id: 'usr-maya',
-      email: 'maya.lin@campus.edu',
+      id: 'usr-ananya',
+      email: 'ananya.reddy@campus.edu',
       role: 'STUDENT',
       userType: 'LEARNER',
-      displayName: 'Maya Lin',
-      college: 'School of Engineering',
+      displayName: 'Ananya Reddy',
+      college: 'Godavari Institute of Computer Science',
       major: 'Data Science & Statistics',
       year: 'Sophomore',
       bio: 'Sophomore data science student eager to learn Python for pandas data analysis, automation scripts, and regression models.',
@@ -71,17 +71,17 @@ export async function seedDatabase(customDb?: Database.Database) {
       reputation: { taught: 0, learned: 6, rating: 4.8, reliability: 98, reviews: 5 },
     },
 
-    // SCENARIO B: MENTOR ONLY (Verified Python Mentor)
+    // PERSONA 2: MENTOR ONLY (Verified Python Mentor - Rahul Reddy)
     {
-      id: 'usr-alex',
-      email: 'alex.rivera@campus.edu',
+      id: 'usr-rahul',
+      email: 'rahul.reddy@campus.edu',
       role: 'STUDENT',
       userType: 'TEACHER',
-      displayName: 'Alex Rivera',
-      college: 'School of Engineering',
+      displayName: 'Rahul Reddy',
+      college: 'Andhra Institute of Technology',
       major: 'Computer Science & Software Systems',
       year: 'Senior',
-      bio: 'Senior software engineering TA specializing in Python architecture, concurrency, FastAPIs, and clean code practices.',
+      bio: 'Senior software engineering TA specializing in Python architecture, concurrency, FastAPIs, and clean backend practices.',
       isVerified: 1,
       trustScore: 97.0,
       balance: 8,
@@ -110,14 +110,14 @@ export async function seedDatabase(customDb?: Database.Database) {
       reputation: { taught: 32, learned: 0, rating: 4.95, reliability: 99, reviews: 29 },
     },
 
-    // SCENARIO C1: MENTOR + STUDENT (Verified Python Mentor & Web3 Learner)
+    // PERSONA 3: MENTOR + STUDENT (Verified Python Mentor & Web3 Learner - Sai Kiran)
     {
-      id: 'usr-rahul',
-      email: 'rahul.kumar@campus.edu',
+      id: 'usr-saikiran',
+      email: 'sai.kiran@campus.edu',
       role: 'STUDENT',
       userType: 'TEACHER_LEARNER',
-      displayName: 'Rahul Kumar',
-      college: 'School of Engineering',
+      displayName: 'Sai Kiran',
+      college: 'Krishna Valley Engineering College',
       major: 'Computer Science & AI',
       year: 'Senior',
       bio: 'Senior developer specializing in Python data engineering, ML pipelines, and Solidity smart contracts.',
@@ -164,14 +164,14 @@ export async function seedDatabase(customDb?: Database.Database) {
       reputation: { taught: 27, learned: 12, rating: 4.9, reliability: 99, reviews: 24 },
     },
 
-    // SCENARIO C2: MENTOR + STUDENT (Pending Verification Python Mentor — For Verification Filter Testing)
+    // PERSONA 4: MENTOR + STUDENT (Pending Verification Python Mentor - Sravani)
     {
-      id: 'usr-priya',
-      email: 'priya.patel@campus.edu',
+      id: 'usr-sravani',
+      email: 'sravani@campus.edu',
       role: 'STUDENT',
       userType: 'TEACHER_LEARNER',
-      displayName: 'Priya Patel',
-      college: 'School of Engineering',
+      displayName: 'Sravani',
+      college: 'Andhra Institute of Technology',
       major: 'Information Technology',
       year: 'Junior',
       bio: 'Junior IT student. Self-taught in Python scripting and automating campus tasks. Ready to swap with React mentors.',
@@ -205,14 +205,14 @@ export async function seedDatabase(customDb?: Database.Database) {
       reputation: { taught: 4, learned: 3, rating: 4.6, reliability: 92, reviews: 4 },
     },
 
-    // Additional Student (Alice Chen - React Mentor & Solidity Learner)
+    // PERSONA 5: Web3 & Fullstack Specialist (Keerthana Rao)
     {
-      id: 'usr-alice',
-      email: 'alice@campus.edu',
+      id: 'usr-keerthana',
+      email: 'keerthana.rao@campus.edu',
       role: 'STUDENT',
       userType: 'TEACHER_LEARNER',
-      displayName: 'Alice Chen',
-      college: 'School of Engineering',
+      displayName: 'Keerthana Rao',
+      college: 'Krishna Valley Engineering College',
       major: 'Computer Science',
       year: 'Junior',
       bio: 'Junior CS student passionate about fullstack web apps and decentralized systems. Looking to master Solidity!',
@@ -235,14 +235,14 @@ export async function seedDatabase(customDb?: Database.Database) {
       reputation: { taught: 8, learned: 5, rating: 4.8, reliability: 98, reviews: 7 },
     },
 
-    // Additional Design Specialist (Elena Rostova)
+    // PERSONA 6: Design & UI/UX Specialist (Bhavya Reddy)
     {
-      id: 'usr-elena',
-      email: 'elena.rostova@campus.edu',
+      id: 'usr-bhavya',
+      email: 'bhavya.reddy@campus.edu',
       role: 'STUDENT',
       userType: 'TEACHER_LEARNER',
-      displayName: 'Elena Rostova',
-      college: 'Faculty of Arts & Media',
+      displayName: 'Bhavya Reddy',
+      college: 'Coastal Andhra University',
       major: 'Digital Media & UI/UX',
       year: 'Senior',
       bio: 'Product designer focusing on accessible design systems and sleek web interfaces. Looking to learn Python for data visualization!',
@@ -264,17 +264,17 @@ export async function seedDatabase(customDb?: Database.Database) {
       reputation: { taught: 19, learned: 8, rating: 4.9, reliability: 97, reviews: 18 },
     },
 
-    // Additional Math Specialist (David Kim)
+    // PERSONA 7: Mathematics & DSA Specialist (Vamsi Krishna)
     {
-      id: 'usr-david',
-      email: 'david.kim@campus.edu',
+      id: 'usr-vamsi',
+      email: 'vamsi.krishna@campus.edu',
       role: 'STUDENT',
       userType: 'TEACHER_LEARNER',
-      displayName: 'David Kim',
-      college: 'Faculty of Mathematics',
+      displayName: 'Vamsi Krishna',
+      college: 'Vijaya Engineering College',
       major: 'Applied Mathematics',
       year: 'Junior',
-      bio: 'Math and stats tutor. I simplify complex calculus proofs, matrix algebra, and algorithmic foundations.',
+      bio: 'Math and algorithms mentor. I simplify complex calculus proofs, matrix algebra, and algorithmic foundations.',
       isVerified: 1,
       trustScore: 90.0,
       balance: 3,
@@ -294,14 +294,14 @@ export async function seedDatabase(customDb?: Database.Database) {
       reputation: { taught: 14, learned: 6, rating: 4.7, reliability: 95, reviews: 12 },
     },
 
-    // Additional Student (Marcus Vance - Business / Python Learner)
+    // PERSONA 8: Finance & Quantitative Learner (Pavan Kumar)
     {
-      id: 'usr-marcus',
-      email: 'marcus.vance@campus.edu',
+      id: 'usr-pavan',
+      email: 'pavan.kumar@campus.edu',
       role: 'STUDENT',
       userType: 'LEARNER',
-      displayName: 'Marcus Vance',
-      college: 'School of Business',
+      displayName: 'Pavan Kumar',
+      college: 'Sri Vasavi Institute of Technology',
       major: 'Finance & Analytics',
       year: 'Senior',
       bio: 'Finance major preparing for quantitative roles. Looking for mentors in Python algorithmic trading scripts.',
@@ -322,14 +322,14 @@ export async function seedDatabase(customDb?: Database.Database) {
       reputation: { taught: 11, learned: 7, rating: 4.8, reliability: 94, reviews: 10 },
     },
 
-    // SCENARIO D: MODERATOR & ADMIN PERSONAS
+    // PERSONA 9: Campus Moderator (Sirisha)
     {
-      id: 'usr-mod-sarah',
-      email: 'moderator.sarah@campus.edu',
+      id: 'usr-mod-sirisha',
+      email: 'moderator.sirisha@campus.edu',
       role: 'MODERATOR',
       userType: 'TEACHER_LEARNER',
-      displayName: 'Sarah Jenkins (Campus Moderator)',
-      college: 'Student Affairs & Honor Council',
+      displayName: 'Sirisha (Campus Moderator)',
+      college: 'Andhra Institute of Technology',
       major: 'Campus Leadership',
       year: 'Graduate',
       bio: 'Official Campus Peer Learning Moderator. Reviewing dispute evidence, fraud signals, and credential standards.',
@@ -342,12 +342,14 @@ export async function seedDatabase(customDb?: Database.Database) {
       availability: [],
       reputation: { taught: 0, learned: 0, rating: 5.0, reliability: 100, reviews: 0 },
     },
+
+    // PERSONA 10: Campus Admin (Srinivas Rao)
     {
       id: 'usr-admin',
       email: 'admin@skillswap.campus.edu',
       role: 'ADMIN',
       userType: 'TEACHER_LEARNER',
-      displayName: 'Campus Admin & SRE',
+      displayName: 'Srinivas Rao (Campus Admin)',
       college: 'IT & Infrastructure Services',
       major: 'System Administration',
       year: 'Staff',
@@ -363,16 +365,17 @@ export async function seedDatabase(customDb?: Database.Database) {
     },
   ];
 
-  // Insert Users, Profiles, Accounts, Reputations (Idempotent with ON CONFLICT)
   for (const stu of students) {
     db.prepare(`
-      INSERT INTO users (id, email, password_hash, role, status, campus_id, user_type)
-      VALUES (?, ?, ?, ?, 'ACTIVE', ?, ?)
+      INSERT INTO users (id, email, password_hash, role, status, campus_id, user_type, email_verified, is_academic_email)
+      VALUES (?, ?, ?, ?, 'ACTIVE', ?, ?, 1, 1)
       ON CONFLICT(id) DO UPDATE SET
         email = excluded.email,
         password_hash = excluded.password_hash,
         role = excluded.role,
-        user_type = excluded.user_type
+        user_type = excluded.user_type,
+        email_verified = 1,
+        is_academic_email = 1
     `).run(stu.id, stu.email, passwordHash, stu.role, `STU-${stu.id.replace('usr-', '').toUpperCase()}`, stu.userType || 'TEACHER_LEARNER');
 
     db.prepare(`
@@ -398,7 +401,7 @@ export async function seedDatabase(customDb?: Database.Database) {
       stu.year,
       stu.isVerified,
       stu.trustScore,
-      stu.teachingPreference || 'Anyone'
+      stu.teachingPreference
     );
 
     db.prepare(`
@@ -430,8 +433,8 @@ export async function seedDatabase(customDb?: Database.Database) {
       stu.reputation.reliability
     );
 
-    // Insert/Update Teaching Skills
-    for (const t of stu.teaching) {
+    // Teaching Skills
+    for (const t of (stu.teaching as any[])) {
       db.prepare(`
         INSERT INTO user_skills (
           id, user_id, skill_id, proficiency, experience_years, teaching_style, verification_status,
@@ -456,16 +459,16 @@ export async function seedDatabase(customDb?: Database.Database) {
         t.exp,
         t.style,
         t.status,
-        (t as any).score || null,
-        (t as any).teachingDays || '["Monday","Wednesday","Friday"]',
-        (t as any).availStart || '17:00',
-        (t as any).availEnd || '20:00',
-        (t as any).prefStart || '17:00',
-        (t as any).prefEnd || '20:00'
+        t.score || null,
+        t.teachingDays || '["Monday","Wednesday","Friday"]',
+        t.availStart || '17:00',
+        t.availEnd || '20:00',
+        t.prefStart || '17:00',
+        t.prefEnd || '20:00'
       );
     }
 
-    // Insert/Update Goals
+    // Learning Goals
     for (const g of stu.goals) {
       db.prepare(`
         INSERT INTO learning_goals (id, user_id, skill_id, target_proficiency, priority, notes)
@@ -484,7 +487,7 @@ export async function seedDatabase(customDb?: Database.Database) {
       );
     }
 
-    // Insert/Update Availability
+    // Availability Slots
     for (const a of stu.availability) {
       db.prepare(`
         INSERT INTO availability_slots (id, user_id, day_of_week, start_time, end_time)
@@ -503,7 +506,7 @@ export async function seedDatabase(customDb?: Database.Database) {
     }
   }
 
-  // 3. Seed Realistic Python Learner Requests (Scenario: Maya Lin & Marcus Vance seeking Python)
+  // 3. Seed Realistic Python Learner Requests (Scenario: Ananya Reddy & Pavan Kumar seeking Python)
   db.prepare(`
     INSERT INTO skill_requests (
       id, learner_id, skill_id, requested_proficiency, current_proficiency,
@@ -513,8 +516,8 @@ export async function seedDatabase(customDb?: Database.Database) {
       status = excluded.status,
       learning_goal = excluded.learning_goal
   `).run(
-    'req-maya-python',
-    'usr-maya',
+    'req-ananya-python',
+    'usr-ananya',
     'skill-python',
     'Intermediate',
     'Beginner',
@@ -534,8 +537,8 @@ export async function seedDatabase(customDb?: Database.Database) {
       status = excluded.status,
       learning_goal = excluded.learning_goal
   `).run(
-    'req-marcus-python',
-    'usr-marcus',
+    'req-pavan-python',
+    'usr-pavan',
     'skill-python',
     'Intermediate',
     'Beginner',
@@ -547,9 +550,6 @@ export async function seedDatabase(customDb?: Database.Database) {
   );
 
   // 4. Seed Verified Python Completed Session + Existing Blocking Session
-  // Existing booked session on Monday for Alex Rivera (blocks 5 PM - 6 PM, leaving 6 PM - 8 PM open for Smart Slot Finder)
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
   const nextMonday = new Date();
   const day = nextMonday.getDay();
   const diff = nextMonday.getDate() + (day === 0 ? 1 : (8 - day));
@@ -564,19 +564,19 @@ export async function seedDatabase(customDb?: Database.Database) {
     ON CONFLICT(id) DO UPDATE SET
       status = excluded.status
   `).run(
-    'sess-alex-blocked-1',
+    'sess-rahul-blocked-1',
     'Python Async Architectures & FastAPIs',
     'skill-python',
-    'usr-alex',
-    'usr-maya',
+    'usr-rahul',
+    'usr-ananya',
     'SCHEDULED',
     `${sessionDateStr}T17:00:00Z`,
     `${sessionDateStr}T18:00:00Z`,
     1.0,
     1,
     'ONLINE',
-    'https://meet.skillswap.internal/room-alex-maya',
-    `idemp-alex-session-${sessionDateStr}`,
+    'https://meet.skillswap.internal/room-rahul-ananya',
+    `idemp-rahul-session-${sessionDateStr}`,
     'Core Python backend architectures. Blocks 17:00-18:00 window.'
   );
 
@@ -586,8 +586,8 @@ export async function seedDatabase(customDb?: Database.Database) {
     VALUES (?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET message = excluded.message
   `).run(
-    'notif-alex-1',
-    'usr-alex',
+    'notif-rahul-1',
+    'usr-rahul',
     'Python Assessment Platform Verified',
     'Your Python skill assessment scored 95.0% and has been verified on-chain.',
     'CREDENTIAL_ISSUED',
@@ -599,13 +599,13 @@ export async function seedDatabase(customDb?: Database.Database) {
     VALUES (?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET message = excluded.message
   `).run(
-    'notif-maya-1',
-    'usr-maya',
+    'notif-ananya-1',
+    'usr-ananya',
     'Python Learner Request Active',
     'Your request for Python Programming is broadcast to campus mentors.',
     'INFO',
     '/explore'
   );
 
-  console.log('Seeding completed successfully with real Python demo data & role restrictions.');
+  console.log('Seeding completed successfully with authentic Indian / Telugu campus demo data & role restrictions.');
 }

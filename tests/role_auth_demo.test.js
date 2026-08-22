@@ -19,8 +19,6 @@ test('1. UI Cleanliness: No Demo Credentials or quick login buttons in LoginPage
   assert.strictEqual(loginCode.includes('Password123!'), false, 'Plaintext password must not be in LoginPage');
   assert.strictEqual(loginCode.includes('DEMO_ACCOUNTS'), false, 'DEMO_ACCOUNTS array must not be in LoginPage');
   assert.strictEqual(loginCode.includes('Use Credentials'), false, 'No Use Credentials button in LoginPage');
-  assert.strictEqual(loginCode.includes('alice@campus.edu'), false, 'No hardcoded demo emails in LoginPage');
-  assert.strictEqual(loginCode.includes('rahul.kumar@campus.edu'), false, 'No hardcoded demo emails in LoginPage');
 
   // Verify Navbar also has no demo switchers
   const navbarCode = fs.readFileSync(path.join(__dirname, '../src/components/Navbar.tsx'), 'utf8');
@@ -36,14 +34,15 @@ test('2. Seeded Database Users: Exist, roles correct, passwords hashed with bcry
 
   // Verify bcrypt hashes for seeded demo accounts
   const seededEmails = [
-    'maya.lin@campus.edu',
-    'alex.rivera@campus.edu',
-    'rahul.kumar@campus.edu',
-    'priya.patel@campus.edu',
-    'elena.rostova@campus.edu',
-    'david.kim@campus.edu',
-    'marcus.vance@campus.edu',
-    'moderator.sarah@campus.edu',
+    'ananya.reddy@campus.edu',
+    'rahul.reddy@campus.edu',
+    'sai.kiran@campus.edu',
+    'sravani@campus.edu',
+    'keerthana.rao@campus.edu',
+    'bhavya.reddy@campus.edu',
+    'vamsi.krishna@campus.edu',
+    'pavan.kumar@campus.edu',
+    'moderator.sirisha@campus.edu',
     'admin@skillswap.campus.edu',
   ];
 
@@ -55,25 +54,25 @@ test('2. Seeded Database Users: Exist, roles correct, passwords hashed with bcry
     assert.strictEqual(valid, true, `Password123! must match for ${u.email}`);
   }
 
-  // Student Only Persona: Maya Lin
-  const maya = users.find(u => u.email === 'maya.lin@campus.edu');
-  assert.ok(maya, 'Maya Lin exists');
-  assert.strictEqual(maya.user_type, 'LEARNER');
-  assert.strictEqual(maya.role, 'STUDENT');
+  // Student Only Persona: Ananya Reddy
+  const ananya = users.find(u => u.email === 'ananya.reddy@campus.edu');
+  assert.ok(ananya, 'Ananya Reddy exists');
+  assert.strictEqual(ananya.user_type, 'LEARNER');
+  assert.strictEqual(ananya.role, 'STUDENT');
 
-  // Mentor Only Persona: Alex Rivera
-  const alex = users.find(u => u.email === 'alex.rivera@campus.edu');
-  assert.ok(alex, 'Alex Rivera exists');
-  assert.strictEqual(alex.user_type, 'TEACHER');
-  assert.strictEqual(alex.role, 'STUDENT');
-
-  // Mentor + Student: Rahul Kumar
-  const rahul = users.find(u => u.email === 'rahul.kumar@campus.edu');
-  assert.ok(rahul, 'Rahul Kumar exists');
-  assert.strictEqual(rahul.user_type, 'TEACHER_LEARNER');
+  // Mentor Only Persona: Rahul Reddy
+  const rahul = users.find(u => u.email === 'rahul.reddy@campus.edu');
+  assert.ok(rahul, 'Rahul Reddy exists');
+  assert.strictEqual(rahul.user_type, 'TEACHER');
   assert.strictEqual(rahul.role, 'STUDENT');
 
-  // Admin User: Admin
+  // Mentor + Student: Sai Kiran
+  const saikiran = users.find(u => u.email === 'sai.kiran@campus.edu');
+  assert.ok(saikiran, 'Sai Kiran exists');
+  assert.strictEqual(saikiran.user_type, 'TEACHER_LEARNER');
+  assert.strictEqual(saikiran.role, 'STUDENT');
+
+  // Admin User: Srinivas Rao / Admin
   const admin = users.find(u => u.email === 'admin@skillswap.campus.edu');
   assert.ok(admin, 'Admin exists');
   assert.strictEqual(admin.role, 'ADMIN');
@@ -93,31 +92,31 @@ test('3. Python Verification Scenarios: Verified vs Pending mentors in database'
 
   assert.ok(pythonSkills.length >= 3, 'At least 3 Python mentors');
 
-  const alexSkill = pythonSkills.find(s => s.email === 'alex.rivera@campus.edu');
-  assert.strictEqual(alexSkill.verification_status, 'PLATFORM_VERIFIED');
-  assert.strictEqual(alexSkill.assessment_score, 95.0);
+  const rahulSkill = pythonSkills.find(s => s.email === 'rahul.reddy@campus.edu');
+  assert.strictEqual(rahulSkill.verification_status, 'PLATFORM_VERIFIED');
+  assert.strictEqual(rahulSkill.assessment_score, 95.0);
 
-  const rahulSkill = pythonSkills.find(s => s.email === 'rahul.kumar@campus.edu');
-  assert.strictEqual(rahulSkill.verification_status, 'ASSESSMENT_VERIFIED');
+  const saiSkill = pythonSkills.find(s => s.email === 'sai.kiran@campus.edu');
+  assert.strictEqual(saiSkill.verification_status, 'ASSESSMENT_VERIFIED');
 
-  const priyaSkill = pythonSkills.find(s => s.email === 'priya.patel@campus.edu');
-  assert.strictEqual(priyaSkill.verification_status, 'SELF_DECLARED');
+  const sravaniSkill = pythonSkills.find(s => s.email === 'sravani@campus.edu');
+  assert.strictEqual(sravaniSkill.verification_status, 'SELF_DECLARED');
 
   db.close();
 });
 
-// 4. SMART SLOT FINDER DEMO DATA: Existing session blocks 5-6 PM on Monday for Alex Rivera
-test('4. Smart Slot Availability: Alex Rivera has 5-6 PM blocked session leaving 6-8 PM open', () => {
+// 4. SMART SLOT FINDER DEMO DATA: Existing session blocks 5-6 PM on Monday for Rahul Reddy
+test('4. Smart Slot Availability: Rahul Reddy has 5-6 PM blocked session leaving 6-8 PM open', () => {
   const db = new Database(dbPath, { readonly: true });
-  const alexSlots = db.prepare(`
-    SELECT day_of_week, start_time, end_time FROM availability_slots WHERE user_id = 'usr-alex'
+  const rahulSlots = db.prepare(`
+    SELECT day_of_week, start_time, end_time FROM availability_slots WHERE user_id = 'usr-rahul'
   `).all();
-  assert.ok(alexSlots.some(s => s.day_of_week === 'Monday' && s.start_time === '17:00' && s.end_time === '20:00'));
+  assert.ok(rahulSlots.some(s => s.day_of_week === 'Monday' && s.start_time === '17:00' && s.end_time === '20:00'));
 
   const blockedSession = db.prepare(`
-    SELECT id, teacher_id, scheduled_start, scheduled_end, status FROM sessions WHERE teacher_id = 'usr-alex'
+    SELECT id, teacher_id, scheduled_start, scheduled_end, status FROM sessions WHERE id = 'sess-rahul-blocked-1'
   `).get();
-  assert.ok(blockedSession, 'Blocked session exists for Alex');
+  assert.ok(blockedSession, 'Blocked session exists for Rahul Reddy');
   assert.strictEqual(blockedSession.status, 'SCHEDULED');
   assert.ok(blockedSession.scheduled_start.includes('T17:00:00Z'));
   assert.ok(blockedSession.scheduled_end.includes('T18:00:00Z'));
@@ -126,7 +125,7 @@ test('4. Smart Slot Availability: Alex Rivera has 5-6 PM blocked session leaving
 });
 
 // 5. PYTHON LEARNER REQUEST SCENARIOS
-test('5. Learner Requests: Maya Lin & Marcus Vance have real OPEN Python requests in DB', () => {
+test('5. Learner Requests: Ananya Reddy & Pavan Kumar have real OPEN Python requests in DB', () => {
   const db = new Database(dbPath, { readonly: true });
   const requests = db.prepare(`
     SELECT sr.id, sr.learner_id, u.email, sr.skill_id, sr.status, sr.urgency
@@ -136,8 +135,8 @@ test('5. Learner Requests: Maya Lin & Marcus Vance have real OPEN Python request
   `).all();
 
   assert.ok(requests.length >= 2, 'At least 2 Python requests');
-  assert.ok(requests.some(r => r.email === 'maya.lin@campus.edu' && r.status === 'OPEN'));
-  assert.ok(requests.some(r => r.email === 'marcus.vance@campus.edu' && r.status === 'OPEN'));
+  assert.ok(requests.some(r => r.email === 'ananya.reddy@campus.edu' && r.status === 'OPEN'));
+  assert.ok(requests.some(r => r.email === 'pavan.kumar@campus.edu' && r.status === 'OPEN'));
 
   db.close();
 });

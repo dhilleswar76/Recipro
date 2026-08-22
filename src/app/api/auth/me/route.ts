@@ -5,7 +5,7 @@ import { requireAuth } from '@/lib/auth';
 export async function GET(req: NextRequest) {
   const authRes = requireAuth(req);
   if ('errorResponse' in authRes) {
-    return authRes.errorResponse;
+    return NextResponse.json({ user: null, authenticated: false }, { status: 200 });
   }
 
   const { user } = authRes;

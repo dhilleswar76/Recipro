@@ -26,7 +26,7 @@ export async function POST(
     let targetState: SessionState = 'REQUESTED';
     if (action === 'ACCEPT') targetState = 'ACCEPTED';
     else if (action === 'START') targetState = 'IN_PROGRESS';
-    else if (action === 'CONFIRM_COMPLETION') targetState = 'COMPLETED';
+    else if (action === 'CONFIRM_COMPLETION' || action === 'CONFIRM') targetState = 'COMPLETED';
     else if (action === 'CANCEL' || action === 'REJECT') targetState = 'CANCELLED';
     else if (action === 'DISPUTE') targetState = 'DISPUTED';
 

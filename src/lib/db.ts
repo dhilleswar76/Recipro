@@ -1,0 +1,416 @@
+import Database from 'better-sqlite3';
+import path from 'path';
+import fs from 'fs';
+
+// Ensure data directory exists
+const dataDir = path.join(process.cwd(), 'data');
+if (!fs.existsSync(dataDir)) {
+  fs.mkdirSync(dataDir, { recursive: true });
+}
+
+const dbPath = process.env.DATABASE_URL
+  ? path.resolve(process.cwd(), process.env.DATABASE_URL)
+  : path.join(dataDir, 'skillswap.db');
+
+// Global cached instance for Next.js hot reloading
+let dbInstance: Database.Database | null = null;
+
+export function getDb(): Database.Database {
+  if (!dbInstance) {
+    dbInstance = new Database(dbPath);
+    dbInstance.pragma('journal_mode = WAL');
+    dbInstance.pragma('foreign_keys = ON');
+    dbInstance.pragma('busy_timeout = 5000');
+    initDatabase(dbInstance);
+  }
+  return dbInstance;
+}
+
+export function initDatabase(db: Database.Database) {
+  // Execute database schema
+  db.exec(`
+    -- 1. Users & Authentication
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      email TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'STUDENT', -- 'STUDENT', 'MODERATOR', 'ADMIN'
+      status TEXT NOT NULL DEFAULT 'ACTIVE', -- 'ACTIVE', 'RESTRICTED', 'SUSPENDED', 'UNDER_REVIEW'
+      campus_id TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- 2. Profiles
+    CREATE TABLE IF NOT EXISTS profiles (
+      id TEXT PRIMARY KEY,
+      user_id TEXT UNIQUE NOT NULL,
+      display_name TEXT NOT NULL,
+      avatar TEXT,
+      bio TEXT,
+      college TEXT,
+      major TEXT,
+      year TEXT,
+      is_verified_student INTEGER NOT NULL DEFAULT 0,
+      trust_score REAL NOT NULL DEFAULT 70.0,
+      completion_rate REAL NOT NULL DEFAULT 100.0,
+      cancellation_rate REAL NOT NULL DEFAULT 0.0,
+      hourly_rate_credits INTEGER NOT NULL DEFAULT 1,
+      teaching_style TEXT DEFAULT 'Interactive & Hands-on',
+      languages TEXT DEFAULT 'English',
+      profile_visibility TEXT DEFAULT 'PUBLIC', -- 'PUBLIC', 'CAMPUS_ONLY', 'PRIVATE'
+      ml_consent INTEGER NOT NULL DEFAULT 1,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    -- 3. Skills Master
+    CREATE TABLE IF NOT EXISTS skills (
+      id TEXT PRIMARY KEY,
+      name TEXT UNIQUE NOT NULL,
+      category TEXT NOT NULL, -- 'Computer Science', 'Design', 'Languages', 'Mathematics', 'Business', 'Music'
+      icon TEXT DEFAULT 'BookOpen',
+      description TEXT,
+      is_verified INTEGER NOT NULL DEFAULT 1,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- 4. User Teaching Skills
+    CREATE TABLE IF NOT EXISTS user_skills (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      skill_id TEXT NOT NULL,
+      proficiency TEXT NOT NULL, -- 'Beginner', 'Intermediate', 'Advanced', 'Expert'
+      experience_years REAL DEFAULT 1.0,
+      teaching_style TEXT DEFAULT 'Hands-on project based',
+      verification_status TEXT NOT NULL DEFAULT 'CLAIMED', -- 'CLAIMED', 'AI_SUGGESTED', 'PEER_VERIFIED', 'PLATFORM_VERIFIED'
+      evidence_url TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(user_id, skill_id),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (skill_id) REFERENCES skills(id) ON DELETE CASCADE
+    );
+
+    -- 5. User Learning Goals
+    CREATE TABLE IF NOT EXISTS learning_goals (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      skill_id TEXT NOT NULL,
+      target_proficiency TEXT NOT NULL DEFAULT 'Intermediate',
+      priority TEXT NOT NULL DEFAULT 'MEDIUM', -- 'LOW', 'MEDIUM', 'HIGH'
+      notes TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(user_id, skill_id),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (skill_id) REFERENCES skills(id) ON DELETE CASCADE
+    );
+
+    -- 6. Availability Slots
+    CREATE TABLE IF NOT EXISTS availability_slots (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      day_of_week TEXT NOT NULL, -- 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'
+      start_time TEXT NOT NULL, -- '18:00'
+      end_time TEXT NOT NULL,   -- '20:00'
+      timezone TEXT NOT NULL DEFAULT 'UTC',
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    -- 7. Sessions Lifecycle
+    CREATE TABLE IF NOT EXISTS sessions (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      skill_id TEXT NOT NULL,
+      teacher_id TEXT NOT NULL,
+      learner_id TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'REQUESTED', -- 'REQUESTED', 'ACCEPTED', 'SCHEDULED', 'IN_PROGRESS', 'PENDING_CONFIRMATION', 'COMPLETED', 'CREDIT_SETTLED', 'DISPUTED', 'CANCELLED'
+      scheduled_start DATETIME NOT NULL,
+      scheduled_end DATETIME NOT NULL,
+      duration_hours REAL NOT NULL DEFAULT 1.0,
+      credits_amount INTEGER NOT NULL DEFAULT 1,
+      mode TEXT NOT NULL DEFAULT 'ONLINE', -- 'ONLINE', 'CAMPUS_IN_PERSON'
+      location_or_url TEXT DEFAULT 'https://meet.skillswap.internal/room',
+      learner_confirmed INTEGER NOT NULL DEFAULT 0,
+      teacher_confirmed INTEGER NOT NULL DEFAULT 0,
+      idempotency_key TEXT UNIQUE NOT NULL,
+      notes TEXT,
+      cancellation_reason TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (skill_id) REFERENCES skills(id),
+      FOREIGN KEY (teacher_id) REFERENCES users(id),
+      FOREIGN KEY (learner_id) REFERENCES users(id)
+    );
+
+    -- 8. Skill Credits Ledger
+    CREATE TABLE IF NOT EXISTS skill_credit_accounts (
+      id TEXT PRIMARY KEY,
+      user_id TEXT UNIQUE NOT NULL,
+      balance INTEGER NOT NULL DEFAULT 3, -- 3 starter credits
+      escrow_balance INTEGER NOT NULL DEFAULT 0,
+      lifetime_earned INTEGER NOT NULL DEFAULT 0,
+      lifetime_spent INTEGER NOT NULL DEFAULT 0,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS credit_transactions (
+      id TEXT PRIMARY KEY,
+      reference_session_id TEXT,
+      sender_id TEXT, -- NULL for system mint / faucet
+      receiver_id TEXT, -- NULL for escrow burn or platform reserve
+      amount INTEGER NOT NULL,
+      transaction_type TEXT NOT NULL, -- 'ESCROW_RESERVE', 'ESCROW_RELEASE', 'ESCROW_REFUND', 'STARTER_GRANT', 'BONUS', 'ADMIN_ADJUST'
+      status TEXT NOT NULL DEFAULT 'SETTLED', -- 'PENDING', 'SETTLED', 'FAILED', 'REVERSED'
+      idempotency_key TEXT UNIQUE NOT NULL,
+      on_chain_tx_hash TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (reference_session_id) REFERENCES sessions(id),
+      FOREIGN KEY (sender_id) REFERENCES users(id),
+      FOREIGN KEY (receiver_id) REFERENCES users(id)
+    );
+
+    -- 9. Ratings & Confidence-Aware Reputation
+    CREATE TABLE IF NOT EXISTS ratings (
+      id TEXT PRIMARY KEY,
+      session_id TEXT UNIQUE NOT NULL,
+      rater_id TEXT NOT NULL,
+      ratee_id TEXT NOT NULL,
+      score REAL NOT NULL CHECK(score >= 1.0 AND score <= 5.0),
+      review TEXT,
+      skills_demonstrated TEXT,
+      punctuality_score REAL DEFAULT 5.0,
+      clarity_score REAL DEFAULT 5.0,
+      flagged_suspicious INTEGER NOT NULL DEFAULT 0,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (session_id) REFERENCES sessions(id),
+      FOREIGN KEY (rater_id) REFERENCES users(id),
+      FOREIGN KEY (ratee_id) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS reputations (
+      id TEXT PRIMARY KEY,
+      user_id TEXT UNIQUE NOT NULL,
+      total_reviews INTEGER NOT NULL DEFAULT 0,
+      total_sessions_taught INTEGER NOT NULL DEFAULT 0,
+      total_sessions_learned INTEGER NOT NULL DEFAULT 0,
+      bayesian_rating REAL NOT NULL DEFAULT 4.5,
+      reliability_score REAL NOT NULL DEFAULT 95.0,
+      teaching_score REAL NOT NULL DEFAULT 90.0,
+      reciprocal_rating_ratio REAL NOT NULL DEFAULT 0.0,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    -- 10. Verifiable Credentials & Badges
+    CREATE TABLE IF NOT EXISTS credentials (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      title TEXT NOT NULL, -- e.g., 'Python Mentor - Level 1'
+      badge_type TEXT NOT NULL, -- 'MENTOR_TIER_1', 'MENTOR_TIER_2', 'RELIABLE_TEACHER', 'CAMPUS_CONTRIBUTOR'
+      skill_id TEXT,
+      token_id TEXT, -- On-chain ERC-721/1155 Token ID
+      tx_hash TEXT,
+      criteria_met TEXT NOT NULL, -- JSON string of condition values satisfied
+      is_revoked INTEGER NOT NULL DEFAULT 0,
+      issued_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (skill_id) REFERENCES skills(id)
+    );
+
+    -- 11. Campus Verification & Sybil Defense
+    CREATE TABLE IF NOT EXISTS campus_verifications (
+      id TEXT PRIMARY KEY,
+      user_id TEXT UNIQUE NOT NULL,
+      student_email TEXT NOT NULL,
+      college_id_card_url TEXT,
+      status TEXT NOT NULL DEFAULT 'PENDING', -- 'PENDING', 'VERIFIED', 'REJECTED'
+      verified_at DATETIME,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    -- 12. Safety, Reports, Disputes & Fraud Alerts
+    CREATE TABLE IF NOT EXISTS reports (
+      id TEXT PRIMARY KEY,
+      reporter_id TEXT NOT NULL,
+      reported_id TEXT NOT NULL,
+      session_id TEXT,
+      reason TEXT NOT NULL, -- 'NO_SHOW', 'HARASSMENT', 'WRONG_SKILL', 'CREDIT_FRAUD', 'OTHER'
+      details TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'OPEN', -- 'OPEN', 'UNDER_REVIEW', 'RESOLVED', 'DISMISSED'
+      resolution_notes TEXT,
+      moderator_id TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (reporter_id) REFERENCES users(id),
+      FOREIGN KEY (reported_id) REFERENCES users(id),
+      FOREIGN KEY (session_id) REFERENCES sessions(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS disputes (
+      id TEXT PRIMARY KEY,
+      session_id TEXT UNIQUE NOT NULL,
+      initiator_id TEXT NOT NULL,
+      reason TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'OPEN', -- 'OPEN', 'UNDER_REVIEW', 'RESOLVED_REFUND', 'RESOLVED_PAYOUT', 'DISMISSED'
+      evidence_url TEXT,
+      moderator_id TEXT,
+      resolution_notes TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (session_id) REFERENCES sessions(id),
+      FOREIGN KEY (initiator_id) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS fraud_alerts (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      risk_score REAL NOT NULL, -- 0 to 100
+      risk_level TEXT NOT NULL, -- 'LOW', 'MEDIUM', 'HIGH'
+      anomaly_reasons TEXT NOT NULL, -- JSON array of detected signals
+      status TEXT NOT NULL DEFAULT 'PENDING_REVIEW', -- 'PENDING_REVIEW', 'INVESTIGATING', 'CLEARED', 'RESTRICTED'
+      reviewed_by TEXT,
+      review_notes TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS audit_logs (
+      id TEXT PRIMARY KEY,
+      actor_id TEXT,
+      action TEXT NOT NULL,
+      target_type TEXT NOT NULL,
+      target_id TEXT NOT NULL,
+      previous_state TEXT,
+      new_state TEXT,
+      ip_address TEXT,
+      user_agent TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS notifications (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      message TEXT NOT NULL,
+      type TEXT NOT NULL DEFAULT 'INFO', -- 'SESSION_REQUEST', 'SESSION_ACCEPTED', 'SESSION_COMPLETED', 'CREDIT_UPDATE', 'CREDENTIAL_ISSUED', 'DISPUTE_UPDATE', 'SECURITY_ALERT'
+      link TEXT,
+      is_read INTEGER NOT NULL DEFAULT 0,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    -- 13. Web3 Wallets & Blockchain Anchors
+    CREATE TABLE IF NOT EXISTS wallets (
+      id TEXT PRIMARY KEY,
+      user_id TEXT UNIQUE NOT NULL,
+      address TEXT UNIQUE NOT NULL,
+      chain_id INTEGER NOT NULL DEFAULT 31337,
+      signature_proof TEXT NOT NULL,
+      is_verified INTEGER NOT NULL DEFAULT 1,
+      linked_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS blockchain_transactions (
+      id TEXT PRIMARY KEY,
+      reference_type TEXT NOT NULL, -- 'SESSION_SETTLEMENT', 'CREDENTIAL_MINT', 'ANCHOR_PROOF'
+      reference_id TEXT NOT NULL,
+      chain_id INTEGER NOT NULL,
+      contract_address TEXT NOT NULL,
+      tx_hash TEXT UNIQUE NOT NULL,
+      status TEXT NOT NULL DEFAULT 'CONFIRMED', -- 'PENDING', 'CONFIRMED', 'FAILED', 'RECONCILIATION_REQUIRED'
+      block_number INTEGER,
+      payload_json TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- 14. StudySphere Campus Features
+    CREATE TABLE IF NOT EXISTS study_groups (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT,
+      subject TEXT NOT NULL,
+      creator_id TEXT NOT NULL,
+      meeting_schedule TEXT DEFAULT 'Every Wednesday 5 PM',
+      max_members INTEGER NOT NULL DEFAULT 8,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (creator_id) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS study_group_members (
+      id TEXT PRIMARY KEY,
+      group_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'MEMBER', -- 'ADMIN', 'MEMBER'
+      joined_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(group_id, user_id),
+      FOREIGN KEY (group_id) REFERENCES study_groups(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS study_resources (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      description TEXT,
+      subject TEXT NOT NULL,
+      author_id TEXT NOT NULL,
+      resource_type TEXT NOT NULL DEFAULT 'PDF', -- 'PDF', 'NOTES', 'CODE', 'EXAM_PREP'
+      file_url TEXT,
+      upvotes INTEGER NOT NULL DEFAULT 0,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (author_id) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS flashcard_decks (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      cards_count INTEGER NOT NULL DEFAULT 0,
+      is_public INTEGER NOT NULL DEFAULT 1,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS flashcards (
+      id TEXT PRIMARY KEY,
+      deck_id TEXT NOT NULL,
+      front TEXT NOT NULL,
+      back TEXT NOT NULL,
+      mastery_level INTEGER NOT NULL DEFAULT 0, -- 0 to 5 (Spaced Repetition)
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (deck_id) REFERENCES flashcard_decks(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS exchange_proposals (
+      id TEXT PRIMARY KEY,
+      cycle_hash TEXT UNIQUE NOT NULL,
+      participants_json TEXT NOT NULL, -- Array of User IDs in cycle
+      skills_flow_json TEXT NOT NULL,   -- Array of { fromUser, toUser, skillName }
+      status TEXT NOT NULL DEFAULT 'PROPOSED', -- 'PROPOSED', 'ACCEPTED_BY_ALL', 'EXECUTED', 'DECLINED', 'EXPIRED'
+      accepted_users_json TEXT NOT NULL DEFAULT '[]',
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      expires_at DATETIME NOT NULL
+    );
+
+    -- Indexes for High Performance Querying
+    CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+    CREATE INDEX IF NOT EXISTS idx_profiles_user_id ON profiles(user_id);
+    CREATE INDEX IF NOT EXISTS idx_user_skills_user ON user_skills(user_id);
+    CREATE INDEX IF NOT EXISTS idx_user_skills_skill ON user_skills(skill_id);
+    CREATE INDEX IF NOT EXISTS idx_learning_goals_user ON learning_goals(user_id);
+    CREATE INDEX IF NOT EXISTS idx_availability_user ON availability_slots(user_id);
+    CREATE INDEX IF NOT EXISTS idx_sessions_teacher ON sessions(teacher_id);
+    CREATE INDEX IF NOT EXISTS idx_sessions_learner ON sessions(learner_id);
+    CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(status);
+    CREATE INDEX IF NOT EXISTS idx_ratings_rater ON ratings(rater_id);
+    CREATE INDEX IF NOT EXISTS idx_ratings_ratee ON ratings(ratee_id);
+    CREATE INDEX IF NOT EXISTS idx_credit_tx_user ON credit_transactions(sender_id, receiver_id);
+    CREATE INDEX IF NOT EXISTS idx_fraud_alerts_user ON fraud_alerts(user_id);
+    CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);
+  `);
+}

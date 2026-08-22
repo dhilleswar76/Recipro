@@ -25,7 +25,7 @@ import {
   RotateCcw,
   Zap,
 } from 'lucide-react';
-import { getSkillStatusDisplay } from '@/lib/skill-verification';
+import { getSkillStatusDisplay } from '@/lib/skill-display';
 
 function ExploreComponent() {
   const searchParams = useSearchParams();

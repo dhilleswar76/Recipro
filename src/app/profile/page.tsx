@@ -23,7 +23,7 @@ import {
   HelpCircle,
   AlertCircle
 } from 'lucide-react';
-import { getSkillStatusDisplay } from '@/lib/skill-verification';
+import { getSkillStatusDisplay } from '@/lib/skill-display';
 
 export default function ProfilePage() {
   const { user, refreshUser, switchDemoUser } = useAuth();

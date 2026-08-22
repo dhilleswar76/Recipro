@@ -32,23 +32,41 @@ export type GeneratedQuiz = z.infer<typeof GeneratedQuizSchema>;
 export type AssessmentQuestion = z.infer<typeof AssessmentQuestionSchema>;
 
 export const RoadmapStageSchema = z.object({
-  order: z.number().int().min(1),
-  title: z.string().min(2),
-  description: z.string().min(5),
-  skillQuery: z.string().min(1),
-  estimatedHours: z.number().min(1).default(5),
-  objectives: z.array(z.string()).min(1),
-  practiceTasks: z.array(z.string()).min(1),
-  completionCriteria: z.array(z.string()).min(1),
-});
+  order: z.number().int().optional(),
+  stage: z.number().int().optional(),
+  title: z.string().min(1),
+  description: z.string().optional().default(''),
+  skillQuery: z.string().optional(),
+  estimatedHours: z.number().optional().default(5),
+  objectives: z.array(z.string()).optional().default([]),
+  topics: z.array(z.string()).optional().default([]),
+  practiceTasks: z.array(z.string()).optional().default([]),
+  completionCriteria: z.array(z.string()).optional().default([]),
+}).transform((st) => ({
+  order: st.order ?? st.stage ?? 1,
+  title: st.title,
+  description: st.description || `Core concepts and practical application of ${st.title}.`,
+  skillQuery: st.skillQuery || st.title.split(' ')[0] || 'Python',
+  estimatedHours: st.estimatedHours || 5,
+  objectives: st.objectives && st.objectives.length > 0 ? st.objectives : (st.topics && st.topics.length > 0 ? st.topics : ['Master core principles']),
+  practiceTasks: st.practiceTasks && st.practiceTasks.length > 0 ? st.practiceTasks : ['Complete hands-on coding exercises'],
+  completionCriteria: st.completionCriteria && st.completionCriteria.length > 0 ? st.completionCriteria : ['Complete stage review and code verification'],
+}));
 
 export const GeneratedRoadmapSchema = z.object({
-  title: z.string().min(3),
-  goal: z.string().min(3),
-  estimatedDuration: z.string().default('6 weeks'),
-  provider: z.enum(['GEMINI_AI', 'LOCAL_FALLBACK']).default('GEMINI_AI'),
-  stages: z.array(RoadmapStageSchema).min(3),
-});
+  title: z.string().min(1),
+  goal: z.string().optional(),
+  estimatedDuration: z.string().optional().default('6 weeks'),
+  provider: z.enum(['GEMINI_AI', 'LOCAL_FALLBACK']).optional().default('GEMINI_AI'),
+  stages: z.array(RoadmapStageSchema).optional(),
+  roadmap: z.array(RoadmapStageSchema).optional(),
+}).transform((rdm) => ({
+  title: rdm.title,
+  goal: rdm.goal || rdm.title,
+  estimatedDuration: rdm.estimatedDuration || '6 weeks',
+  provider: rdm.provider || 'GEMINI_AI',
+  stages: (rdm.stages && rdm.stages.length > 0 ? rdm.stages : (rdm.roadmap || [])),
+}));
 
 export type GeneratedRoadmap = z.infer<typeof GeneratedRoadmapSchema>;
 export type RoadmapStage = z.infer<typeof RoadmapStageSchema>;
@@ -583,7 +601,7 @@ export async function generateStudyRoadmap(params: {
 
   const lowerGoal = goal.toLowerCase();
 
-  // If no API key or local match
+  // If no API key configured, fallback to curated roadmaps if available or throw configuration error
   if (!apiKey || apiKey.trim() === '') {
     if (lowerGoal.includes('solidity') || lowerGoal.includes('web3') || lowerGoal.includes('blockchain')) {
       return LOCAL_CURRICULUM_ROADMAPS['solidity'];
@@ -593,28 +611,44 @@ export async function generateStudyRoadmap(params: {
 
   try {
     const systemInstruction = `You are a principal university curriculum designer and AI Study Coach.
-Create a structured, step-by-step learning roadmap for a student.
-Rules:
-1. Break down the goal into 4 to 6 logical learning stages.
-2. For each stage, specify a clean, search-friendly skillQuery (e.g. "Python", "React", "Data Structures", "Machine Learning", "Calculus", "Figma").
-3. Include clear learning objectives, practice tasks, estimated study hours, and completion criteria.
-4. Output strictly valid JSON matching the schema without conversational markdown.`;
+Generate a structured, step-by-step learning roadmap in JSON format matching the following schema:
+{
+  "title": "Clear Roadmap Title",
+  "goal": "Student learning goal",
+  "estimatedDuration": "8 weeks",
+  "stages": [
+    {
+      "order": 1,
+      "title": "Stage Title",
+      "description": "Comprehensive explanation of what is learned in this stage",
+      "skillQuery": "Specific skill name to search in mentor catalog (e.g. Python, React, Solidity, Data Structures)",
+      "estimatedHours": 6,
+      "objectives": ["Specific objective 1", "Specific objective 2"],
+      "practiceTasks": ["Actionable practice task 1", "Actionable practice task 2"],
+      "completionCriteria": ["Clear verification metric"]
+    }
+  ]
+}
+Output strictly valid JSON with 4 to 6 stages. Do not include markdown code blocks or conversational text.`;
 
     const userPrompt = `Student Goal: "${goal}"
 Current Proficiency: ${currentLevel}
 Target Proficiency: ${targetLevel}
-Available Time per Week: ${weeklyHours} hours`;
+Available Study Time: ${weeklyHours} hours per week`;
 
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        system_instruction: {
+          parts: [{ text: systemInstruction }]
+        },
         contents: [
-          { role: 'user', parts: [{ text: `${systemInstruction}\n\n${userPrompt}` }] }
+          { role: 'user', parts: [{ text: userPrompt }] }
         ],
         generationConfig: {
           responseMimeType: 'application/json',
-          temperature: 0.3,
+          temperature: 0.2,
         },
       }),
     });

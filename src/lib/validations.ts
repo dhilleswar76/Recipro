@@ -70,9 +70,13 @@ export const SubmitAssessmentSchema = z.object({
   skillId: z.string().min(1, 'Skill ID is required'),
   targetLevel: z.enum(['Beginner', 'Intermediate', 'Advanced', 'Expert']).default('Intermediate'),
   answers: z.array(z.object({
-    questionId: z.string(),
-    selectedOption: z.number().int(),
-  })),
+    questionId: z.string().min(1, 'Question ID is required'),
+    selectedOption: z.union([
+      z.number().int().min(0).max(3),
+      z.enum(['A', 'B', 'C', 'D']),
+      z.string().min(1),
+    ]),
+  })).min(1, 'At least one answer must be submitted'),
 });
 
 export const SubmitEvidenceSchema = z.object({

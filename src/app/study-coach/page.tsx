@@ -30,6 +30,7 @@ export default function StudyCoachPage() {
   const [weeklyHours, setWeeklyHours] = useState(6);
 
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<any | null>(null);
   const [activeStageIndex, setActiveStageIndex] = useState<number | null>(0);
 
@@ -56,6 +57,7 @@ export default function StudyCoachPage() {
     if (e) e.preventDefault();
     if (!topic.trim()) return;
     setLoading(true);
+    setError(null);
 
     try {
       const res = await fetch('/api/ai/study-coach', {
@@ -72,10 +74,15 @@ export default function StudyCoachPage() {
       if (res.ok) {
         const data = await res.json();
         setResult(data);
+        setError(null);
         setActiveStageIndex(0);
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        setError(errData.error?.message || errData.error || 'AI roadmap generation is temporarily unavailable. GEMINI_API_KEY is required for live generation.');
       }
     } catch (err) {
       console.error('Study coach error:', err);
+      setError('Network or server error while generating learning roadmap. Please check your connection and retry.');
     } finally {
       setLoading(false);
     }
@@ -205,6 +212,26 @@ export default function StudyCoachPage() {
           </div>
         </form>
       </div>
+
+      {/* Error Alert Box with Retry */}
+      {error && (
+        <div className="max-w-3xl mx-auto p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-300 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg">
+          <div className="flex items-start gap-2.5 text-xs">
+            <span className="text-amber-400 font-bold text-sm leading-none mt-0.5">⚠️</span>
+            <div>
+              <p className="font-semibold text-white">AI Roadmap Generation Notice</p>
+              <p className="text-amber-200/90 mt-0.5">{error}</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => handleGenerateRoadmap()}
+            className="px-4 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-dark-bg font-bold text-xs shrink-0 shadow-sm transition-all"
+          >
+            Retry
+          </button>
+        </div>
+      )}
 
       {/* Output Content */}
       {result && result.roadmap && (

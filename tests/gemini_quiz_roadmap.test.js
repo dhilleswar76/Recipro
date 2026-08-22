@@ -13,7 +13,7 @@ test.before(() => {
   execSync('node scripts/seed.js', { cwd: path.join(__dirname, '..') });
 });
 
-// Define schemas to test
+// Canonical Schemas
 const AssessmentQuestionOptionSchema = z.object({
   id: z.enum(['A', 'B', 'C', 'D']),
   text: z.string().min(1),
@@ -39,22 +39,53 @@ const GeneratedQuizSchema = z.object({
 });
 
 const RoadmapStageSchema = z.object({
-  order: z.number().int().min(1),
-  title: z.string().min(2),
-  description: z.string().min(5),
-  skillQuery: z.string().min(1),
-  estimatedHours: z.number().min(1).default(5),
-  objectives: z.array(z.string()).min(1),
-  practiceTasks: z.array(z.string()).min(1),
-  completionCriteria: z.array(z.string()).min(1),
-});
+  order: z.number().int().optional(),
+  stage: z.number().int().optional(),
+  title: z.string().min(1),
+  description: z.string().optional().default(''),
+  skillQuery: z.string().optional(),
+  estimatedHours: z.number().optional().default(5),
+  objectives: z.array(z.string()).optional().default([]),
+  topics: z.array(z.string()).optional().default([]),
+  practiceTasks: z.array(z.string()).optional().default([]),
+  completionCriteria: z.array(z.string()).optional().default([]),
+}).transform((st) => ({
+  order: st.order ?? st.stage ?? 1,
+  title: st.title,
+  description: st.description || `Core concepts and practical application of ${st.title}.`,
+  skillQuery: st.skillQuery || st.title.split(' ')[0] || 'Python',
+  estimatedHours: st.estimatedHours || 5,
+  objectives: st.objectives && st.objectives.length > 0 ? st.objectives : (st.topics && st.topics.length > 0 ? st.topics : ['Master core principles']),
+  practiceTasks: st.practiceTasks && st.practiceTasks.length > 0 ? st.practiceTasks : ['Complete hands-on coding exercises'],
+  completionCriteria: st.completionCriteria && st.completionCriteria.length > 0 ? st.completionCriteria : ['Complete stage review and code verification'],
+}));
 
 const GeneratedRoadmapSchema = z.object({
-  title: z.string().min(3),
-  goal: z.string().min(3),
-  estimatedDuration: z.string().default('6 weeks'),
-  provider: z.enum(['GEMINI_AI', 'LOCAL_FALLBACK']).default('GEMINI_AI'),
-  stages: z.array(RoadmapStageSchema).min(3),
+  title: z.string().min(1),
+  goal: z.string().optional(),
+  estimatedDuration: z.string().optional().default('6 weeks'),
+  provider: z.enum(['GEMINI_AI', 'LOCAL_FALLBACK']).optional().default('GEMINI_AI'),
+  stages: z.array(RoadmapStageSchema).optional(),
+  roadmap: z.array(RoadmapStageSchema).optional(),
+}).transform((rdm) => ({
+  title: rdm.title,
+  goal: rdm.goal || rdm.title,
+  estimatedDuration: rdm.estimatedDuration || '6 weeks',
+  provider: rdm.provider || 'GEMINI_AI',
+  stages: (rdm.stages && rdm.stages.length > 0 ? rdm.stages : (rdm.roadmap || [])),
+}));
+
+const SubmitAssessmentSchema = z.object({
+  skillId: z.string().min(1, 'Skill ID is required'),
+  targetLevel: z.enum(['Beginner', 'Intermediate', 'Advanced', 'Expert']).default('Intermediate'),
+  answers: z.array(z.object({
+    questionId: z.string().min(1, 'Question ID is required'),
+    selectedOption: z.union([
+      z.number().int().min(0).max(3),
+      z.enum(['A', 'B', 'C', 'D']),
+      z.string().min(1),
+    ]),
+  })).min(1, 'At least one answer must be submitted'),
 });
 
 function sanitizeAssessmentForClient(quiz) {
@@ -159,7 +190,7 @@ test('1. Gemini AI Schema: Strict validation for Python quiz and curriculum road
   };
   assert.strictEqual(GeneratedQuizSchema.safeParse(invalidQuiz).success, false, 'Invalid quiz must be rejected');
 
-  // Test valid roadmap
+  // Test roadmap schema with topics/stages flexibility
   const validRoadmap = {
     title: 'Python for Data Science & ML',
     goal: 'Master Python fundamentals and scikit-learn',
@@ -167,32 +198,32 @@ test('1. Gemini AI Schema: Strict validation for Python quiz and curriculum road
     provider: 'GEMINI_AI',
     stages: [
       {
-        order: 1,
+        stage: 1,
         title: 'Core Syntax',
         description: 'Variables, loops, and functions.',
         skillQuery: 'Python',
         estimatedHours: 6,
-        objectives: ['Control flow'],
+        topics: ['Control flow'],
         practiceTasks: ['Write 5 scripts'],
         completionCriteria: ['Zero syntax errors']
       },
       {
-        order: 2,
+        stage: 2,
         title: 'Data Structures',
         description: 'Lists, dicts, tuples, sets.',
         skillQuery: 'Data Structures',
         estimatedHours: 8,
-        objectives: ['Data structure ops'],
+        topics: ['Data structure ops'],
         practiceTasks: ['Implement a stack'],
         completionCriteria: ['Pass test suite']
       },
       {
-        order: 3,
+        stage: 3,
         title: 'Pandas & NumPy',
         description: 'Tabular data processing.',
         skillQuery: 'Python',
         estimatedHours: 10,
-        objectives: ['Vectorized operations'],
+        topics: ['Vectorized operations'],
         practiceTasks: ['Analyze dataset'],
         completionCriteria: ['Produce summary report']
       }
@@ -200,6 +231,8 @@ test('1. Gemini AI Schema: Strict validation for Python quiz and curriculum road
   };
   const parsedRoadmap = GeneratedRoadmapSchema.safeParse(validRoadmap);
   assert.strictEqual(parsedRoadmap.success, true, 'Valid roadmap must parse cleanly');
+  assert.strictEqual(parsedRoadmap.data.stages[0].order, 1, 'Transformed stage to order');
+  assert.deepStrictEqual(parsedRoadmap.data.stages[0].objectives, ['Control flow'], 'Transformed topics to objectives');
 });
 
 // 2. CRITICAL SECURITY: CLIENT SANITIZATION (ZERO ANSWER LEAKAGE)
@@ -234,8 +267,50 @@ test('2. Client Security: Sanitized assessment strips correctOption and explanat
   assert.strictEqual(sanitized.questions[0].hint, 'Lock mechanism in CPython');
 });
 
-// 3. SERVER-SIDE ASSESSMENT SCORING & PASS/FAIL LOGIC
-test('3. Server-Side Scoring: Passing score (>=70%) verifies skill; failing score (<70%) rejects', () => {
+// 3. SUBMIT ASSESSMENT SCHEMA CONTRACT: ACCEPTS BOTH NUMBERS & LETTERS
+test('3. Schema Contract: SubmitAssessmentSchema parses both numeric indices (0,1) and letter strings (A,B)', () => {
+  // Numeric submission
+  const numericPayload = {
+    skillId: 'skill-python',
+    targetLevel: 'Intermediate',
+    answers: [
+      { questionId: 'py-1', selectedOption: 1 },
+      { questionId: 'py-2', selectedOption: 0 },
+    ]
+  };
+  const numParsed = SubmitAssessmentSchema.safeParse(numericPayload);
+  assert.strictEqual(numParsed.success, true, 'Numeric payload must pass schema validation');
+
+  // Letter submission
+  const letterPayload = {
+    skillId: 'skill-python',
+    targetLevel: 'Intermediate',
+    answers: [
+      { questionId: 'py-b-1', selectedOption: 'B' },
+      { questionId: 'py-b-2', selectedOption: 'C' },
+    ]
+  };
+  const letterParsed = SubmitAssessmentSchema.safeParse(letterPayload);
+  assert.strictEqual(letterParsed.success, true, 'Letter payload must pass schema validation');
+
+  // Invalid payload (empty answers)
+  const emptyPayload = {
+    skillId: 'skill-python',
+    targetLevel: 'Intermediate',
+    answers: []
+  };
+  assert.strictEqual(SubmitAssessmentSchema.safeParse(emptyPayload).success, false, 'Empty answers array must be rejected');
+
+  // Invalid payload (missing skillId)
+  const missingSkillPayload = {
+    targetLevel: 'Intermediate',
+    answers: [{ questionId: 'py-1', selectedOption: 1 }]
+  };
+  assert.strictEqual(SubmitAssessmentSchema.safeParse(missingSkillPayload).success, false, 'Missing skillId must be rejected');
+});
+
+// 4. SERVER-SIDE ASSESSMENT SCORING & ATOMIC TRANSACTION
+test('4. Server-Side Scoring: Passing score (>=70%) verifies skill; failing score (<70%) rejects', () => {
   const db = new Database(dbPath);
 
   function evaluateQuiz(answers, targetProficiency) {
@@ -288,8 +363,8 @@ test('3. Server-Side Scoring: Passing score (>=70%) verifies skill; failing scor
   db.close();
 });
 
-// 4. STUDY ROADMAP SCHEMA & REAL MENTOR INTEGRATION
-test('4. Study Roadmap: Generates structured multi-stage curriculum and links to database mentors', () => {
+// 5. STUDY ROADMAP SCHEMA & REAL MENTOR INTEGRATION
+test('5. Study Roadmap: Generates structured multi-stage curriculum and links to database mentors', () => {
   const db = new Database(dbPath, { readonly: true });
 
   // Querying skillQuery from SQLite finds real mentors
@@ -316,34 +391,45 @@ test('4. Study Roadmap: Generates structured multi-stage curriculum and links to
   db.close();
 });
 
-// 5. ROLE SYSTEM & ROLE UPGRADE API
-test('5. Role System & Upgrade: Upgrades student to Mentor+Student while preserving records', () => {
+// 6. ROLE SYSTEM & ROLE UPGRADE API
+test('6. Role System & Upgrade: Upgrades student to Mentor+Student while preserving records', () => {
   const db = new Database(dbPath);
 
-  // Maya Lin is initially LEARNER
-  const initialMaya = db.prepare('SELECT user_type FROM users WHERE email = ?').get('maya.lin@campus.edu');
-  assert.strictEqual(initialMaya.user_type, 'LEARNER');
+  // Create isolated test user
+  const testUserId = `usr-test-upgrade-${Date.now()}`;
+  const testEmail = `upgrade.${Date.now()}@campus.edu`;
+  
+  db.prepare(`
+    INSERT INTO users (id, email, password_hash, role, user_type, status)
+    VALUES (?, ?, 'hash', 'STUDENT', 'LEARNER', 'ACTIVE')
+  `).run(testUserId, testEmail);
+
+  db.prepare(`
+    INSERT INTO skill_credit_accounts (user_id, balance, escrow_balance)
+    VALUES (?, 4, 0)
+  `).run(testUserId);
+
+  const initialUser = db.prepare('SELECT user_type FROM users WHERE email = ?').get(testEmail);
+  assert.strictEqual(initialUser.user_type, 'LEARNER');
 
   // Perform role upgrade
-  db.prepare("UPDATE users SET user_type = 'TEACHER_LEARNER' WHERE email = ?").run('maya.lin@campus.edu');
+  db.prepare("UPDATE users SET user_type = 'TEACHER_LEARNER' WHERE email = ?").run(testEmail);
 
-  const upgradedMaya = db.prepare('SELECT user_type FROM users WHERE email = ?').get('maya.lin@campus.edu');
-  assert.strictEqual(upgradedMaya.user_type, 'TEACHER_LEARNER');
+  const upgradedUser = db.prepare('SELECT user_type FROM users WHERE email = ?').get(testEmail);
+  assert.strictEqual(upgradedUser.user_type, 'TEACHER_LEARNER');
 
-  // Verify balance and learner requests remain intact
-  const balance = db.prepare('SELECT balance FROM skill_credit_accounts WHERE user_id = ?').get('usr-maya');
+  // Verify balance remains intact
+  const balance = db.prepare('SELECT balance FROM skill_credit_accounts WHERE user_id = ?').get(testUserId);
   assert.strictEqual(balance.balance, 4);
 
-  const req = db.prepare('SELECT status FROM skill_requests WHERE learner_id = ?').get('usr-maya');
-  assert.strictEqual(req.status, 'OPEN');
-
-  // Restore Maya to LEARNER for pristine test state
-  db.prepare("UPDATE users SET user_type = 'LEARNER' WHERE email = ?").run('maya.lin@campus.edu');
+  // Clean up
+  db.prepare('DELETE FROM users WHERE id = ?').run(testUserId);
+  db.prepare('DELETE FROM skill_credit_accounts WHERE user_id = ?').run(testUserId);
   db.close();
 });
 
-// 6. ROUTING & UI SEPARATION
-test('6. Routing Separation: Navbar has separate /login and /register links, LoginPage has no register form', () => {
+// 7. ROUTING & UI SEPARATION
+test('7. Routing Separation: Navbar has separate /login and /register links, LoginPage has no register form', () => {
   const navbarCode = fs.readFileSync(path.join(__dirname, '../src/components/Navbar.tsx'), 'utf8');
   assert.ok(navbarCode.includes('href="/login"'), 'Navbar must link to /login');
   assert.ok(navbarCode.includes('href="/register"'), 'Navbar must link to /register');

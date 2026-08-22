@@ -241,6 +241,8 @@ export function getAssessmentQuestionsForSkill(skillName: string): AssessmentQue
   return GENERIC_QUESTIONS;
 }
 
+import { LOCAL_PYTHON_QUIZ_BANK } from './gemini';
+
 export interface EvaluateAssessmentParams {
   userId: string;
   skillId: string;
@@ -274,8 +276,9 @@ export function evaluateSkillAssessment(
   const questions = getAssessmentQuestionsForSkill(skillName);
   let correctCount = 0;
   const letterMap: Record<string, number> = { 'A': 0, 'B': 1, 'C': 2, 'D': 3 };
+  const numToLetter = ['A', 'B', 'C', 'D'];
 
-  // Check against standard bank and Python quiz bank
+  // Check answers against both standard question bank and Python quiz bank
   for (const userAns of params.answers) {
     const q = questions.find(question => question.id === userAns.questionId);
     if (q) {
@@ -287,25 +290,31 @@ export function evaluateSkillAssessment(
         correctCount++;
       }
     } else {
-      // Check if it's from LOCAL_PYTHON_QUIZ_BANK
+      // Check in LOCAL_PYTHON_QUIZ_BANK
+      let foundInLocal = false;
       const allLevels = ['Beginner', 'Intermediate', 'Advanced', 'Expert'];
       for (const lvl of allLevels) {
-        const bank = (SKILL_QUESTION_BANKS['python'] || []);
+        const bank = LOCAL_PYTHON_QUIZ_BANK[lvl] || [];
         const matchedQ = bank.find(bq => bq.id === userAns.questionId);
         if (matchedQ) {
-          const userChoice = typeof userAns.selectedOption === 'number'
+          const correctLetter = matchedQ.correctOption; // 'A', 'B', 'C', 'D'
+          const correctIdx = letterMap[correctLetter] ?? 0;
+          const userChoiceStr = String(userAns.selectedOption).toUpperCase();
+          const userChoiceNum = typeof userAns.selectedOption === 'number'
             ? userAns.selectedOption
-            : (letterMap[String(userAns.selectedOption).toUpperCase()] ?? Number(userAns.selectedOption));
-          if (userChoice === matchedQ.correctOptionIndex) {
+            : (letterMap[userChoiceStr] ?? Number(userAns.selectedOption));
+
+          if (userChoiceStr === correctLetter || userChoiceNum === correctIdx) {
             correctCount++;
           }
+          foundInLocal = true;
           break;
         }
       }
     }
   }
 
-  const maxScore = params.answers.length > 0 ? params.answers.length : questions.length;
+  const maxScore = params.answers.length > 0 ? params.answers.length : (questions.length || 5);
   const score = correctCount;
   const percentage = maxScore > 0 ? Math.round((score / maxScore) * 100) : 0;
 
@@ -371,58 +380,63 @@ export function evaluateSkillAssessment(
 
   const assessmentId = `assess-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
 
-  // Save assessment record
-  db.prepare(`
-    INSERT INTO skill_assessments (
-      id, user_id, skill_id, score, max_score, percentage, passed, target_level, verified_level, version, answers_json
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'v1.0', ?)
-  `).run(
-    assessmentId,
-    params.userId,
-    params.skillId,
-    score,
-    maxScore,
-    percentage,
-    passed ? 1 : 0,
-    params.requestedProficiency,
-    verifiedLevel,
-    JSON.stringify(params.answers)
-  );
-
-  // Update user_skills record
-  if (userSkill) {
+  // Atomic transaction to persist assessment and update user skill verification
+  const runTransaction = db.transaction(() => {
+    // 1. Save assessment record
     db.prepare(`
-      UPDATE user_skills
-      SET 
-        verification_status = ?,
-        assessment_score = ?,
-        proficiency = CASE WHEN ? = 1 THEN ? ELSE proficiency END,
-        verified_at = CURRENT_TIMESTAMP,
-        verified_by = 'SYSTEM_ASSESSMENT_ENGINE',
-        reassessment_required = CASE WHEN ? = 1 THEN 0 ELSE 1 END
-      WHERE user_id = ? AND skill_id = ?
+      INSERT INTO skill_assessments (
+        id, user_id, skill_id, score, max_score, percentage, passed, target_level, verified_level, version, answers_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'v1.0', ?)
     `).run(
-      verificationStatus,
+      assessmentId,
+      params.userId,
+      params.skillId,
+      score,
+      maxScore,
       percentage,
       passed ? 1 : 0,
+      params.requestedProficiency,
       verifiedLevel,
-      passed ? 1 : 0,
-      params.userId,
-      params.skillId
+      JSON.stringify(params.answers)
     );
-  }
 
-  // Create notification for student
-  db.prepare(`
-    INSERT INTO notifications (id, user_id, title, message, type, link)
-    VALUES (?, ?, ?, ?, ?, '/profile')
-  `).run(
-    `notif-${Date.now()}`,
-    params.userId,
-    passed ? `Skill Verified: ${skillName}` : `Assessment Result: ${skillName}`,
-    feedback,
-    passed ? 'CREDENTIAL_ISSUED' : 'INFO'
-  );
+    // 2. Update user_skills record
+    if (userSkill) {
+      db.prepare(`
+        UPDATE user_skills
+        SET 
+          verification_status = ?,
+          assessment_score = ?,
+          proficiency = CASE WHEN ? = 1 THEN ? ELSE proficiency END,
+          verified_at = CURRENT_TIMESTAMP,
+          verified_by = 'SYSTEM_ASSESSMENT_ENGINE',
+          reassessment_required = CASE WHEN ? = 1 THEN 0 ELSE 1 END
+        WHERE user_id = ? AND skill_id = ?
+      `).run(
+        verificationStatus,
+        percentage,
+        passed ? 1 : 0,
+        verifiedLevel,
+        passed ? 1 : 0,
+        params.userId,
+        params.skillId
+      );
+    }
+
+    // 3. Create notification for student
+    db.prepare(`
+      INSERT INTO notifications (id, user_id, title, message, type, link)
+      VALUES (?, ?, ?, ?, ?, '/profile')
+    `).run(
+      `notif-${Date.now()}`,
+      params.userId,
+      passed ? `Skill Verified: ${skillName}` : `Assessment Result: ${skillName}`,
+      feedback,
+      passed ? 'CREDENTIAL_ISSUED' : 'INFO'
+    );
+  });
+
+  runTransaction();
 
   return {
     passed,

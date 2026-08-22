@@ -96,6 +96,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       result: evaluation,
+      passed: evaluation.passed,
+      score: evaluation.score,
+      maxScore: evaluation.maxScore,
+      percentage: evaluation.percentage,
+      verifiedLevel: evaluation.verifiedLevel,
+      verificationStatus: evaluation.verificationStatus,
+      feedback: evaluation.feedback,
+      assessmentId: evaluation.assessmentId,
     });
   } catch (err: any) {
     console.error('Assessment Submission Error:', err);

@@ -294,8 +294,8 @@ export default function ProfilePage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          skillId: assessmentSkill.skill_id,
-          targetLevel: assessmentSkill.proficiency,
+          skillId: assessmentSkill.skill_id || assessmentSkill.id,
+          targetLevel: assessmentSkill.proficiency || 'Intermediate',
           answers: answersArray,
         }),
       });

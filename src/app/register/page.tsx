@@ -15,7 +15,7 @@ import {
   GraduationCap
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-import { isAcademicEmail } from '@/lib/db';
+import { isAcademicEmail } from '@/lib/validations';
 
 export default function RegisterPage() {
   const router = useRouter();

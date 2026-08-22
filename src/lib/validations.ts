@@ -255,3 +255,26 @@ export const RespondReturnSkillSchema = z.object({
   notes: z.string().max(300).optional(),
 });
 
+export function isAcademicEmail(email: string): boolean {
+  if (!email || typeof email !== 'string') return false;
+  const lower = email.trim().toLowerCase();
+  const parts = lower.split('@');
+  if (parts.length !== 2) return false;
+  const domain = parts[1];
+  if (!domain) return false;
+
+  return (
+    domain.endsWith('.edu') ||
+    domain.endsWith('.ac.in') ||
+    domain.endsWith('.ac.uk') ||
+    domain.endsWith('.edu.in') ||
+    domain.endsWith('.edu.au') ||
+    domain.endsWith('.ac.nz') ||
+    domain.endsWith('.ac.za') ||
+    domain.endsWith('.edu.sg') ||
+    domain.includes('.edu.') ||
+    domain.includes('.ac.')
+  );
+}
+
+

@@ -72,27 +72,36 @@ export function logAdminAction(params: {
 export function getDailyReport(dateStr: string) {
   const db = getDb();
 
-  // 1. Fetch all sessions scheduled or created on the selected date
-  const sessions = db.prepare(`
+  // 1. Fetch all sessions scheduled, created, or updated on the selected date (or all dates)
+  const isAll = dateStr === 'ALL';
+  const sessionsQuery = `
     SELECT 
       s.*,
       sk.name as skill_name, sk.category as skill_category,
-      tp.display_name as teacher_name, tp.college as teacher_college,
-      lp.display_name as learner_name, lp.college as learner_college,
+      tp.display_name as teacher_name, tp.college as teacher_college, tp.major as teacher_major,
+      lp.display_name as learner_name, lp.college as learner_college, lp.major as learner_major,
+      tu.email as teacher_email, lu.email as learner_email,
+      us.verification_status as mentor_verification_status,
       sea.status as agreement_status, sea.return_type as agreement_return_type, sea.requested_return_skill_name,
       d.id as dispute_id, d.reason as dispute_reason, d.status as dispute_status
     FROM sessions s
     JOIN skills sk ON s.skill_id = sk.id
     JOIN profiles tp ON s.teacher_id = tp.user_id
     JOIN profiles lp ON s.learner_id = lp.user_id
+    LEFT JOIN users tu ON s.teacher_id = tu.id
+    LEFT JOIN users lu ON s.learner_id = lu.id
+    LEFT JOIN user_skills us ON (s.teacher_id = us.user_id AND s.skill_id = us.skill_id)
     LEFT JOIN session_exchange_agreements sea ON s.id = sea.session_id
     LEFT JOIN disputes d ON s.id = d.session_id
-    WHERE DATE(s.scheduled_start) = DATE(?) OR DATE(s.created_at) = DATE(?)
-    ORDER BY s.scheduled_start ASC
-  `).all(dateStr, dateStr) as any[];
+    ${isAll ? '' : 'WHERE DATE(s.scheduled_start) = DATE(?) OR DATE(s.created_at) = DATE(?) OR DATE(s.updated_at) = DATE(?)'}
+    ORDER BY s.scheduled_start DESC, s.created_at DESC
+  `;
+  const sessions = isAll
+    ? (db.prepare(sessionsQuery).all() as any[])
+    : (db.prepare(sessionsQuery).all(dateStr, dateStr, dateStr) as any[]);
 
-  // 2. Fetch all credit transactions on this date
-  const creditTxs = db.prepare(`
+  // 2. Fetch all credit transactions on this date (or all dates)
+  const creditTxsQuery = `
     SELECT 
       ctx.*,
       sp.display_name as sender_name,
@@ -100,9 +109,12 @@ export function getDailyReport(dateStr: string) {
     FROM credit_transactions ctx
     LEFT JOIN profiles sp ON ctx.sender_id = sp.user_id
     LEFT JOIN profiles rp ON ctx.receiver_id = rp.user_id
-    WHERE DATE(ctx.created_at) = DATE(?)
+    ${isAll ? '' : 'WHERE DATE(ctx.created_at) = DATE(?)'}
     ORDER BY ctx.created_at DESC
-  `).all(dateStr) as any[];
+  `;
+  const creditTxs = isAll
+    ? (db.prepare(creditTxsQuery).all() as any[])
+    : (db.prepare(creditTxsQuery).all(dateStr) as any[]);
 
   // 3. Compute Session Metrics
   let totalScheduled = 0;
@@ -198,9 +210,83 @@ export function getDailyReport(dateStr: string) {
     LIMIT 50
   `).all() as any[];
 
+  // 7. Compute Platform-Wide Lifetime Totals across All Time
+  const allTimeStatsRaw = db.prepare(`
+    SELECT 
+      COUNT(*) as total_lifetime_sessions,
+      SUM(CASE WHEN status IN ('ACCEPTED', 'SCHEDULED', 'IN_PROGRESS', 'PENDING_CONFIRMATION') THEN 1 ELSE 0 END) as active_sessions,
+      SUM(CASE WHEN status IN ('COMPLETED', 'CREDIT_SETTLED') THEN 1 ELSE 0 END) as completed_sessions,
+      SUM(CASE WHEN status = 'CANCELLED' THEN 1 ELSE 0 END) as cancelled_sessions,
+      SUM(CASE WHEN status = 'DISPUTED' THEN 1 ELSE 0 END) as disputed_sessions
+    FROM sessions
+  `).get() as any;
+
+  const totalEscrowLocked = (db.prepare(`
+    SELECT COALESCE(SUM(escrow_balance), 0) as total FROM skill_credit_accounts
+  `).get() as any).total;
+
+  const totalUsersCount = (db.prepare(`
+    SELECT COUNT(*) as count FROM users
+  `).get() as any).count;
+
+  // 8. Fetch Chronological Day Timeline Events ("What happened first, then what happened next")
+  const dayTimelineEventsQuery = `
+    SELECT 
+      se.*,
+      ap.display_name as actor_name,
+      s.title as session_title,
+      s.credits_amount,
+      sk.name as skill_name,
+      tp.display_name as teacher_name, tp.college as teacher_college,
+      lp.display_name as learner_name, lp.college as learner_college,
+      us.verification_status as mentor_verification_status,
+      sea.return_type as agreement_return_type,
+      sea.requested_return_skill_name,
+      sea.status as agreement_status
+    FROM session_events se
+    JOIN sessions s ON se.session_id = s.id
+    LEFT JOIN skills sk ON s.skill_id = sk.id
+    LEFT JOIN profiles ap ON se.actor_id = ap.user_id
+    LEFT JOIN profiles tp ON s.teacher_id = tp.user_id
+    LEFT JOIN profiles lp ON s.learner_id = lp.user_id
+    LEFT JOIN user_skills us ON (s.teacher_id = us.user_id AND s.skill_id = us.skill_id)
+    LEFT JOIN session_exchange_agreements sea ON s.id = sea.session_id
+    ${isAll ? '' : 'WHERE DATE(se.created_at) = DATE(?)'}
+    ORDER BY se.created_at ASC
+  `;
+  const dayTimelineEvents = isAll
+    ? (db.prepare(dayTimelineEventsQuery).all() as any[])
+    : (db.prepare(dayTimelineEventsQuery).all(dateStr) as any[]);
+
+  // 9. Group Day-Wise Metrics for Lifetime View
+  const lifetimeDayWiseMetrics = db.prepare(`
+    SELECT 
+      DATE(created_at) as session_date,
+      COUNT(*) as total_sessions,
+      SUM(CASE WHEN status IN ('COMPLETED', 'CREDIT_SETTLED') THEN 1 ELSE 0 END) as completed_sessions,
+      SUM(CASE WHEN status = 'CANCELLED' THEN 1 ELSE 0 END) as cancelled_sessions,
+      SUM(CASE WHEN status = 'DISPUTED' THEN 1 ELSE 0 END) as disputed_sessions,
+      SUM(CASE WHEN status = 'IN_PROGRESS' THEN 1 ELSE 0 END) as in_progress_sessions,
+      SUM(credits_amount) as total_credits_volume
+    FROM sessions
+    GROUP BY DATE(created_at)
+    ORDER BY session_date DESC
+    LIMIT 30
+  `).all() as any[];
+
   return {
     reportDate: dateStr,
+    isLifetime: isAll,
     generatedAt: new Date().toISOString(),
+    platformLifetimeStats: {
+      totalLifetimeSessions: allTimeStatsRaw?.total_lifetime_sessions || 0,
+      activeSessions: allTimeStatsRaw?.active_sessions || 0,
+      completedSessions: allTimeStatsRaw?.completed_sessions || 0,
+      cancelledSessions: allTimeStatsRaw?.cancelled_sessions || 0,
+      disputedSessions: allTimeStatsRaw?.disputed_sessions || 0,
+      totalEscrowLocked,
+      totalUsersCount,
+    },
     overview: {
       totalSessions: totalScheduled,
       completedSessions: totalCompleted,
@@ -237,10 +323,108 @@ export function getDailyReport(dateStr: string) {
       creditsDisputed,
       transactionCount: creditTxs.length,
     },
-    sessions: enrichedSessions,
+    dayTimelineEvents,
+    lifetimeDayWiseMetrics,
+    sessions: isAll ? [] : enrichedSessions, // In Lifetime view, return metrics only; return detailed sessions when a day is selected!
     creditTransactions: creditTxs,
     learningRequests,
     notificationDeliveries,
+  };
+}
+
+/**
+ * Get Comprehensive Sessions List with Server-Side Search, Status Filter & Pagination
+ */
+export function getSessionsListReport(params: {
+  search?: string;
+  status?: string;
+  date?: string;
+  settlement?: string;
+  page?: number;
+  limit?: number;
+}) {
+  const db = getDb();
+  const page = Math.max(1, params.page || 1);
+  const limit = Math.min(100, Math.max(5, params.limit || 20));
+  const offset = (page - 1) * limit;
+
+  let whereClauses: string[] = [];
+  let queryParams: any[] = [];
+
+  if (params.search && params.search.trim()) {
+    const term = `%${params.search.trim().toLowerCase()}%`;
+    whereClauses.push(`(
+      LOWER(sk.name) LIKE ? OR
+      LOWER(tp.display_name) LIKE ? OR
+      LOWER(lp.display_name) LIKE ? OR
+      LOWER(tu.email) LIKE ? OR
+      LOWER(lu.email) LIKE ? OR
+      s.id LIKE ?
+    )`);
+    queryParams.push(term, term, term, term, term, term);
+  }
+
+  if (params.status && params.status !== 'ALL') {
+    whereClauses.push(`s.status = ?`);
+    queryParams.push(params.status);
+  }
+
+  if (params.date && params.date !== 'ALL') {
+    whereClauses.push(`(DATE(s.scheduled_start) = DATE(?) OR DATE(s.created_at) = DATE(?))`);
+    queryParams.push(params.date, params.date);
+  }
+
+  const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+
+  const totalCount = (db.prepare(`
+    SELECT COUNT(*) as count
+    FROM sessions s
+    JOIN skills sk ON s.skill_id = sk.id
+    JOIN profiles tp ON s.teacher_id = tp.user_id
+    JOIN profiles lp ON s.learner_id = lp.user_id
+    JOIN users tu ON s.teacher_id = tu.id
+    JOIN users lu ON s.learner_id = lu.id
+    ${whereSql}
+  `).get(...queryParams) as any).count;
+
+  const rawSessions = db.prepare(`
+    SELECT 
+      s.*,
+      sk.name as skill_name, sk.category as skill_category, sk.icon as skill_icon,
+      tp.display_name as teacher_name, tp.college as teacher_college, tp.avatar as teacher_avatar, tu.email as teacher_email,
+      lp.display_name as learner_name, lp.college as learner_college, lp.avatar as learner_avatar, lu.email as learner_email,
+      sea.status as agreement_status, sea.return_type as agreement_return_type, sea.requested_return_skill_name, sea.credit_amount as agreement_credit_amount, sea.proposed_by as agreement_proposed_by, sea.accepted_by as agreement_accepted_by, sea.accepted_at as agreement_accepted_at,
+      d.id as dispute_id, d.reason as dispute_reason, d.status as dispute_status
+    FROM sessions s
+    JOIN skills sk ON s.skill_id = sk.id
+    JOIN profiles tp ON s.teacher_id = tp.user_id
+    JOIN profiles lp ON s.learner_id = lp.user_id
+    JOIN users tu ON s.teacher_id = tu.id
+    JOIN users lu ON s.learner_id = lu.id
+    LEFT JOIN session_exchange_agreements sea ON s.id = sea.session_id
+    LEFT JOIN disputes d ON s.id = d.session_id
+    ${whereSql}
+    ORDER BY s.scheduled_start DESC, s.created_at DESC
+    LIMIT ? OFFSET ?
+  `).all(...queryParams, limit, offset) as any[];
+
+  const sessions = rawSessions.map(sess => {
+    const settlement = classifySettlement(sess, { status: sess.agreement_status, return_type: sess.agreement_return_type }, null, { status: sess.dispute_status });
+    return {
+      ...sess,
+      settlement_classification: settlement,
+    };
+  });
+
+  return {
+    sessions,
+    pagination: {
+      total: totalCount,
+      page,
+      limit,
+      totalPages: Math.ceil(totalCount / limit),
+      hasMore: offset + sessions.length < totalCount,
+    }
   };
 }
 
@@ -646,27 +830,41 @@ export function getSessionDetailReport(sessionId: string) {
     SELECT 
       s.*,
       sk.name as skill_name, sk.category as skill_category, sk.description as skill_description,
-      tp.user_id as teacher_user_id, tp.display_name as teacher_name, tp.college as teacher_college, tp.avatar as teacher_avatar, tp.is_verified_student as teacher_verified,
-      lp.user_id as learner_user_id, lp.display_name as learner_name, lp.college as learner_college, lp.avatar as learner_avatar, lp.is_verified_student as learner_verified
+      tp.user_id as teacher_user_id, tp.display_name as teacher_name, tp.college as teacher_college, tp.major as teacher_major, tp.avatar as teacher_avatar, tp.is_verified_student as teacher_verified,
+      lp.user_id as learner_user_id, lp.display_name as learner_name, lp.college as learner_college, lp.major as learner_major, lp.avatar as learner_avatar, lp.is_verified_student as learner_verified,
+      tu.email as teacher_email, lu.email as learner_email,
+      us.verification_status as mentor_verification_status
     FROM sessions s
     JOIN skills sk ON s.skill_id = sk.id
     JOIN profiles tp ON s.teacher_id = tp.user_id
     JOIN profiles lp ON s.learner_id = lp.user_id
+    LEFT JOIN users tu ON s.teacher_id = tu.id
+    LEFT JOIN users lu ON s.learner_id = lu.id
+    LEFT JOIN user_skills us ON (s.teacher_id = us.user_id AND s.skill_id = us.skill_id)
     WHERE s.id = ?
   `).get(sessionId) as any;
 
   if (!session) return null;
 
   const participants = db.prepare(`
-    SELECT sp.*, p.display_name, p.college, p.avatar, p.is_verified_student
+    SELECT sp.*, p.display_name, p.college, p.major, p.avatar, p.is_verified_student, u.email
     FROM session_participants sp
     JOIN profiles p ON sp.user_id = p.user_id
+    LEFT JOIN users u ON sp.user_id = u.id
     WHERE sp.session_id = ?
   `).all(sessionId) as any[];
 
   const agreement = db.prepare(`
     SELECT * FROM session_exchange_agreements WHERE session_id = ?
   `).get(sessionId) as any;
+
+  const sessionEvents = db.prepare(`
+    SELECT se.*, p.display_name as actor_name
+    FROM session_events se
+    LEFT JOIN profiles p ON se.actor_id = p.user_id
+    WHERE se.session_id = ?
+    ORDER BY se.created_at ASC
+  `).all(sessionId) as any[];
 
   const creditTransactions = db.prepare(`
     SELECT ctx.*, sp.display_name as sender_name, rp.display_name as receiver_name
@@ -718,6 +916,7 @@ export function getSessionDetailReport(sessionId: string) {
     session,
     participants,
     agreement: agreement || null,
+    sessionEvents,
     creditTransactions,
     dispute: dispute || null,
     blockchainTx: blockchainTx || null,

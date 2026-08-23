@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { requireAuth } from '@/lib/auth';
 import { BookSessionSchema } from '@/lib/validations';
-import { reserveEscrowCredits } from '@/lib/state-machine';
+import { reserveEscrowCredits, recordSessionEvent } from '@/lib/state-machine';
 import { checkSlotHardConstraints } from '@/lib/scheduling';
+import { NotificationService } from '@/lib/notifications';
 
 export async function GET(req: NextRequest) {
   const authRes = requireAuth(req);
@@ -11,10 +12,153 @@ export async function GET(req: NextRequest) {
 
   const { user } = authRes;
   const db = getDb();
+  const { searchParams } = new URL(req.url);
+
+  const search = (searchParams.get('search') || searchParams.get('q') || '').trim();
+  const status = searchParams.get('status') || 'ALL';
+  const skill = searchParams.get('skill') || 'ALL';
+  const role = searchParams.get('role') || 'ALL'; // ALL, TEACHING, LEARNING
+  const mode = searchParams.get('mode') || 'ALL'; // ALL, ONLINE, CAMPUS_IN_PERSON
+  const creditStatus = searchParams.get('creditStatus') || 'ALL'; // ALL, RESERVED, SETTLED, REFUNDED
+  const dateFilter = searchParams.get('dateFilter') || 'ALL';
+  const dateFrom = searchParams.get('dateFrom') || '';
+  const dateTo = searchParams.get('dateTo') || '';
+  const timeStart = searchParams.get('timeStart') || '';
+  const timeEnd = searchParams.get('timeEnd') || '';
+  const sort = searchParams.get('sort') || 'UPCOMING_FIRST';
+  const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
+  const limit = Math.min(50, Math.max(1, parseInt(searchParams.get('limit') || '15', 10)));
+  const offset = (page - 1) * limit;
 
   try {
-    // Fetch sessions where user is teacher OR learner with resilient LEFT JOINs
-    const sessions = db.prepare(`
+    let whereClauses: string[] = ['(s.teacher_id = ? OR s.learner_id = ?)'];
+    let queryParams: any[] = [user.userId, user.userId];
+
+    // Role filter
+    if (role === 'TEACHING') {
+      whereClauses = ['s.teacher_id = ?'];
+      queryParams = [user.userId];
+    } else if (role === 'LEARNING') {
+      whereClauses = ['s.learner_id = ?'];
+      queryParams = [user.userId];
+    }
+
+    // Status filter
+    if (status !== 'ALL') {
+      if (status === 'ACTIVE' || status === 'UPCOMING') {
+        whereClauses.push("s.status IN ('REQUESTED', 'ACCEPTED', 'SCHEDULED', 'IN_PROGRESS')");
+      } else if (status === 'COMPLETED') {
+        whereClauses.push("s.status IN ('COMPLETED', 'CREDIT_SETTLED')");
+      } else {
+        whereClauses.push('s.status = ?');
+        queryParams.push(status);
+      }
+    }
+
+    // Skill filter
+    if (skill !== 'ALL') {
+      whereClauses.push('LOWER(sk.name) LIKE LOWER(?)');
+      queryParams.push(`%${skill}%`);
+    }
+
+    // Mode filter
+    if (mode !== 'ALL') {
+      whereClauses.push('s.mode = ?');
+      queryParams.push(mode);
+    }
+
+    // Search query
+    if (search) {
+      whereClauses.push(`(
+        LOWER(sk.name) LIKE LOWER(?) OR
+        LOWER(s.title) LIKE LOWER(?) OR
+        LOWER(tp.display_name) LIKE LOWER(?) OR
+        LOWER(lp.display_name) LIKE LOWER(?) OR
+        LOWER(s.id) LIKE LOWER(?)
+      )`);
+      const sTerm = `%${search}%`;
+      queryParams.push(sTerm, sTerm, sTerm, sTerm, sTerm);
+    }
+
+    // Date Filters
+    const today = new Date().toISOString().substring(0, 10);
+    if (dateFilter === 'TODAY') {
+      whereClauses.push('DATE(s.scheduled_start) = DATE(?)');
+      queryParams.push(today);
+    } else if (dateFilter === 'TOMORROW') {
+      const tomorrow = new Date(Date.now() + 86400000).toISOString().substring(0, 10);
+      whereClauses.push('DATE(s.scheduled_start) = DATE(?)');
+      queryParams.push(tomorrow);
+    } else if (dateFilter === 'THIS_WEEK' || dateFilter === 'NEXT_7_DAYS') {
+      const next7 = new Date(Date.now() + 7 * 86400000).toISOString().substring(0, 10);
+      whereClauses.push('DATE(s.scheduled_start) >= DATE(?) AND DATE(s.scheduled_start) <= DATE(?)');
+      queryParams.push(today, next7);
+    } else if (dateFilter === 'THIS_MONTH') {
+      const monthPrefix = today.substring(0, 7);
+      whereClauses.push("strftime('%Y-%m', s.scheduled_start) = ?");
+      queryParams.push(monthPrefix);
+    } else if (dateFilter === 'CUSTOM') {
+      if (dateFrom) {
+        whereClauses.push('DATE(s.scheduled_start) >= DATE(?)');
+        queryParams.push(dateFrom);
+      }
+      if (dateTo) {
+        whereClauses.push('DATE(s.scheduled_start) <= DATE(?)');
+        queryParams.push(dateTo);
+      }
+    }
+
+    // Time Filters (HH:MM)
+    if (timeStart) {
+      whereClauses.push("strftime('%H:%M', s.scheduled_start) >= ?");
+      queryParams.push(timeStart);
+    }
+    if (timeEnd) {
+      whereClauses.push("strftime('%H:%M', s.scheduled_start) <= ?");
+      queryParams.push(timeEnd);
+    }
+
+    const whereSql = `WHERE ${whereClauses.join(' AND ')}`;
+
+    // Order By
+    let orderBySql = 's.scheduled_start DESC';
+    if (sort === 'UPCOMING_FIRST') {
+      orderBySql = `
+        CASE 
+          WHEN s.status IN ('SCHEDULED', 'ACCEPTED', 'REQUESTED', 'IN_PROGRESS') THEN 0
+          ELSE 1
+        END ASC,
+        s.scheduled_start ASC
+      `;
+    } else if (sort === 'NEWEST_FIRST') {
+      orderBySql = 's.created_at DESC';
+    } else if (sort === 'OLDEST_FIRST') {
+      orderBySql = 's.created_at ASC';
+    } else if (sort === 'RECENTLY_UPDATED') {
+      orderBySql = 's.updated_at DESC';
+    } else if (sort === 'RECENTLY_COMPLETED') {
+      orderBySql = `
+        CASE 
+          WHEN s.status IN ('COMPLETED', 'CREDIT_SETTLED') THEN 0
+          ELSE 1
+        END ASC,
+        s.updated_at DESC
+      `;
+    }
+
+    // 1. Fetch Total Count for Pagination
+    const countQuery = `
+      SELECT COUNT(*) as total
+      FROM sessions s
+      LEFT JOIN skills sk ON s.skill_id = sk.id
+      LEFT JOIN profiles tp ON s.teacher_id = tp.user_id
+      LEFT JOIN profiles lp ON s.learner_id = lp.user_id
+      ${whereSql}
+    `;
+    const total = (db.prepare(countQuery).get(...queryParams) as any).total;
+
+    // 2. Fetch Sessions List
+    const selectQuery = `
       SELECT 
         s.*,
         sk.name as skill_name, sk.category as skill_category, sk.icon as skill_icon,
@@ -33,11 +177,48 @@ export async function GET(req: NextRequest) {
       LEFT JOIN profiles lp ON s.learner_id = lp.user_id
       LEFT JOIN session_exchange_agreements sea ON s.id = sea.session_id
       LEFT JOIN ratings r ON s.id = r.session_id AND r.rater_id = ?
-      WHERE s.teacher_id = ? OR s.learner_id = ?
-      ORDER BY s.scheduled_start DESC
-    `).all(user.userId, user.userId, user.userId);
+      ${whereSql}
+      ORDER BY ${orderBySql}
+      LIMIT ? OFFSET ?
+    `;
+    const sessions = db.prepare(selectQuery).all(user.userId, ...queryParams, limit, offset);
 
-    return NextResponse.json({ sessions });
+    // 3. Compute Real Persisted Summary Counters for User
+    const userSummary = db.prepare(`
+      SELECT 
+        COUNT(*) as total_sessions,
+        SUM(CASE WHEN status IN ('SCHEDULED', 'ACCEPTED', 'IN_PROGRESS') THEN 1 ELSE 0 END) as upcoming_sessions,
+        SUM(CASE WHEN status = 'REQUESTED' THEN 1 ELSE 0 END) as pending_requests,
+        SUM(CASE WHEN status = 'ACCEPTED' THEN 1 ELSE 0 END) as accepted_sessions,
+        SUM(CASE WHEN status IN ('COMPLETED', 'CREDIT_SETTLED') THEN 1 ELSE 0 END) as completed_sessions,
+        SUM(CASE WHEN status = 'CANCELLED' THEN 1 ELSE 0 END) as cancelled_sessions,
+        SUM(CASE WHEN status = 'DISPUTED' THEN 1 ELSE 0 END) as disputed_sessions,
+        SUM(CASE WHEN teacher_id = ? AND status IN ('COMPLETED', 'CREDIT_SETTLED') THEN credits_amount ELSE 0 END) as credits_earned,
+        SUM(CASE WHEN learner_id = ? AND status IN ('COMPLETED', 'CREDIT_SETTLED') THEN credits_amount ELSE 0 END) as credits_spent
+      FROM sessions
+      WHERE teacher_id = ? OR learner_id = ?
+    `).get(user.userId, user.userId, user.userId, user.userId) as any;
+
+    return NextResponse.json({
+      sessions,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+      stats: {
+        totalSessions: userSummary?.total_sessions || 0,
+        upcomingSessions: userSummary?.upcoming_sessions || 0,
+        pendingRequests: userSummary?.pending_requests || 0,
+        acceptedSessions: userSummary?.accepted_sessions || 0,
+        completedSessions: userSummary?.completed_sessions || 0,
+        cancelledSessions: userSummary?.cancelled_sessions || 0,
+        disputedSessions: userSummary?.disputed_sessions || 0,
+        creditsEarned: userSummary?.credits_earned || 0,
+        creditsSpent: userSummary?.credits_spent || 0,
+      },
+    });
   } catch (err: any) {
     console.error('Fetch Sessions Error:', err);
     return NextResponse.json({ error: 'Failed to retrieve sessions', details: err.message }, { status: 500 });
@@ -146,15 +327,27 @@ export async function POST(req: NextRequest) {
         throw new Error(`INSUFFICIENT_CREDITS:${escrowRes.message}`);
       }
 
-      // 4. Notify Teacher
-      db.prepare(`
-        INSERT INTO notifications (id, user_id, title, message, type, link)
-        VALUES (?, ?, 'New Session Request!', ?, 'SESSION_REQUEST', '/sessions')
-      `).run(
-        `notif-${Date.now()}`,
-        teacherId,
-        `A student requested a ${durationHours}h session for your skill: "${title}"`
+      // 4. Record Initial Lifecycle Audit Event
+      recordSessionEvent(
+        sessionId,
+        user.userId,
+        'REQUESTED',
+        'Session Requested',
+        `Learner requested a ${durationHours}h ${mode} session with 1 credit reserved in escrow.`,
+        undefined,
+        'REQUESTED'
       );
+
+      // 5. Notify Teacher
+      NotificationService.send(db, {
+        userId: teacherId,
+        type: 'SESSION_REQUESTED',
+        title: 'New Session Request',
+        message: `${user.email} requested a ${durationHours} hour skill session for ${title}`,
+        relatedEntityType: 'SESSION',
+        relatedEntityId: sessionId,
+        actionUrl: `/sessions/${sessionId}`,
+      });
     });
 
     try {
@@ -167,25 +360,16 @@ export async function POST(req: NextRequest) {
     }
 
     if (conflictResult.hasConflict) {
-      return NextResponse.json({
-        error: conflictResult.reason || 'Scheduling conflict: that slot is unavailable.',
-        code: 'SLOT_CONFLICT',
+      return NextResponse.json({ 
+        error: conflictResult.reason || 'Selected time slot is unavailable',
         nextAvailableSlot: conflictResult.nextAvailableSlot,
       }, { status: 409 });
     }
 
-    return NextResponse.json({
-      success: true,
-      message: 'Session requested! 1 Skill Credit held in escrow until completion.',
-      session: {
-        id: sessionId,
-        status: 'REQUESTED',
-        creditsAmount,
-        meetingUrl: `https://meet.skillswap.internal/room/${sessionId}`,
-      }
-    }, { status: 201 });
+    const createdSession = db.prepare(`SELECT * FROM sessions WHERE id = ?`).get(sessionId);
+    return NextResponse.json({ session: createdSession }, { status: 201 });
   } catch (err: any) {
     console.error('Book Session Error:', err);
-    return NextResponse.json({ error: 'Failed to create session request', details: err.message }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to book session', details: err.message }, { status: 500 });
   }
 }

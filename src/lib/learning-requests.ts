@@ -319,13 +319,18 @@ export function evaluateActiveLearningRequests(
       NotificationService.send(db, {
         userId: req.learner_id,
         requestId: req.id,
-        type: 'MENTOR_FOUND',
+        type: 'MENTOR_AVAILABLE',
         title: `🎉 Mentor Found for ${req.skill_name}!`,
         message: `${bestMatch.display_name} is now available to teach ${req.skill_name} (${bestMatch.proficiency}) during your preferred time.${isOutside ? ' (Partner College Mentor)' : ''}`,
+        relatedEntityType: 'LEARNER_REQUEST',
+        relatedEntityId: bestMatch.user_id,
         mentorName: bestMatch.display_name,
         skillName: req.skill_name,
+        mentorVerification: bestMatch.verification_status?.replace('_', ' ') || 'Verified Mentor',
         availabilityWindow: `${bestMatch.available_start_time} – ${bestMatch.available_end_time}`,
-        link: `/profile?tab=requests`,
+        matchScore: bestScore,
+        link: `/learner-requests/${req.id}/confirm-match?mentorId=${bestMatch.user_id}`,
+        actionUrl: `/learner-requests/${req.id}/confirm-match?mentorId=${bestMatch.user_id}`,
       });
 
       matchedCount++;

@@ -151,7 +151,7 @@ export default function AdminSessionReportPage() {
           {/* Participants Breakdown */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             
-            {/* Participant 1: Trainer */}
+            {/* Participant 1: Mentor / Trainer */}
             <div className="glass-panel p-5 rounded-3xl border border-brand-500/30 bg-brand-500/5 space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-brand-400 uppercase tracking-wider">Teaching Mentor (Trainer)</span>
@@ -165,7 +165,14 @@ export default function AdminSessionReportPage() {
               <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 space-y-2 text-xs">
                 <div className="flex items-center justify-between">
                   <span className="text-slate-400">Name:</span>
-                  <strong className="text-white text-sm">{report.session.teacher_name}</strong>
+                  <div className="flex items-center gap-1.5">
+                    <strong className="text-white text-sm">{report.session.teacher_name}</strong>
+                    {report.session.mentor_verification_status === 'PLATFORM_VERIFIED' && (
+                      <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/40">
+                        ✓ Verified Mentor
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-slate-400">User ID:</span>
@@ -173,13 +180,23 @@ export default function AdminSessionReportPage() {
                     {report.session.teacher_id}
                   </Link>
                 </div>
+                {report.session.teacher_email && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400">Email:</span>
+                    <span className="text-slate-300 font-mono">{report.session.teacher_email}</span>
+                  </div>
+                )}
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-400">College:</span>
-                  <span className="text-slate-300">{report.session.teacher_college || 'Engineering'}</span>
+                  <span className="text-slate-400">College &amp; Major:</span>
+                  <span className="text-slate-300">
+                    {report.session.teacher_college || 'Campus'} {report.session.teacher_major ? `• ${report.session.teacher_major}` : ''}
+                  </span>
                 </div>
                 <div className="flex items-center justify-between border-t border-slate-800 pt-1.5">
-                  <span className="text-slate-400">Verified Student:</span>
-                  <span className="text-emerald-400 font-bold">YES ✓</span>
+                  <span className="text-slate-400">Verification Status:</span>
+                  <span className="text-emerald-400 font-bold">
+                    {report.session.mentor_verification_status || 'VERIFIED STUDENT'} ✓
+                  </span>
                 </div>
               </div>
             </div>
@@ -206,9 +223,17 @@ export default function AdminSessionReportPage() {
                     {report.session.learner_id}
                   </Link>
                 </div>
+                {report.session.learner_email && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400">Email:</span>
+                    <span className="text-slate-300 font-mono">{report.session.learner_email}</span>
+                  </div>
+                )}
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-400">College:</span>
-                  <span className="text-slate-300">{report.session.learner_college || 'Sciences'}</span>
+                  <span className="text-slate-400">College &amp; Major:</span>
+                  <span className="text-slate-300">
+                    {report.session.learner_college || 'Campus'} {report.session.learner_major ? `• ${report.session.learner_major}` : ''}
+                  </span>
                 </div>
                 <div className="flex items-center justify-between border-t border-slate-800 pt-1.5">
                   <span className="text-slate-400">Verified Student:</span>
@@ -223,28 +248,38 @@ export default function AdminSessionReportPage() {
           <div className="glass-panel p-5 rounded-3xl border border-slate-800 space-y-4">
             <h3 className="text-sm font-bold text-white flex items-center gap-2">
               <Layers className="w-4 h-4 text-brand-400" />
-              <span>Settlement Classification &amp; Agreement Terms</span>
+              <span>Settlement Classification &amp; Return Exchange Terms</span>
             </h3>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
               <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-2">
-                <span className="text-slate-400 text-[11px] uppercase tracking-wider font-bold">Exchange Classification</span>
+                <span className="text-slate-400 text-[11px] uppercase tracking-wider font-bold">Exchange Terms</span>
                 <div className="text-base font-extrabold text-cyan-300">{report.settlementClassification}</div>
-                <p className="text-slate-400 text-[11px]">
-                  {report.agreement ? `Pre-session return requested: "${report.agreement.requested_return_skill_name}" (Return Type: ${report.agreement.return_type}, Status: ${report.agreement.status})` : 'Standard platform peer mentorship.'}
-                </p>
+                {report.agreement?.return_type === 'SKILL' ? (
+                  <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs space-y-1">
+                    <strong className="block font-bold">🔄 Direct Skill Return Agreement:</strong>
+                    <div>Skill: <span className="font-bold">{report.agreement.requested_return_skill_name}</span></div>
+                    <div>Agreement Status: <span className="font-bold">{report.agreement.status}</span></div>
+                  </div>
+                ) : (
+                  <div className="p-2.5 rounded-xl bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 text-xs space-y-1">
+                    <strong className="block font-bold">🪙 Credit-Based Exchange:</strong>
+                    <div>Rate: <span className="font-bold">{report.session.credits_amount || 1} Skill Credit</span></div>
+                    <div>Status: <span className="font-bold">{report.session.status === 'CREDIT_SETTLED' ? 'Settled to Mentor' : 'Held in Escrow'}</span></div>
+                  </div>
+                )}
               </div>
 
               <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-2">
                 <span className="text-slate-400 text-[11px] uppercase tracking-wider font-bold">Credit Ledger Record</span>
                 {report.creditTransactions.length > 0 ? (
                   report.creditTransactions.map((ctx: any) => (
-                    <div key={ctx.id} className="space-y-1">
+                    <div key={ctx.id} className="space-y-1 p-2 rounded-xl bg-slate-950/60 border border-slate-800">
                       <div className="font-bold text-brand-400">
                         {ctx.sender_name || 'Escrow'} → {ctx.receiver_name || 'Escrow'} ({ctx.amount} Credit)
                       </div>
                       <div className="text-[11px] text-slate-400">
-                        Tx ID: <code className="text-slate-300 font-mono">{ctx.id}</code> ({ctx.transaction_type})
+                        Tx ID: <code className="text-slate-300 font-mono">{ctx.id}</code> ({ctx.transaction_type} • {ctx.status})
                       </div>
                     </div>
                   ))
@@ -253,6 +288,75 @@ export default function AdminSessionReportPage() {
                 )}
               </div>
             </div>
+          </div>
+
+          {/* Chronological Step-by-Step Session Event Sequence ("What happened first, then what happened next") */}
+          <div className="glass-panel p-6 rounded-3xl border border-slate-800 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <Clock className="w-4 h-4 text-brand-400" />
+                <h3 className="text-sm font-extrabold text-white">
+                  Chronological Session Lifecycle: What Happened First &rarr; Next
+                </h3>
+              </div>
+              <span className="text-xs text-slate-400 font-mono">
+                {report.sessionEvents?.length || 0} Chronological Events Logged
+              </span>
+            </div>
+
+            {(!report.sessionEvents || report.sessionEvents.length === 0) ? (
+              <div className="py-8 text-center text-xs text-slate-400">No session events logged.</div>
+            ) : (
+              <div className="space-y-3 relative before:absolute before:left-[17px] before:top-3 before:bottom-3 before:w-0.5 before:bg-slate-800">
+                {report.sessionEvents.map((evt: any, idx: number) => {
+                  const timeStr = new Date(evt.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                  return (
+                    <div key={evt.id || idx} className="relative flex items-start gap-4 pl-1 group">
+                      <div className="w-8 h-8 rounded-full bg-slate-900 border-2 border-brand-500/60 text-brand-300 font-extrabold text-xs flex items-center justify-center shrink-0 z-10">
+                        {idx + 1}
+                      </div>
+
+                      <div className="flex-1 p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-1.5">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className={`text-[10px] px-2.5 py-0.5 rounded font-extrabold border ${
+                              evt.event_type.includes('COMPLETED') || evt.event_type.includes('SETTLED') ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' :
+                              evt.event_type.includes('STARTED') || evt.event_type.includes('JOINED') ? 'bg-sky-500/20 text-sky-300 border-sky-500/30' :
+                              evt.event_type.includes('ACCEPTED') || evt.event_type.includes('SCHEDULED') ? 'bg-brand-500/20 text-brand-300 border-brand-500/30' :
+                              evt.event_type.includes('CANCELLED') || evt.event_type.includes('DISPUTED') ? 'bg-rose-500/20 text-rose-300 border-rose-500/30' :
+                              'bg-slate-800 text-slate-300 border-slate-700'
+                            }`}>
+                              {evt.event_type}
+                            </span>
+                            <strong className="text-white text-xs font-bold">{evt.title}</strong>
+                          </div>
+
+                          <span className="text-[11px] font-mono text-slate-400 font-bold bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
+                            {timeStr} • {new Date(evt.created_at).toLocaleDateString()}
+                          </span>
+                        </div>
+
+                        <p className="text-xs text-slate-300 leading-relaxed">
+                          {evt.description}
+                        </p>
+
+                        <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-800/80 text-[11px] text-slate-400">
+                          <div>
+                            Actor: <strong className="text-slate-300">{evt.actor_name || evt.actor_id || 'System'}</strong>
+                          </div>
+
+                          {evt.previous_state && evt.new_state && (
+                            <div className="font-mono text-[10px] bg-slate-950 px-2 py-0.5 rounded text-slate-400 border border-slate-800">
+                              State: <span className="text-slate-300">{evt.previous_state}</span> &rarr; <span className="text-emerald-400 font-bold">{evt.new_state}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* Dispute Record (if any) */}

@@ -11,6 +11,7 @@
     "test": "node --test tests/domain.test.js",
     "test:contracts": "node scripts/test-contracts.js",
     "test:security": "node scripts/test-security.js",
+    "test:smtp": "node scripts/test-live-smtp.js",
     "seed": "node scripts/seed.js"
   },
   "dependencies": {

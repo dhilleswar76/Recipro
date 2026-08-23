@@ -42,7 +42,11 @@ export default function AdminDashboardPage() {
 
   // Date selection state (Defaults to today or ALL)
   const todayStr = new Date().toISOString().substring(0, 10);
-  const [selectedDate, setSelectedDate] = useState<string>('ALL');
+  const yesterdayObj = new Date();
+  yesterdayObj.setDate(yesterdayObj.getDate() - 1);
+  const yesterdayStr = yesterdayObj.toISOString().substring(0, 10);
+
+  const [selectedDate, setSelectedDate] = useState<string>(todayStr); // Default to Today for Day-wise data!
   const [dailyReport, setDailyReport] = useState<any | null>(null);
   const [reportLoading, setReportLoading] = useState(true);
 
@@ -322,22 +326,33 @@ export default function AdminDashboardPage() {
           </div>
         </div>
 
-        {/* Date Filter & Mode Selector */}
+        {/* Date Filter & Day-Wise Mode Selector */}
         <div className="flex flex-wrap items-center gap-2">
           
           <button
-            onClick={() => handleDateChange('ALL')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 border ${
-              selectedDate === 'ALL'
+            onClick={() => handleDateChange(todayStr)}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-1.5 ${
+              selectedDate === todayStr
                 ? 'bg-brand-500 text-dark-bg border-brand-400 shadow-glow-brand'
                 : 'bg-slate-900 text-slate-300 border-slate-700 hover:text-white'
             }`}
           >
-            <Globe className="w-3.5 h-3.5" /> All Dates (Lifetime)
+            <Calendar className="w-3.5 h-3.5" /> Today
+          </button>
+
+          <button
+            onClick={() => handleDateChange(yesterdayStr)}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-1.5 ${
+              selectedDate === yesterdayStr
+                ? 'bg-brand-500 text-dark-bg border-brand-400 shadow-glow-brand'
+                : 'bg-slate-900 text-slate-300 border-slate-700 hover:text-white'
+            }`}
+          >
+            Yesterday
           </button>
 
           <div className="flex items-center gap-2 bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5">
-            <Calendar className="w-4 h-4 text-slate-400" />
+            <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Date:</span>
             <input
               type="date"
               value={selectedDate === 'ALL' ? todayStr : selectedDate}
@@ -347,9 +362,20 @@ export default function AdminDashboardPage() {
           </div>
 
           <button
+            onClick={() => handleDateChange('ALL')}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border ${
+              selectedDate === 'ALL'
+                ? 'bg-indigo-600 text-white border-indigo-500 shadow-md shadow-indigo-500/20'
+                : 'bg-slate-900 text-slate-300 border-slate-700 hover:text-white'
+            }`}
+          >
+            <Globe className="w-3.5 h-3.5" /> Lifetime (Metrics Only)
+          </button>
+
+          <button
             onClick={refreshAll}
             disabled={reportLoading || sessionsLoading}
-            className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors"
+            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors"
             title="Refresh live data"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${reportLoading || sessionsLoading ? 'animate-spin' : ''}`} />
@@ -358,7 +384,7 @@ export default function AdminDashboardPage() {
           <a
             href={`/api/admin/reports/export?type=daily&date=${selectedDate}`}
             download
-            className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs border border-slate-700 transition-colors flex items-center gap-1.5"
+            className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs border border-slate-700 transition-colors flex items-center gap-1.5"
             title="Download CSV report"
           >
             <Download className="w-3.5 h-3.5" />
@@ -410,7 +436,7 @@ export default function AdminDashboardPage() {
               : 'text-slate-400 hover:text-white hover:bg-slate-900'
           }`}
         >
-          {selectedDate === 'ALL' ? 'Platform Overview (All-Time)' : `Day Overview (${selectedDate})`}
+          {selectedDate === 'ALL' ? 'Lifetime Metrics (Platform Total)' : `Day-Wise Report (${selectedDate})`}
         </button>
         <button
           onClick={() => {
@@ -454,10 +480,53 @@ export default function AdminDashboardPage() {
       {activeTab === 'OVERVIEW' && (
         <div className="space-y-6">
           
+          {/* Active Mode Notice Banner */}
+          <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              {selectedDate === 'ALL' ? (
+                <Globe className="w-5 h-5 text-indigo-400 shrink-0" />
+              ) : (
+                <Calendar className="w-5 h-5 text-brand-400 shrink-0" />
+              )}
+              <div>
+                <strong className="text-white text-xs block font-bold">
+                  {selectedDate === 'ALL' 
+                    ? 'Platform Lifetime Mode — Displaying High-Level Aggregate Metrics'
+                    : `Day-Wise Mode — Showing Detailed Chronological Events & Sessions for ${selectedDate}`
+                  }
+                </strong>
+                <p className="text-[11px] text-slate-400">
+                  {selectedDate === 'ALL'
+                    ? 'For maximum performance, lifetime records show aggregate platform totals. To inspect granular chronological session events, select a specific date.'
+                    : 'Displaying exact chronological sequence of session lifecycle events ("what happened first, then what happened next") and session details for this date.'
+                  }
+                </p>
+              </div>
+            </div>
+
+            {selectedDate === 'ALL' ? (
+              <button
+                onClick={() => handleDateChange(todayStr)}
+                className="px-3.5 py-1.5 rounded-xl bg-brand-500 hover:bg-brand-400 text-dark-bg font-bold text-xs shrink-0 shadow-glow-brand transition-all"
+              >
+                Inspect Today's Timeline &rarr;
+              </button>
+            ) : (
+              <button
+                onClick={() => handleDateChange('ALL')}
+                className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs shrink-0 border border-slate-700 transition-colors"
+              >
+                Switch to Lifetime Metrics
+              </button>
+            )}
+          </div>
+
           {/* Main Stat Counters Grid */}
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
             <div className="glass-panel p-4 rounded-2xl border border-slate-800 space-y-1">
-              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Report Sessions</span>
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                {selectedDate === 'ALL' ? 'Lifetime Sessions' : 'Day Sessions'}
+              </span>
               <div className="text-2xl font-extrabold text-white">{dailyReport?.overview?.totalSessions ?? 0}</div>
             </div>
 
@@ -495,14 +564,14 @@ export default function AdminDashboardPage() {
           {/* Detailed Two-Col Breakdown: Session Outcomes & Credit Activity */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             
-            {/* Box A: Daily Session Classification */}
+            {/* Box A: Daily / Lifetime Session Classification */}
             <div className="glass-panel p-5 rounded-3xl border border-slate-800 space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-bold text-white flex items-center gap-2">
                   <BookOpen className="w-4 h-4 text-brand-400" />
                   <span>Session Outcome &amp; Settlement Classification</span>
                 </h3>
-                <span className="text-xs text-slate-400">{selectedDate === 'ALL' ? 'All-Time' : selectedDate}</span>
+                <span className="text-xs text-slate-400">{selectedDate === 'ALL' ? 'Lifetime Total' : selectedDate}</span>
               </div>
 
               <div className="space-y-2.5 text-xs">
@@ -573,76 +642,215 @@ export default function AdminDashboardPage() {
 
           </div>
 
-          {/* Quick Sessions Table */}
-          <div className="glass-panel p-5 rounded-3xl border border-slate-800 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-white">Recent Sessions ({dailyReport?.sessions?.length || 0})</h3>
-              <button
-                onClick={() => {
-                  setActiveTab('SESSIONS');
-                  fetchSessions();
-                }}
-                className="text-brand-400 font-semibold text-xs hover:underline flex items-center gap-1"
-              >
-                View Full Platform Sessions Directory <ArrowRight className="w-3 h-3" />
-              </button>
-            </div>
+          {/* ============================================================ */}
+          {/* CASE 1: SPECIFIC DAY SELECTED — CHRONOLOGICAL TIMELINE & DETAILS */}
+          {/* ============================================================ */}
+          {selectedDate !== 'ALL' && (
+            <div className="space-y-6">
+              
+              {/* Chronological Step-by-Step Sequence ("What happened first, then what happened next") */}
+              <div className="glass-panel p-6 rounded-3xl border border-slate-800 space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-brand-400" />
+                    <h3 className="text-sm font-extrabold text-white">
+                      Day Event Timeline: What Happened First &rarr; Next ({selectedDate})
+                    </h3>
+                  </div>
+                  <span className="text-xs text-slate-400 font-mono">
+                    {dailyReport?.dayTimelineEvents?.length || 0} Chronological Events
+                  </span>
+                </div>
 
-            {(!dailyReport?.sessions || dailyReport.sessions.length === 0) ? (
-              <div className="py-12 text-center text-xs text-slate-400">
-                No session activity recorded for this period. Click "All Dates" above to view all campus sessions.
+                {(!dailyReport?.dayTimelineEvents || dailyReport.dayTimelineEvents.length === 0) ? (
+                  <div className="py-8 text-center text-xs text-slate-400">
+                    No session audit events logged for {selectedDate}.
+                  </div>
+                ) : (
+                  <div className="space-y-3 relative before:absolute before:left-[17px] before:top-3 before:bottom-3 before:w-0.5 before:bg-slate-800">
+                    {dailyReport.dayTimelineEvents.map((evt: any, idx: number) => {
+                      const timeStr = new Date(evt.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                      return (
+                        <div key={evt.id || idx} className="relative flex items-start gap-4 pl-1 group">
+                          {/* Step Number Badge */}
+                          <div className="w-8 h-8 rounded-full bg-slate-900 border-2 border-brand-500/60 text-brand-300 font-extrabold text-xs flex items-center justify-center shrink-0 z-10 group-hover:scale-110 transition-transform">
+                            {idx + 1}
+                          </div>
+
+                          {/* Event Card */}
+                          <div className="flex-1 p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 hover:border-slate-700 transition-colors space-y-1.5">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div className="flex items-center gap-2">
+                                <span className={`text-[10px] px-2 py-0.5 rounded font-extrabold border ${
+                                  evt.event_type.includes('COMPLETED') || evt.event_type.includes('SETTLED') ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' :
+                                  evt.event_type.includes('STARTED') || evt.event_type.includes('JOINED') ? 'bg-sky-500/20 text-sky-300 border-sky-500/30' :
+                                  evt.event_type.includes('ACCEPTED') || evt.event_type.includes('SCHEDULED') ? 'bg-brand-500/20 text-brand-300 border-brand-500/30' :
+                                  evt.event_type.includes('CANCELLED') || evt.event_type.includes('DISPUTED') ? 'bg-rose-500/20 text-rose-300 border-rose-500/30' :
+                                  'bg-slate-800 text-slate-300 border-slate-700'
+                                }`}>
+                                  {evt.event_type}
+                                </span>
+                                <strong className="text-white text-xs font-bold">{evt.title}</strong>
+                              </div>
+
+                              <span className="text-[11px] font-mono text-slate-400 font-bold bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
+                                {timeStr}
+                              </span>
+                            </div>
+
+                            <p className="text-xs text-slate-300 leading-relaxed">
+                              {evt.description}
+                            </p>
+
+                            <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-800/80 text-[11px] text-slate-400">
+                              <div>
+                                Session: <span className="font-bold text-slate-300">{evt.skill_name || 'Skill'}</span> ({evt.session_id}) •{' '}
+                                Mentor: <span className="text-brand-300">{evt.teacher_name || 'Mentor'}</span> •{' '}
+                                Learner: <span className="text-indigo-300">{evt.learner_name || 'Learner'}</span>
+                              </div>
+
+                              {evt.previous_state && evt.new_state && (
+                                <div className="font-mono text-[10px] bg-slate-950 px-2 py-0.5 rounded text-slate-400">
+                                  State: <span className="text-slate-300">{evt.previous_state}</span> &rarr; <span className="text-emerald-400 font-bold">{evt.new_state}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead className="text-[11px] text-slate-400 uppercase border-b border-slate-800 bg-slate-900/40">
-                    <tr>
-                      <th className="py-2.5 px-3">Session ID</th>
-                      <th className="py-2.5 px-3">Skill</th>
-                      <th className="py-2.5 px-3">Participants</th>
-                      <th className="py-2.5 px-3">Time</th>
-                      <th className="py-2.5 px-3">Status</th>
-                      <th className="py-2.5 px-3">Settlement</th>
-                      <th className="py-2.5 px-3 text-right">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/60">
-                    {dailyReport.sessions.slice(0, 8).map((sess: any) => (
-                      <tr key={sess.id} className="hover:bg-slate-900/30 transition-colors">
-                        <td className="py-3 px-3 font-mono text-[11px] text-slate-300">{sess.id}</td>
-                        <td className="py-3 px-3 font-bold text-white">{sess.skill_name}</td>
-                        <td className="py-3 px-3 text-slate-300">
-                          <div><strong className="text-brand-400">T:</strong> {sess.teacher_name}</div>
-                          <div><strong className="text-indigo-400">L:</strong> {sess.learner_name}</div>
-                        </td>
-                        <td className="py-3 px-3 text-slate-300">{sess.scheduled_start?.substring(11, 16) || 'Scheduled'}</td>
-                        <td className="py-3 px-3">
-                          <span className={`text-[10px] px-2 py-0.5 rounded font-bold border ${
-                            sess.status === 'CREDIT_SETTLED' || sess.status === 'COMPLETED' ? 'bg-brand-500/20 text-brand-400 border-brand-500/30' :
-                            sess.status === 'IN_PROGRESS' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 animate-pulse' :
-                            sess.status === 'SCHEDULED' ? 'bg-sky-500/20 text-sky-300 border-sky-500/40' :
-                            sess.status === 'DISPUTED' ? 'bg-rose-500/20 text-rose-400 border-rose-500/30' :
-                            'bg-slate-800 text-slate-300 border-slate-700'
-                          }`}>
-                            {sess.status}
-                          </span>
-                        </td>
-                        <td className="py-3 px-3 text-slate-300 font-semibold">{sess.settlement_classification}</td>
-                        <td className="py-3 px-3 text-right">
-                          <Link
-                            href={`/admin/sessions/${sess.id}`}
-                            className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-[11px] border border-slate-700 inline-flex items-center gap-1"
-                          >
-                            Inspect <ChevronRight className="w-3 h-3" />
-                          </Link>
-                        </td>
+
+              {/* Day's Detailed Sessions Table */}
+              <div className="glass-panel p-5 rounded-3xl border border-slate-800 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-white">Day Sessions List ({dailyReport?.sessions?.length || 0})</h3>
+                  <span className="text-xs text-slate-400">Date: {selectedDate}</span>
+                </div>
+
+                {(!dailyReport?.sessions || dailyReport.sessions.length === 0) ? (
+                  <div className="py-8 text-center text-xs text-slate-400">
+                    No sessions recorded on {selectedDate}.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead className="text-[11px] text-slate-400 uppercase border-b border-slate-800 bg-slate-900/40">
+                        <tr>
+                          <th className="py-2.5 px-3">Session ID</th>
+                          <th className="py-2.5 px-3">Skill</th>
+                          <th className="py-2.5 px-3">Participants</th>
+                          <th className="py-2.5 px-3">Time</th>
+                          <th className="py-2.5 px-3">Status</th>
+                          <th className="py-2.5 px-3">Settlement</th>
+                          <th className="py-2.5 px-3 text-right">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/60">
+                        {dailyReport.sessions.map((sess: any) => (
+                          <tr key={sess.id} className="hover:bg-slate-900/30 transition-colors">
+                            <td className="py-3 px-3 font-mono text-[11px] text-slate-300">{sess.id}</td>
+                            <td className="py-3 px-3 font-bold text-white">{sess.skill_name}</td>
+                            <td className="py-3 px-3 text-slate-300">
+                              <div><strong className="text-brand-400">T:</strong> {sess.teacher_name}</div>
+                              <div><strong className="text-indigo-400">L:</strong> {sess.learner_name}</div>
+                            </td>
+                            <td className="py-3 px-3 text-slate-300">{sess.scheduled_start?.substring(11, 16) || 'Scheduled'}</td>
+                            <td className="py-3 px-3">
+                              <span className={`text-[10px] px-2 py-0.5 rounded font-bold border ${
+                                sess.status === 'CREDIT_SETTLED' || sess.status === 'COMPLETED' ? 'bg-brand-500/20 text-brand-400 border-brand-500/30' :
+                                sess.status === 'IN_PROGRESS' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 animate-pulse' :
+                                sess.status === 'SCHEDULED' ? 'bg-sky-500/20 text-sky-300 border-sky-500/40' :
+                                sess.status === 'DISPUTED' ? 'bg-rose-500/20 text-rose-400 border-rose-500/30' :
+                                'bg-slate-800 text-slate-300 border-slate-700'
+                              }`}>
+                                {sess.status}
+                              </span>
+                            </td>
+                            <td className="py-3 px-3 text-slate-300 font-semibold">{sess.settlement_classification}</td>
+                            <td className="py-3 px-3 text-right">
+                              <Link
+                                href={`/admin/sessions/${sess.id}`}
+                                className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-[11px] border border-slate-700 inline-flex items-center gap-1"
+                              >
+                                Inspect <ChevronRight className="w-3 h-3" />
+                              </Link>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+            </div>
+          )}
+
+          {/* ============================================================ */}
+          {/* CASE 2: LIFETIME SELECTED — DAY-WISE METRICS SUMMARY BREAKDOWN */}
+          {/* ============================================================ */}
+          {selectedDate === 'ALL' && (
+            <div className="glass-panel p-5 rounded-3xl border border-slate-800 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <TrendingUp className="w-4 h-4 text-indigo-400" />
+                    <span>Day-Wise Historical Metrics Summary (Past 30 Days)</span>
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Aggregated daily totals. Click "Inspect Day" on any date to view its full chronological event timeline.
+                  </p>
+                </div>
+              </div>
+
+              {(!dailyReport?.lifetimeDayWiseMetrics || dailyReport.lifetimeDayWiseMetrics.length === 0) ? (
+                <div className="py-12 text-center text-xs text-slate-400">
+                  No historical day metrics recorded.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="text-[11px] text-slate-400 uppercase border-b border-slate-800 bg-slate-900/40">
+                      <tr>
+                        <th className="py-2.5 px-3">Date</th>
+                        <th className="py-2.5 px-3">Total Sessions</th>
+                        <th className="py-2.5 px-3">Completed</th>
+                        <th className="py-2.5 px-3">Live In-Progress</th>
+                        <th className="py-2.5 px-3">Cancelled</th>
+                        <th className="py-2.5 px-3">Disputed</th>
+                        <th className="py-2.5 px-3">Credits Volume</th>
+                        <th className="py-2.5 px-3 text-right">Action</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/60">
+                      {dailyReport.lifetimeDayWiseMetrics.map((day: any) => (
+                        <tr key={day.session_date} className="hover:bg-slate-900/30 transition-colors">
+                          <td className="py-3 px-3 font-bold text-white font-mono">{day.session_date}</td>
+                          <td className="py-3 px-3 text-white font-semibold">{day.total_sessions}</td>
+                          <td className="py-3 px-3 text-emerald-300 font-semibold">{day.completed_sessions}</td>
+                          <td className="py-3 px-3 text-sky-300 font-semibold">{day.in_progress_sessions}</td>
+                          <td className="py-3 px-3 text-rose-300 font-semibold">{day.cancelled_sessions}</td>
+                          <td className="py-3 px-3 text-amber-300 font-semibold">{day.disputed_sessions}</td>
+                          <td className="py-3 px-3 text-brand-300 font-bold font-mono">{day.total_credits_volume || 0} Credits</td>
+                          <td className="py-3 px-3 text-right">
+                            <button
+                              onClick={() => handleDateChange(day.session_date)}
+                              className="px-3 py-1 rounded-lg bg-brand-500/20 hover:bg-brand-500/30 text-brand-300 font-bold text-[11px] border border-brand-500/30 inline-flex items-center gap-1"
+                            >
+                              Inspect Day &rarr;
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
 
         </div>
       )}

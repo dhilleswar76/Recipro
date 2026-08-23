@@ -224,8 +224,47 @@ export function getDailyReport(dateStr: string) {
     SELECT COUNT(*) as count FROM users
   `).get() as any).count;
 
+  // 8. Fetch Chronological Day Timeline Events ("What happened first, then what happened next")
+  const dayTimelineEventsQuery = `
+    SELECT 
+      se.*,
+      ap.display_name as actor_name,
+      s.title as session_title,
+      sk.name as skill_name,
+      tp.display_name as teacher_name,
+      lp.display_name as learner_name
+    FROM session_events se
+    JOIN sessions s ON se.session_id = s.id
+    LEFT JOIN skills sk ON s.skill_id = sk.id
+    LEFT JOIN profiles ap ON se.actor_id = ap.user_id
+    LEFT JOIN profiles tp ON s.teacher_id = tp.user_id
+    LEFT JOIN profiles lp ON s.learner_id = lp.user_id
+    ${isAll ? '' : 'WHERE DATE(se.created_at) = DATE(?)'}
+    ORDER BY se.created_at ASC
+  `;
+  const dayTimelineEvents = isAll
+    ? (db.prepare(dayTimelineEventsQuery).all() as any[])
+    : (db.prepare(dayTimelineEventsQuery).all(dateStr) as any[]);
+
+  // 9. Group Day-Wise Metrics for Lifetime View
+  const lifetimeDayWiseMetrics = db.prepare(`
+    SELECT 
+      DATE(created_at) as session_date,
+      COUNT(*) as total_sessions,
+      SUM(CASE WHEN status IN ('COMPLETED', 'CREDIT_SETTLED') THEN 1 ELSE 0 END) as completed_sessions,
+      SUM(CASE WHEN status = 'CANCELLED' THEN 1 ELSE 0 END) as cancelled_sessions,
+      SUM(CASE WHEN status = 'DISPUTED' THEN 1 ELSE 0 END) as disputed_sessions,
+      SUM(CASE WHEN status = 'IN_PROGRESS' THEN 1 ELSE 0 END) as in_progress_sessions,
+      SUM(credits_amount) as total_credits_volume
+    FROM sessions
+    GROUP BY DATE(created_at)
+    ORDER BY session_date DESC
+    LIMIT 30
+  `).all() as any[];
+
   return {
     reportDate: dateStr,
+    isLifetime: isAll,
     generatedAt: new Date().toISOString(),
     platformLifetimeStats: {
       totalLifetimeSessions: allTimeStatsRaw?.total_lifetime_sessions || 0,
@@ -272,7 +311,9 @@ export function getDailyReport(dateStr: string) {
       creditsDisputed,
       transactionCount: creditTxs.length,
     },
-    sessions: enrichedSessions,
+    dayTimelineEvents,
+    lifetimeDayWiseMetrics,
+    sessions: isAll ? [] : enrichedSessions, // In Lifetime view, return metrics only; return detailed sessions when a day is selected!
     creditTransactions: creditTxs,
     learningRequests,
     notificationDeliveries,

@@ -88,7 +88,7 @@ export function RegisterForm({
       }
 
       await refreshUser();
-      router.push('/verify-email');
+      router.push('/onboarding');
     } catch (err: any) {
       setError('A network error occurred. Please try again.');
       setLoading(false);

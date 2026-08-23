@@ -47,13 +47,6 @@ function LoginComponent() {
         if (meRes.ok) {
           const meData = await meRes.json();
           const userRole = meData.user?.role || 'STUDENT';
-          const emailVerified = meData.user?.email_verified;
-
-          // If email is unverified, direct to verification
-          if (emailVerified === false || emailVerified === 0) {
-            router.push('/verify-email');
-            return;
-          }
 
           // Admin redirect if admin
           if (userRole === 'ADMIN') {

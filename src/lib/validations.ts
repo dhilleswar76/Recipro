@@ -181,7 +181,7 @@ export const BookSessionSchema = z.object({
 export const SessionActionSchema = z.object({
   action: z.enum(['ACCEPT', 'REJECT', 'START', 'CONFIRM_COMPLETION', 'CONFIRM', 'CANCEL', 'DISPUTE']),
   reason: z.string().max(500).optional(),
-  idempotencyKey: z.string().min(10),
+  idempotencyKey: z.string().min(10).optional(),
 });
 
 // ==========================================

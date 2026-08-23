@@ -458,11 +458,33 @@ function ExploreComponent() {
 
         {/* Card Footer: Rating & Book Button */}
         <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between gap-2 mt-2">
-          <div className="flex items-center gap-1 text-amber-400 text-xs font-bold">
-            <Star className="w-3.5 h-3.5 fill-amber-400" />
-            <span>{cand?.reputation?.bayesianRating?.toFixed(1) || '4.5'}</span>
-            <span className="text-[10px] text-slate-500 font-normal">({cand?.reputation?.totalSessionsTaught || 0})</span>
-          </div>
+          {cand?.mentorQuality?.qualitySource === 'PROFICIENCY_FIRST_LECTURE' ? (
+            <div className="flex flex-col text-left">
+              <div className="flex items-center gap-1 text-amber-400 text-xs font-bold">
+                <Star className="w-3.5 h-3.5 fill-amber-400" />
+                <span>{cand.mentorQuality.qualityScore.toFixed(1)}</span>
+                <span className="text-[9px] text-brand-400 font-semibold px-1.5 py-0.5 bg-brand-500/10 rounded border border-brand-500/20">
+                  1st Lecture
+                </span>
+              </div>
+              <span className="text-[10px] text-slate-500 font-normal">Based on {cand.mentorQuality.proficiency}</span>
+            </div>
+          ) : (
+            <div className="flex flex-col text-left">
+              <div className="flex items-center gap-1 text-amber-400 text-xs font-bold">
+                <Star className="w-3.5 h-3.5 fill-amber-400" />
+                <span>{cand?.mentorQuality?.qualityScore?.toFixed(1) || cand?.reputation?.bayesianRating?.toFixed(1) || '4.5'}</span>
+                {cand?.mentorQuality?.totalReviews ? (
+                  <span className="text-[9px] text-emerald-400 font-semibold px-1.5 py-0.5 bg-emerald-500/10 rounded border border-emerald-500/20">
+                    Learner Rated
+                  </span>
+                ) : null}
+              </div>
+              <span className="text-[10px] text-slate-500 font-normal">
+                {cand?.mentorQuality?.totalReviews || cand?.reputation?.totalReviews || 0} student review(s)
+              </span>
+            </div>
+          )}
 
           <button
             onClick={() => setBookingCandidate(cand)}
@@ -945,11 +967,33 @@ function ExploreComponent() {
                           </div>
 
                           <div className="text-right">
-                            <div className="flex items-center gap-1 text-amber-400 text-xs font-bold justify-end">
-                              <Star className="w-3.5 h-3.5 fill-amber-400" />
-                              <span>{cand.reputation?.bayesianRating?.toFixed(1) || '4.5'}</span>
-                            </div>
-                            <div className="text-[11px] text-slate-400 mt-0.5">{cand.reputation?.totalSessionsTaught || 0} sessions taught</div>
+                            {cand.mentorQuality?.qualitySource === 'PROFICIENCY_FIRST_LECTURE' ? (
+                              <div className="space-y-0.5">
+                                <div className="flex items-center gap-1 text-amber-400 text-xs font-bold justify-end">
+                                  <Star className="w-3.5 h-3.5 fill-amber-400" />
+                                  <span>{cand.mentorQuality.qualityScore.toFixed(1)}</span>
+                                  <span className="text-[9px] text-brand-400 font-semibold px-1.5 py-0.2 bg-brand-500/10 rounded border border-brand-500/20">
+                                    1st Lecture
+                                  </span>
+                                </div>
+                                <div className="text-[10px] text-slate-400">Based on {cand.mentorQuality.proficiency}</div>
+                              </div>
+                            ) : (
+                              <div className="space-y-0.5">
+                                <div className="flex items-center gap-1 text-amber-400 text-xs font-bold justify-end">
+                                  <Star className="w-3.5 h-3.5 fill-amber-400" />
+                                  <span>{cand.mentorQuality?.qualityScore?.toFixed(1) || cand.reputation?.bayesianRating?.toFixed(1) || '4.5'}</span>
+                                  {cand.mentorQuality?.totalReviews ? (
+                                    <span className="text-[9px] text-emerald-400 font-semibold px-1.5 py-0.2 bg-emerald-500/10 rounded border border-emerald-500/20">
+                                      Learner Rated
+                                    </span>
+                                  ) : null}
+                                </div>
+                                <div className="text-[10px] text-slate-400">
+                                  {cand.mentorQuality?.totalReviews || cand.reputation?.totalSessionsTaught || 0} student review(s)
+                                </div>
+                              </div>
+                            )}
                           </div>
                         </div>
 

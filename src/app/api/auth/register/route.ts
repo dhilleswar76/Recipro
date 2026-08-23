@@ -45,19 +45,19 @@ export async function POST(req: NextRequest) {
     const isAcademic = isAcademicEmail(cleanEmail) ? 1 : 0;
 
     const tx = db.transaction(() => {
-      // 1. Insert User with verification token and academic email flag
+      // 1. Insert User as active and verified
       db.prepare(`
         INSERT INTO users (
           id, email, password_hash, role, status, campus_id, user_type,
           email_verified, verification_token, verification_token_expires, is_academic_email
-        ) VALUES (?, ?, ?, ?, 'ACTIVE', ?, ?, 0, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, 'ACTIVE', ?, ?, 1, ?, ?, ?)
       `).run(userId, cleanEmail, passwordHash, userRole, campusId, userType, verificationToken, tokenExpires, isAcademic);
 
       // 2. Insert Profile with default values
       db.prepare(`
         INSERT INTO profiles (
           id, user_id, display_name, college, major, year, is_verified_student, trust_score, teaching_preference
-        ) VALUES (?, ?, ?, ?, ?, ?, 0, 75.0, 'Anyone')
+        ) VALUES (?, ?, ?, ?, ?, ?, 1, 75.0, 'Anyone')
       `).run(`prof-${userId}`, userId, displayName, college || 'SkillSwap Campus', major || 'General Studies', year || 'Freshman');
 
       // 3. Insert Skill Credit Account with 3 starter credits
@@ -75,24 +75,28 @@ export async function POST(req: NextRequest) {
       // 5. Welcome Notification
       db.prepare(`
         INSERT INTO notifications (id, user_id, title, message, type, link)
-        VALUES (?, ?, 'Welcome to SkillSwap Campus!', 'Please verify your email address to complete your profile setup and start exchanging skills.', 'INFO', '/verify-email')
+        VALUES (?, ?, 'Welcome to SkillSwap Campus!', 'Your account has been created! Complete your profile setup to start exchanging skills.', 'INFO', '/onboarding')
       `).run(`notif-${Date.now()}`, userId);
     });
 
     tx();
 
-    // Automatically dispatch account verification email via configured SMTP / API / Dev provider
+    // Send welcome email in background
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin || 'http://localhost:3000';
-      const verificationUrl = `${baseUrl}/verify-email?token=${verificationToken}`;
-
-      await EmailService.sendVerificationEmail(db, {
+      await EmailService.sendEmail(db, {
         to: cleanEmail,
-        displayName,
-        verificationUrl,
-        token: verificationToken,
-        userId,
-        expiresInHours: 24,
+        subject: 'Welcome to SkillSwap Campus!',
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 24px; border: 1px solid #1e293b; border-radius: 12px; background-color: #0f172a; color: #ffffff;">
+            <h1 style="color: #14b8a6; margin-top: 0;">SkillSwap Campus</h1>
+            <h2 style="color: #ffffff; font-size: 18px;">Welcome, ${displayName}!</h2>
+            <p style="color: #cbd5e1; font-size: 14px; line-height: 1.6;">
+              Your campus skill exchange account is ready. You have received <strong>3 starter skill credits</strong> to begin booking and offering peer sessions.
+            </p>
+          </div>
+        `,
+        category: 'WELCOME',
+        metadata: { userId },
       });
     } catch (mailErr) {
       console.warn('[Register:EMAIL_DISPATCH_WARN]', mailErr);
@@ -107,7 +111,7 @@ export async function POST(req: NextRequest) {
 
     const response = NextResponse.json({
       success: true,
-      message: 'Account created successfully. Please verify your email to continue.',
+      message: 'Account created successfully!',
       user: {
         id: userId,
         email: cleanEmail,
@@ -118,12 +122,12 @@ export async function POST(req: NextRequest) {
         major: major || 'General Studies',
         year: year || 'Freshman',
         balance: 3,
-        emailVerified: false,
+        emailVerified: true,
         isAcademicEmail: Boolean(isAcademic),
       },
       token,
       verificationToken,
-      nextStep: '/verify-email',
+      nextStep: '/onboarding',
     }, { status: 201 });
 
     response.cookies.set('skillswap_token', token, {

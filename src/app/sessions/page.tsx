@@ -25,6 +25,7 @@ import {
   X,
   PlusCircle,
   TrendingUp,
+  Star,
 } from 'lucide-react';
 
 export default function SessionsListPage() {
@@ -512,6 +513,16 @@ export default function SessionsListPage() {
                       >
                         <Video className="w-3.5 h-3.5" />
                         <span>Live Classroom</span>
+                      </Link>
+                    )}
+
+                    {['COMPLETED', 'CREDIT_SETTLED'].includes(sess.status) && !isTeacher && (
+                      <Link
+                        href={`/sessions/${sess.id}`}
+                        className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-dark-bg font-extrabold text-xs shadow-glow-brand transition-all flex items-center gap-1"
+                      >
+                        <Star className="w-3.5 h-3.5 fill-current" />
+                        <span>Rate Mentor</span>
                       </Link>
                     )}
                   </div>

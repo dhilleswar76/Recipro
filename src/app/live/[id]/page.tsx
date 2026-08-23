@@ -30,6 +30,7 @@ import {
   ChevronLeft,
   Maximize2
 } from 'lucide-react';
+import RatingModal from '@/components/RatingModal';
 
 export type ConnectionState = 'CONNECTING' | 'CONNECTED' | 'RECONNECTING' | 'FAILED' | 'ENDED';
 
@@ -83,8 +84,9 @@ function processLearningGoal() {
   const [newMessage, setNewMessage] = useState('');
   const [sendingMessage, setSendingMessage] = useState(false);
 
-  // Leave / Completion Modals
+  // Leave / Completion / Rating Modals
   const [leaveModalOpen, setLeaveModalOpen] = useState(false);
+  const [showRatingModal, setShowRatingModal] = useState(false);
   const [completing, setCompleting] = useState(false);
   const [completionSuccess, setCompletionSuccess] = useState(false);
   const [exchangeData, setExchangeData] = useState<any | null>(null);
@@ -472,9 +474,16 @@ function processLearningGoal() {
         setCompletionSuccess(true);
         logAttendance('LEFT', { reason: 'SESSION_COMPLETED_SETTLED' });
         await refreshUser();
-        setTimeout(() => {
-          router.push('/sessions');
-        }, 2200);
+
+        // If current participant is learner, prompt rating modal immediately
+        const isLearner = participantInfo?.role === 'STUDENT' || exchangeData?.session?.learner_id === user?.id;
+        if (isLearner) {
+          setShowRatingModal(true);
+        } else {
+          setTimeout(() => {
+            router.push(`/sessions/${sessionId}`);
+          }, 1800);
+        }
       } else {
         const data = await res.json();
         alert(data.error || 'Failed to settle session');
@@ -860,6 +869,22 @@ function processLearningGoal() {
           </div>
         </div>
       )}
+
+      {/* Post-Session Rating Modal */}
+      <RatingModal
+        isOpen={showRatingModal}
+        onClose={() => {
+          setShowRatingModal(false);
+          router.push(`/sessions/${sessionId}`);
+        }}
+        sessionId={sessionId}
+        mentorName={exchangeData?.session?.teacher_name || participantInfo?.trainerName || 'Mentor'}
+        mentorAvatar={exchangeData?.session?.teacher_avatar}
+        skillName={exchangeData?.session?.skill_name || participantInfo?.skillName || 'Skill Mentorship'}
+        onRatingSubmitted={() => {
+          router.push(`/sessions/${sessionId}`);
+        }}
+      />
 
     </div>
   );

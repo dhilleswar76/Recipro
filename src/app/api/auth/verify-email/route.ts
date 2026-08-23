@@ -55,9 +55,7 @@ export async function GET(req: NextRequest) {
 }
 
 // POST /api/auth/verify-email
-// Supports:
-// 1. { action: 'INSTANT_VERIFY' } -> Verifies the logged-in user immediately
-// 2. { action: 'RESEND' } or default -> Dispatches a fresh token via SMTP/Resend email service
+// Dispatches a fresh verification token to user's email via SMTP / EmailService
 export async function POST(req: NextRequest) {
   const authRes = requireAuth(req);
   if ('errorResponse' in authRes) return authRes.errorResponse;
@@ -66,32 +64,7 @@ export async function POST(req: NextRequest) {
   const db = getDb();
 
   try {
-    let body: any = {};
-    try {
-      body = await req.json();
-    } catch {
-      body = {};
-    }
-
-    if (body.action === 'INSTANT_VERIFY') {
-      db.prepare(`
-        UPDATE users
-        SET email_verified = 1, verification_token = NULL, verification_token_expires = NULL, updated_at = CURRENT_TIMESTAMP
-        WHERE id = ?
-      `).run(user.userId);
-
-      db.prepare(`
-        INSERT INTO notifications (id, user_id, title, message, type, link)
-        VALUES (?, ?, 'Email Verified Successfully', 'Your email address has been verified. You can now complete your onboarding.', 'INFO', '/onboarding')
-      `).run(`notif-verify-${Date.now()}`, user.userId);
-
-      return NextResponse.json({
-        success: true,
-        message: 'Email verified successfully!',
-      });
-    }
-
-    // Default or RESEND: Generate fresh token & dispatch via EmailService
+    // Generate fresh token & dispatch via EmailService
     const freshToken = crypto.randomBytes(32).toString('hex');
     const tokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 

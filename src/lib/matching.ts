@@ -1,4 +1,5 @@
 import { getDb } from './db';
+import { getMentorQualityForSkill, MentorQualityResult } from './reputation';
 
 export interface MatchingWeights {
   skillCompatibility: number;     // default 0.30
@@ -47,6 +48,7 @@ export interface CandidateResult {
     verificationStatus: string;
     assessmentScore?: number | null;
   };
+  mentorQuality?: MentorQualityResult;
   reputation: {
     bayesianRating: number;
     totalReviews: number;
@@ -180,39 +182,42 @@ export function searchAndMatchCandidates(params: SearchParams, weights: Matching
         campusTier = 'PARTNER_COLLEGE';
       }
 
-      knownPersonMatches.push({
-        userId: pRow.user_id,
-        displayName: pRow.display_name,
-        avatar: pRow.avatar,
-        bio: pRow.bio,
-        college: pRow.college,
-        major: pRow.major,
-        year: pRow.year,
-        userType: pRow.user_type || 'TEACHER_LEARNER',
-        teachingPreference: pRow.teaching_preference || 'Anyone',
-        campusTier,
-        isOutsideCollege: campusTier !== 'OWN_COLLEGE',
-        isVerifiedStudent: Boolean(pRow.is_verified_student),
-        trustScore: pRow.trust_score || 70,
-        completionRate: pRow.completion_rate || 100,
-        hourlyRateCredits: pRow.hourly_rate_credits || 1,
-        teachingStyle: pRow.teaching_style || 'Interactive & Hands-on',
-        languages: pRow.languages || 'English',
-        matchedSkill: {
-          skillId: primarySkill.skill_id,
-          skillName: primarySkill.skill_name,
-          category: primarySkill.skill_category,
-          proficiency: primarySkill.proficiency,
-          experienceYears: primarySkill.experience_years,
-          verificationStatus: primarySkill.verification_status,
-          assessmentScore: primarySkill.assessment_score,
-        },
-        reputation: {
-          bayesianRating: pRow.bayesian_rating || 4.5,
-          totalReviews: pRow.total_reviews || 0,
-          totalSessionsTaught: pRow.total_sessions_taught || 0,
-          reliabilityScore: pRow.reliability_score || 95,
-        },
+        const mentorQuality = getMentorQualityForSkill(pRow.user_id, primarySkill.skill_id);
+
+        knownPersonMatches.push({
+          userId: pRow.user_id,
+          displayName: pRow.display_name,
+          avatar: pRow.avatar,
+          bio: pRow.bio,
+          college: pRow.college,
+          major: pRow.major,
+          year: pRow.year,
+          userType: pRow.user_type || 'TEACHER_LEARNER',
+          teachingPreference: pRow.teaching_preference || 'Anyone',
+          campusTier,
+          isOutsideCollege: campusTier !== 'OWN_COLLEGE',
+          isVerifiedStudent: Boolean(pRow.is_verified_student),
+          trustScore: pRow.trust_score || 70,
+          completionRate: pRow.completion_rate || 100,
+          hourlyRateCredits: pRow.hourly_rate_credits || 1,
+          teachingStyle: pRow.teaching_style || 'Interactive & Hands-on',
+          languages: pRow.languages || 'English',
+          matchedSkill: {
+            skillId: primarySkill.skill_id,
+            skillName: primarySkill.skill_name,
+            category: primarySkill.skill_category,
+            proficiency: primarySkill.proficiency,
+            experienceYears: primarySkill.experience_years,
+            verificationStatus: primarySkill.verification_status,
+            assessmentScore: primarySkill.assessment_score,
+          },
+          mentorQuality,
+          reputation: {
+            bayesianRating: pRow.bayesian_rating || 4.5,
+            totalReviews: pRow.total_reviews || 0,
+            totalSessionsTaught: pRow.total_sessions_taught || 0,
+            reliabilityScore: pRow.reliability_score || 95,
+          },
         availability: userAvail.map((a: any) => ({
           dayOfWeek: a.day_of_week,
           startTime: a.start_time,
@@ -407,6 +412,8 @@ export function searchAndMatchCandidates(params: SearchParams, weights: Matching
       explanationPoints.push(`✓ Classmate at your college (${row.college})`);
     }
 
+    const mentorQuality = getMentorQualityForSkill(row.user_id, row.skill_id);
+
     skillMatches.push({
       userId: row.user_id,
       displayName: row.display_name,
@@ -434,6 +441,7 @@ export function searchAndMatchCandidates(params: SearchParams, weights: Matching
         verificationStatus: row.verification_status,
         assessmentScore: row.assessment_score,
       },
+      mentorQuality,
       reputation: {
         bayesianRating,
         totalReviews: row.total_reviews || 0,

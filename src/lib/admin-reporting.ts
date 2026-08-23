@@ -78,14 +78,19 @@ export function getDailyReport(dateStr: string) {
     SELECT 
       s.*,
       sk.name as skill_name, sk.category as skill_category,
-      tp.display_name as teacher_name, tp.college as teacher_college,
-      lp.display_name as learner_name, lp.college as learner_college,
+      tp.display_name as teacher_name, tp.college as teacher_college, tp.major as teacher_major,
+      lp.display_name as learner_name, lp.college as learner_college, lp.major as learner_major,
+      tu.email as teacher_email, lu.email as learner_email,
+      us.verification_status as mentor_verification_status,
       sea.status as agreement_status, sea.return_type as agreement_return_type, sea.requested_return_skill_name,
       d.id as dispute_id, d.reason as dispute_reason, d.status as dispute_status
     FROM sessions s
     JOIN skills sk ON s.skill_id = sk.id
     JOIN profiles tp ON s.teacher_id = tp.user_id
     JOIN profiles lp ON s.learner_id = lp.user_id
+    LEFT JOIN users tu ON s.teacher_id = tu.id
+    LEFT JOIN users lu ON s.learner_id = lu.id
+    LEFT JOIN user_skills us ON (s.teacher_id = us.user_id AND s.skill_id = us.skill_id)
     LEFT JOIN session_exchange_agreements sea ON s.id = sea.session_id
     LEFT JOIN disputes d ON s.id = d.session_id
     ${isAll ? '' : 'WHERE DATE(s.scheduled_start) = DATE(?) OR DATE(s.created_at) = DATE(?) OR DATE(s.updated_at) = DATE(?)'}
@@ -230,15 +235,22 @@ export function getDailyReport(dateStr: string) {
       se.*,
       ap.display_name as actor_name,
       s.title as session_title,
+      s.credits_amount,
       sk.name as skill_name,
-      tp.display_name as teacher_name,
-      lp.display_name as learner_name
+      tp.display_name as teacher_name, tp.college as teacher_college,
+      lp.display_name as learner_name, lp.college as learner_college,
+      us.verification_status as mentor_verification_status,
+      sea.return_type as agreement_return_type,
+      sea.requested_return_skill_name,
+      sea.status as agreement_status
     FROM session_events se
     JOIN sessions s ON se.session_id = s.id
     LEFT JOIN skills sk ON s.skill_id = sk.id
     LEFT JOIN profiles ap ON se.actor_id = ap.user_id
     LEFT JOIN profiles tp ON s.teacher_id = tp.user_id
     LEFT JOIN profiles lp ON s.learner_id = lp.user_id
+    LEFT JOIN user_skills us ON (s.teacher_id = us.user_id AND s.skill_id = us.skill_id)
+    LEFT JOIN session_exchange_agreements sea ON s.id = sea.session_id
     ${isAll ? '' : 'WHERE DATE(se.created_at) = DATE(?)'}
     ORDER BY se.created_at ASC
   `;
@@ -818,27 +830,41 @@ export function getSessionDetailReport(sessionId: string) {
     SELECT 
       s.*,
       sk.name as skill_name, sk.category as skill_category, sk.description as skill_description,
-      tp.user_id as teacher_user_id, tp.display_name as teacher_name, tp.college as teacher_college, tp.avatar as teacher_avatar, tp.is_verified_student as teacher_verified,
-      lp.user_id as learner_user_id, lp.display_name as learner_name, lp.college as learner_college, lp.avatar as learner_avatar, lp.is_verified_student as learner_verified
+      tp.user_id as teacher_user_id, tp.display_name as teacher_name, tp.college as teacher_college, tp.major as teacher_major, tp.avatar as teacher_avatar, tp.is_verified_student as teacher_verified,
+      lp.user_id as learner_user_id, lp.display_name as learner_name, lp.college as learner_college, lp.major as learner_major, lp.avatar as learner_avatar, lp.is_verified_student as learner_verified,
+      tu.email as teacher_email, lu.email as learner_email,
+      us.verification_status as mentor_verification_status
     FROM sessions s
     JOIN skills sk ON s.skill_id = sk.id
     JOIN profiles tp ON s.teacher_id = tp.user_id
     JOIN profiles lp ON s.learner_id = lp.user_id
+    LEFT JOIN users tu ON s.teacher_id = tu.id
+    LEFT JOIN users lu ON s.learner_id = lu.id
+    LEFT JOIN user_skills us ON (s.teacher_id = us.user_id AND s.skill_id = us.skill_id)
     WHERE s.id = ?
   `).get(sessionId) as any;
 
   if (!session) return null;
 
   const participants = db.prepare(`
-    SELECT sp.*, p.display_name, p.college, p.avatar, p.is_verified_student
+    SELECT sp.*, p.display_name, p.college, p.major, p.avatar, p.is_verified_student, u.email
     FROM session_participants sp
     JOIN profiles p ON sp.user_id = p.user_id
+    LEFT JOIN users u ON sp.user_id = u.id
     WHERE sp.session_id = ?
   `).all(sessionId) as any[];
 
   const agreement = db.prepare(`
     SELECT * FROM session_exchange_agreements WHERE session_id = ?
   `).get(sessionId) as any;
+
+  const sessionEvents = db.prepare(`
+    SELECT se.*, p.display_name as actor_name
+    FROM session_events se
+    LEFT JOIN profiles p ON se.actor_id = p.user_id
+    WHERE se.session_id = ?
+    ORDER BY se.created_at ASC
+  `).all(sessionId) as any[];
 
   const creditTransactions = db.prepare(`
     SELECT ctx.*, sp.display_name as sender_name, rp.display_name as receiver_name
@@ -890,6 +916,7 @@ export function getSessionDetailReport(sessionId: string) {
     session,
     participants,
     agreement: agreement || null,
+    sessionEvents,
     creditTransactions,
     dispute: dispute || null,
     blockchainTx: blockchainTx || null,

@@ -678,10 +678,10 @@ export default function AdminDashboardPage() {
                           </div>
 
                           {/* Event Card */}
-                          <div className="flex-1 p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 hover:border-slate-700 transition-colors space-y-1.5">
+                          <div className="flex-1 p-4 rounded-2xl bg-slate-900/90 border border-slate-800 hover:border-slate-700 transition-colors space-y-2">
                             <div className="flex flex-wrap items-center justify-between gap-2">
                               <div className="flex items-center gap-2">
-                                <span className={`text-[10px] px-2 py-0.5 rounded font-extrabold border ${
+                                <span className={`text-[10px] px-2.5 py-0.5 rounded font-extrabold border ${
                                   evt.event_type.includes('COMPLETED') || evt.event_type.includes('SETTLED') ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' :
                                   evt.event_type.includes('STARTED') || evt.event_type.includes('JOINED') ? 'bg-sky-500/20 text-sky-300 border-sky-500/30' :
                                   evt.event_type.includes('ACCEPTED') || evt.event_type.includes('SCHEDULED') ? 'bg-brand-500/20 text-brand-300 border-brand-500/30' :
@@ -702,18 +702,43 @@ export default function AdminDashboardPage() {
                               {evt.description}
                             </p>
 
-                            <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-800/80 text-[11px] text-slate-400">
-                              <div>
-                                Session: <span className="font-bold text-slate-300">{evt.skill_name || 'Skill'}</span> ({evt.session_id}) •{' '}
-                                Mentor: <span className="text-brand-300">{evt.teacher_name || 'Mentor'}</span> •{' '}
-                                Learner: <span className="text-indigo-300">{evt.learner_name || 'Learner'}</span>
+                            {/* Participant & Return Terms Breakdown */}
+                            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-800/80 text-[11px]">
+                              <div className="flex flex-wrap items-center gap-3 text-slate-400">
+                                <div>
+                                  <strong className="text-slate-300">Skill:</strong> {evt.skill_name || 'Skill'} ({evt.session_id})
+                                </div>
+                                <div>
+                                  <strong className="text-brand-400">Mentor:</strong> {evt.teacher_name || 'Mentor'}{' '}
+                                  {evt.mentor_verification_status === 'PLATFORM_VERIFIED' && (
+                                    <span className="text-[10px] text-emerald-400 font-bold ml-0.5">✓ Verified</span>
+                                  )}
+                                  {evt.teacher_college && <span className="text-slate-500"> ({evt.teacher_college})</span>}
+                                </div>
+                                <div>
+                                  <strong className="text-indigo-400">Learner:</strong> {evt.learner_name || 'Learner'}
+                                  {evt.learner_college && <span className="text-slate-500"> ({evt.learner_college})</span>}
+                                </div>
                               </div>
 
-                              {evt.previous_state && evt.new_state && (
-                                <div className="font-mono text-[10px] bg-slate-950 px-2 py-0.5 rounded text-slate-400">
-                                  State: <span className="text-slate-300">{evt.previous_state}</span> &rarr; <span className="text-emerald-400 font-bold">{evt.new_state}</span>
-                                </div>
-                              )}
+                              {/* Return Terms Badge */}
+                              <div className="flex items-center gap-2">
+                                {evt.agreement_return_type === 'SKILL' ? (
+                                  <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold">
+                                    🔄 Return Skill: {evt.requested_return_skill_name} ({evt.agreement_status || 'AGREED'})
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-bold">
+                                    🪙 Return Credits: {evt.credits_amount || 1} Credit
+                                  </span>
+                                )}
+
+                                {evt.previous_state && evt.new_state && (
+                                  <div className="font-mono text-[10px] bg-slate-950 px-2 py-0.5 rounded text-slate-400 border border-slate-800">
+                                    <span className="text-slate-300">{evt.previous_state}</span> &rarr; <span className="text-emerald-400 font-bold">{evt.new_state}</span>
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -726,7 +751,7 @@ export default function AdminDashboardPage() {
               {/* Day's Detailed Sessions Table */}
               <div className="glass-panel p-5 rounded-3xl border border-slate-800 space-y-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-bold text-white">Day Sessions List ({dailyReport?.sessions?.length || 0})</h3>
+                  <h3 className="text-sm font-bold text-white">Day Sessions Details List ({dailyReport?.sessions?.length || 0})</h3>
                   <span className="text-xs text-slate-400">Date: {selectedDate}</span>
                 </div>
 
@@ -739,10 +764,11 @@ export default function AdminDashboardPage() {
                     <table className="w-full text-left text-xs">
                       <thead className="text-[11px] text-slate-400 uppercase border-b border-slate-800 bg-slate-900/40">
                         <tr>
-                          <th className="py-2.5 px-3">Session ID</th>
-                          <th className="py-2.5 px-3">Skill</th>
-                          <th className="py-2.5 px-3">Participants</th>
-                          <th className="py-2.5 px-3">Time</th>
+                          <th className="py-2.5 px-3">Session ID &amp; Time</th>
+                          <th className="py-2.5 px-3">Skill &amp; Category</th>
+                          <th className="py-2.5 px-3">Teaching Mentor</th>
+                          <th className="py-2.5 px-3">Learner</th>
+                          <th className="py-2.5 px-3">Return Exchange Terms</th>
                           <th className="py-2.5 px-3">Status</th>
                           <th className="py-2.5 px-3">Settlement</th>
                           <th className="py-2.5 px-3 text-right">Action</th>
@@ -751,15 +777,67 @@ export default function AdminDashboardPage() {
                       <tbody className="divide-y divide-slate-800/60">
                         {dailyReport.sessions.map((sess: any) => (
                           <tr key={sess.id} className="hover:bg-slate-900/30 transition-colors">
-                            <td className="py-3 px-3 font-mono text-[11px] text-slate-300">{sess.id}</td>
-                            <td className="py-3 px-3 font-bold text-white">{sess.skill_name}</td>
-                            <td className="py-3 px-3 text-slate-300">
-                              <div><strong className="text-brand-400">T:</strong> {sess.teacher_name}</div>
-                              <div><strong className="text-indigo-400">L:</strong> {sess.learner_name}</div>
-                            </td>
-                            <td className="py-3 px-3 text-slate-300">{sess.scheduled_start?.substring(11, 16) || 'Scheduled'}</td>
                             <td className="py-3 px-3">
-                              <span className={`text-[10px] px-2 py-0.5 rounded font-bold border ${
+                              <div className="font-mono text-[11px] text-slate-300 font-bold">{sess.id}</div>
+                              <div className="text-[10px] text-slate-400 mt-0.5">
+                                {sess.scheduled_start?.substring(11, 16) || 'Scheduled'}
+                              </div>
+                            </td>
+
+                            <td className="py-3 px-3">
+                              <div className="font-bold text-white">{sess.skill_name}</div>
+                              <div className="text-[10px] text-brand-400">{sess.skill_category}</div>
+                            </td>
+
+                            <td className="py-3 px-3">
+                              <div className="font-bold text-white flex items-center gap-1">
+                                <span>{sess.teacher_name}</span>
+                                {sess.mentor_verification_status === 'PLATFORM_VERIFIED' && (
+                                  <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/40">
+                                    ✓ Verified
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-[10px] text-slate-400">
+                                {sess.teacher_college || 'Campus'} {sess.teacher_major ? `• ${sess.teacher_major}` : ''}
+                              </div>
+                              {sess.teacher_email && (
+                                <div className="text-[10px] text-slate-500 font-mono">{sess.teacher_email}</div>
+                              )}
+                            </td>
+
+                            <td className="py-3 px-3">
+                              <div className="font-bold text-white">{sess.learner_name}</div>
+                              <div className="text-[10px] text-slate-400">
+                                {sess.learner_college || 'Campus'} {sess.learner_major ? `• ${sess.learner_major}` : ''}
+                              </div>
+                              {sess.learner_email && (
+                                <div className="text-[10px] text-slate-500 font-mono">{sess.learner_email}</div>
+                              )}
+                            </td>
+
+                            <td className="py-3 px-3">
+                              {sess.agreement_return_type === 'SKILL' ? (
+                                <div className="space-y-0.5">
+                                  <span className="text-[10px] px-2 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/40 inline-flex items-center gap-1">
+                                    🔄 Return Skill: {sess.requested_return_skill_name || 'Agreed'}
+                                  </span>
+                                  <div className="text-[9px] text-slate-400">Agreement: {sess.agreement_status || 'PROPOSED'}</div>
+                                </div>
+                              ) : (
+                                <div className="space-y-0.5">
+                                  <span className="text-[10px] px-2 py-0.5 rounded-lg bg-indigo-500/20 text-indigo-300 font-bold border border-indigo-500/40 inline-flex items-center gap-1">
+                                    🪙 Return Credits: {sess.credits_amount || 1} Skill Credit
+                                  </span>
+                                  <div className="text-[9px] text-slate-400">
+                                    {sess.status === 'CREDIT_SETTLED' ? 'Settled to Mentor' : 'Held in Escrow'}
+                                  </div>
+                                </div>
+                              )}
+                            </td>
+
+                            <td className="py-3 px-3">
+                              <span className={`text-[10px] px-2.5 py-1 rounded-xl font-extrabold border inline-flex items-center gap-1.5 ${
                                 sess.status === 'CREDIT_SETTLED' || sess.status === 'COMPLETED' ? 'bg-brand-500/20 text-brand-400 border-brand-500/30' :
                                 sess.status === 'IN_PROGRESS' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 animate-pulse' :
                                 sess.status === 'SCHEDULED' ? 'bg-sky-500/20 text-sky-300 border-sky-500/40' :
@@ -769,7 +847,9 @@ export default function AdminDashboardPage() {
                                 {sess.status}
                               </span>
                             </td>
+
                             <td className="py-3 px-3 text-slate-300 font-semibold">{sess.settlement_classification}</td>
+
                             <td className="py-3 px-3 text-right">
                               <Link
                                 href={`/admin/sessions/${sess.id}`}

@@ -47,20 +47,49 @@ export async function POST(req: NextRequest) {
       skill = { id: skillId };
     }
 
+    const learningDays = body.learningDays ? JSON.stringify(body.learningDays) : '["Tuesday","Thursday","Saturday"]';
+    const availableStartTime = body.availableStartTime || '18:00';
+    const availableEndTime = body.availableEndTime || '21:00';
+    const preferredStartTime = body.preferredStartTime || '19:00';
+    const preferredEndTime = body.preferredEndTime || '21:00';
+    const sessionDurationMinutes = Number(body.sessionDurationMinutes) || 60;
+    const timezone = body.timezone || 'Asia/Kolkata';
+    const isFlexible = body.isFlexible === false ? 0 : 1;
+
     db.prepare(`
-      INSERT INTO learning_goals (id, user_id, skill_id, target_proficiency, priority, notes)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO learning_goals (
+        id, user_id, skill_id, target_proficiency, priority, notes,
+        learning_days, available_start_time, available_end_time, preferred_start_time, preferred_end_time,
+        session_duration_minutes, timezone, is_flexible
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(user_id, skill_id) DO UPDATE SET
         target_proficiency = excluded.target_proficiency,
         priority = excluded.priority,
-        notes = excluded.notes
+        notes = excluded.notes,
+        learning_days = excluded.learning_days,
+        available_start_time = excluded.available_start_time,
+        available_end_time = excluded.available_end_time,
+        preferred_start_time = excluded.preferred_start_time,
+        preferred_end_time = excluded.preferred_end_time,
+        session_duration_minutes = excluded.session_duration_minutes,
+        timezone = excluded.timezone,
+        is_flexible = excluded.is_flexible
     `).run(
       `goal-${user.userId}-${skill.id}`,
       user.userId,
       skill.id,
       targetProficiency,
       priority,
-      notes || ''
+      notes || '',
+      learningDays,
+      availableStartTime,
+      availableEndTime,
+      preferredStartTime,
+      preferredEndTime,
+      sessionDurationMinutes,
+      timezone,
+      isFlexible
     );
 
     return NextResponse.json({

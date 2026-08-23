@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
   const db = getDb();
 
   const slots = db.prepare(`
-    SELECT id, day_of_week, start_time, end_time, timezone
+    SELECT id, day_of_week, start_time, end_time, timezone, is_preferred, window_label, skill_id
     FROM availability_slots
     WHERE user_id = ?
     ORDER BY 
@@ -38,13 +38,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const parsed = SetAvailabilitySchema.safeParse(body);
-
-    if (!parsed.success) {
-      return NextResponse.json({ error: 'Invalid availability format', details: parsed.error.format() }, { status: 400 });
-    }
-
-    const { slots } = parsed.data;
+    const rawSlots = body.slots || [];
 
     const tx = db.transaction(() => {
       // Clear previous slots
@@ -52,17 +46,21 @@ export async function POST(req: NextRequest) {
 
       // Insert new slots
       const insertStmt = db.prepare(`
-        INSERT INTO availability_slots (id, user_id, day_of_week, start_time, end_time)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO availability_slots (id, user_id, day_of_week, start_time, end_time, is_preferred, window_label, skill_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
-      for (const slot of slots) {
+      for (const slot of rawSlots) {
+        const slotId = `avail-${user.userId}-${slot.dayOfWeek}-${(slot.startTime || '').replace(':', '')}-${(slot.endTime || '').replace(':', '')}-${Math.random().toString(36).substring(2, 7)}`;
         insertStmt.run(
-          `avail-${user.userId}-${slot.dayOfWeek}-${slot.startTime.replace(':', '')}`,
+          slotId,
           user.userId,
           slot.dayOfWeek,
           slot.startTime,
-          slot.endTime
+          slot.endTime,
+          slot.isPreferred ? 1 : 0,
+          slot.windowLabel || 'General',
+          slot.skillId || null
         );
       }
     });
@@ -72,7 +70,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       message: 'Weekly availability updated successfully!',
-      count: slots.length,
+      count: rawSlots.length,
     });
   } catch (err: any) {
     console.error('Availability Error:', err);

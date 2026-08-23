@@ -4,18 +4,47 @@ import { z } from 'zod';
 // AUTHENTICATION SCHEMAS
 // ==========================================
 
+export const UserTypeEnum = z.enum(['TEACHER', 'LEARNER', 'TEACHER_LEARNER']);
+export const TeachingPreferenceEnum = z.enum(['Anyone', 'Women', 'Men']);
+export const SkillVerificationStatusEnum = z.enum([
+  'SELF_DECLARED',
+  'ASSESSMENT_VERIFIED',
+  'PLATFORM_VERIFIED',
+  'VERIFICATION_FAILED',
+  'CLAIMED', // backward compat
+  'AI_SUGGESTED',
+  'PEER_VERIFIED'
+]);
+
 export const RegisterSchema = z.object({
-  email: z.string().email('Please enter a valid email address').toLowerCase().trim(),
+  email: z.preprocess(
+    (val) => typeof val === 'string' ? val.trim().toLowerCase() : val,
+    z.string().email('Please enter a valid email address')
+  ),
   password: z.string().min(8, 'Password must be at least 8 characters long'),
-  displayName: z.string().min(2, 'Name must be at least 2 characters').max(50),
-  college: z.string().min(2, 'College name is required').max(100),
-  major: z.string().min(2, 'Major/Faculty is required').max(100),
-  year: z.enum(['Freshman', 'Sophomore', 'Junior', 'Senior', 'Graduate', 'PhD']),
+  name: z.string().min(2, 'Name must be at least 2 characters').max(50).optional(),
+  displayName: z.string().min(2, 'Name must be at least 2 characters').max(50).optional(),
+  college: z.string().max(100).optional().default('SkillSwap Campus'),
+  major: z.string().max(100).optional().default('General Studies'),
+  year: z.enum(['Freshman', 'Sophomore', 'Junior', 'Senior', 'Graduate', 'PhD']).optional().default('Freshman'),
+  userType: UserTypeEnum.optional().default('TEACHER_LEARNER'),
   role: z.enum(['STUDENT', 'MODERATOR', 'ADMIN']).optional().default('STUDENT'),
 });
 
+export const OnboardingSchema = z.object({
+  userType: UserTypeEnum.default('TEACHER_LEARNER'),
+  college: z.string().min(2, 'College name is required').max(100),
+  major: z.string().min(2, 'Major/Faculty is required').max(100),
+  year: z.enum(['Freshman', 'Sophomore', 'Junior', 'Senior', 'Graduate', 'PhD']),
+  teachingPreference: TeachingPreferenceEnum.optional().default('Anyone'),
+  bio: z.string().max(500).optional(),
+});
+
 export const LoginSchema = z.object({
-  email: z.string().email('Please enter a valid email address').toLowerCase().trim(),
+  email: z.preprocess(
+    (val) => typeof val === 'string' ? val.trim().toLowerCase() : val,
+    z.string().email('Please enter a valid email address')
+  ),
   password: z.string().min(1, 'Password is required'),
 });
 
@@ -29,9 +58,17 @@ export const UpdateProfileSchema = z.object({
   college: z.string().max(100).optional(),
   major: z.string().max(100).optional(),
   year: z.string().optional(),
+  userType: UserTypeEnum.optional(),
+  teachingPreference: TeachingPreferenceEnum.optional(),
+  portfolioUrl: z.string().url().or(z.literal('')).optional(),
   teachingStyle: z.string().max(200).optional(),
   languages: z.string().max(200).optional(),
   profileVisibility: z.enum(['PUBLIC', 'CAMPUS_ONLY', 'PRIVATE']).optional(),
+  skillVisibility: z.enum(['PUBLIC', 'CAMPUS_ONLY', 'PRIVATE']).optional(),
+  availabilityVisibility: z.enum(['PUBLIC', 'CAMPUS_ONLY', 'PRIVATE']).optional(),
+  portfolioVisibility: z.enum(['PUBLIC', 'CAMPUS_ONLY', 'PRIVATE']).optional(),
+  learningGoalVisibility: z.enum(['PUBLIC', 'CAMPUS_ONLY', 'PRIVATE']).optional(),
+  dailySessionLimit: z.number().int().min(1).max(10).optional(),
   mlConsent: z.boolean().optional(),
 });
 
@@ -42,7 +79,54 @@ export const AddSkillSchema = z.object({
   experienceYears: z.number().min(0).max(20).default(1),
   teachingStyle: z.string().max(200).optional().default('Hands-on practice & examples'),
   evidenceUrl: z.string().url().or(z.literal('')).optional(),
-  verificationStatus: z.enum(['CLAIMED', 'AI_SUGGESTED', 'PEER_VERIFIED', 'PLATFORM_VERIFIED']).optional().default('CLAIMED'),
+  verificationStatus: SkillVerificationStatusEnum.optional().default('SELF_DECLARED'),
+});
+
+export const SubmitAssessmentSchema = z.object({
+  skillId: z.string().min(1, 'Skill ID is required'),
+  targetLevel: z.enum(['Beginner', 'Intermediate', 'Advanced', 'Expert']).default('Intermediate'),
+  answers: z.array(z.object({
+    questionId: z.string().min(1, 'Question ID is required'),
+    selectedOption: z.union([
+      z.number().int().min(0).max(3),
+      z.enum(['A', 'B', 'C', 'D']),
+      z.string().min(1),
+    ]),
+  })).min(1, 'At least one answer must be submitted'),
+});
+
+export const SubmitEvidenceSchema = z.object({
+  skillId: z.string().min(1, 'Skill ID is required'),
+  evidenceType: z.enum(['PORTFOLIO_LINK', 'GITHUB_REPO', 'CERTIFICATE', 'PROJECT_DEMO', 'ACADEMIC_TRANSCRIPT']),
+  title: z.string().min(3).max(100),
+  url: z.string().url(),
+  description: z.string().max(500).optional(),
+});
+
+export const CreateSkillRequestSchema = z.object({
+  skillName: z.string().min(2).max(50).trim(),
+  category: z.string().min(2).max(50).default('Computer Science'),
+  requestedProficiency: z.enum(['Beginner', 'Intermediate', 'Advanced', 'Expert']).default('Beginner'),
+  currentProficiency: z.enum(['Beginner', 'Intermediate', 'Advanced', 'Expert']).default('Beginner'),
+  learningGoal: z.string().min(5).max(500),
+  preferredSchedule: z.string().max(200).optional(),
+  preferredSessionMode: z.enum(['ONLINE', 'CAMPUS_IN_PERSON']).default('ONLINE'),
+  urgency: z.enum(['LOW', 'MEDIUM', 'HIGH']).default('MEDIUM'),
+});
+
+export const SubscribeSkillNotificationSchema = z.object({
+  skillName: z.string().min(2).max(50).trim(),
+  category: z.string().min(2).max(50).default('Computer Science'),
+});
+
+export const CalculateSlotsSchema = z.object({
+  teacherId: z.string().min(1, 'Teacher ID is required'),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date format must be YYYY-MM-DD'),
+  startTimeWindow: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/).optional().default('08:00'),
+  endTimeWindow: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/).optional().default('22:00'),
+  durationHours: z.number().min(0.5).max(4).default(1.0),
+  bufferMinutes: z.number().min(0).max(60).default(15),
+  isFlexible: z.boolean().default(true),
 });
 
 export const AddGoalSchema = z.object({
@@ -67,7 +151,7 @@ export const SetAvailabilitySchema = z.object({
 
 export const SearchQuerySchema = z.object({
   q: z.string().optional().default(''), // Keyword (Person name OR Skill name)
-  mode: z.enum(['ALL', 'MODE_A', 'MODE_B', 'MODE_C']).optional().default('ALL'),
+  mode: z.enum(['ALL', 'MODE_A', 'MODE_B', 'MODE_C', 'SLOT_FINDER']).optional().default('ALL'),
   skillCategory: z.string().optional(),
   minProficiency: z.enum(['Beginner', 'Intermediate', 'Advanced', 'Expert']).optional(),
   dayOfWeek: z.string().optional(),
@@ -95,9 +179,9 @@ export const BookSessionSchema = z.object({
 });
 
 export const SessionActionSchema = z.object({
-  action: z.enum(['ACCEPT', 'REJECT', 'START', 'CONFIRM_COMPLETION', 'CANCEL', 'DISPUTE']),
+  action: z.enum(['ACCEPT', 'REJECT', 'START', 'CONFIRM_COMPLETION', 'CONFIRM', 'CANCEL', 'DISPUTE']),
   reason: z.string().max(500).optional(),
-  idempotencyKey: z.string().min(10),
+  idempotencyKey: z.string().min(10).optional(),
 });
 
 // ==========================================
@@ -155,3 +239,42 @@ export const ModeratorActionSchema = z.object({
   action: z.enum(['RESOLVE_REFUND', 'RESOLVE_PAYOUT', 'SUSPEND_USER', 'RESTRICT_CREDITS', 'DISMISS_REPORT', 'CLEAR_ALERT', 'FORCE_CANCEL']),
   reason: z.string().min(5).max(500),
 });
+
+// ==========================================
+// PRE-SESSION RETURN CONFIRMATION SCHEMAS
+// ==========================================
+
+export const ProposeReturnSkillSchema = z.object({
+  skillName: z.string().min(1, 'Skill name is required').max(50).trim(),
+  notes: z.string().max(300).optional(),
+});
+
+export const RespondReturnSkillSchema = z.object({
+  action: z.enum(['ACCEPT_SKILL', 'OFFER_CREDITS', 'PROPOSE_ALTERNATIVE', 'DECLINE']),
+  alternativeSkillName: z.string().max(50).trim().optional(),
+  notes: z.string().max(300).optional(),
+});
+
+export function isAcademicEmail(email: string): boolean {
+  if (!email || typeof email !== 'string') return false;
+  const lower = email.trim().toLowerCase();
+  const parts = lower.split('@');
+  if (parts.length !== 2) return false;
+  const domain = parts[1];
+  if (!domain) return false;
+
+  return (
+    domain.endsWith('.edu') ||
+    domain.endsWith('.ac.in') ||
+    domain.endsWith('.ac.uk') ||
+    domain.endsWith('.edu.in') ||
+    domain.endsWith('.edu.au') ||
+    domain.endsWith('.ac.nz') ||
+    domain.endsWith('.ac.za') ||
+    domain.endsWith('.edu.sg') ||
+    domain.includes('.edu.') ||
+    domain.includes('.ac.')
+  );
+}
+
+

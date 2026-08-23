@@ -32,13 +32,13 @@ export async function POST(req: NextRequest) {
     }
 
     const students = [
-      { id: 'usr-alice', email: 'alice@campus.edu', role: 'STUDENT', name: 'Alice Chen', college: 'School of Engineering', major: 'Computer Science', year: 'Junior', balance: 4, verified: 1, trust: 92 },
-      { id: 'usr-rahul', email: 'rahul.kumar@campus.edu', role: 'STUDENT', name: 'Rahul Kumar', college: 'School of Engineering', major: 'Computer Science & AI', year: 'Senior', balance: 6, verified: 1, trust: 96 },
-      { id: 'usr-elena', email: 'elena.rostova@campus.edu', role: 'STUDENT', name: 'Elena Rostova', college: 'School of Design', major: 'Digital Media & UI/UX', year: 'Senior', balance: 5, verified: 1, trust: 94 },
-      { id: 'usr-david', email: 'david.kim@campus.edu', role: 'STUDENT', name: 'David Kim', college: 'College of Arts & Sciences', major: 'Applied Mathematics', year: 'Junior', balance: 3, verified: 1, trust: 90 },
+      { id: 'usr-keerthana', email: 'keerthana.rao@campus.edu', role: 'STUDENT', name: 'Keerthana Rao', college: 'Krishna Valley Engineering College', major: 'Computer Science', year: 'Junior', balance: 4, verified: 1, trust: 92 },
+      { id: 'usr-saikiran', email: 'sai.kiran@campus.edu', role: 'STUDENT', name: 'Sai Kiran', college: 'Krishna Valley Engineering College', major: 'Computer Science & AI', year: 'Senior', balance: 6, verified: 1, trust: 96 },
+      { id: 'usr-bhavya', email: 'bhavya.reddy@campus.edu', role: 'STUDENT', name: 'Bhavya Reddy', college: 'Coastal Andhra University', major: 'Digital Media & UI/UX', year: 'Senior', balance: 5, verified: 1, trust: 94 },
+      { id: 'usr-vamsi', email: 'vamsi.krishna@campus.edu', role: 'STUDENT', name: 'Vamsi Krishna', college: 'Vijaya Engineering College', major: 'Applied Mathematics', year: 'Junior', balance: 3, verified: 1, trust: 90 },
       { id: 'usr-suspect-1', email: 'botfarm1@external-temp.net', role: 'STUDENT', name: 'QuickSwap Pro', college: 'Unknown Faculty', major: 'General Studies', year: 'Freshman', balance: 15, verified: 0, trust: 42 },
-      { id: 'usr-mod-sarah', email: 'moderator.sarah@campus.edu', role: 'MODERATOR', name: 'Sarah Jenkins', college: 'Student Affairs', major: 'Campus Leadership', year: 'Graduate', balance: 10, verified: 1, trust: 99 },
-      { id: 'usr-admin', email: 'admin@skillswap.campus.edu', role: 'ADMIN', name: 'Campus Admin', college: 'IT Services', major: 'System Administration', year: 'Staff', balance: 100, verified: 1, trust: 100 },
+      { id: 'usr-mod-sirisha', email: 'moderator.sirisha@campus.edu', role: 'MODERATOR', name: 'Sirisha (Campus Moderator)', college: 'Andhra Institute of Technology', major: 'Student Affairs', year: 'Graduate', balance: 10, verified: 1, trust: 99 },
+      { id: 'usr-admin', email: 'admin@skillswap.campus.edu', role: 'ADMIN', name: 'Srinivas Rao (Campus Admin)', college: 'IT & Infrastructure Services', major: 'System Administration', year: 'Staff', balance: 100, verified: 1, trust: 100 },
     ];
 
     for (const s of students) {
@@ -49,47 +49,47 @@ export async function POST(req: NextRequest) {
     }
 
     // Teaching Skills
-    db.prepare(`INSERT OR REPLACE INTO user_skills (id, user_id, skill_id, proficiency, experience_years, teaching_style, verification_status) VALUES (?, ?, ?, ?, ?, ?, ?)`).run('usk-alice-react', 'usr-alice', 'skill-react', 'Advanced', 2.5, 'Hands-on project reviews', 'PLATFORM_VERIFIED');
-    db.prepare(`INSERT OR REPLACE INTO user_skills (id, user_id, skill_id, proficiency, experience_years, teaching_style, verification_status) VALUES (?, ?, ?, ?, ?, ?, ?)`).run('usk-alice-node', 'usr-alice', 'skill-node', 'Intermediate', 1.5, 'API building workshops', 'PEER_VERIFIED');
-    db.prepare(`INSERT OR REPLACE INTO user_skills (id, user_id, skill_id, proficiency, experience_years, teaching_style, verification_status) VALUES (?, ?, ?, ?, ?, ?, ?)`).run('usk-rahul-python', 'usr-rahul', 'skill-python', 'Expert', 3.5, 'Deep dive architecture & debugging', 'PLATFORM_VERIFIED');
-    db.prepare(`INSERT OR REPLACE INTO user_skills (id, user_id, skill_id, proficiency, experience_years, teaching_style, verification_status) VALUES (?, ?, ?, ?, ?, ?, ?)`).run('usk-rahul-solidity', 'usr-rahul', 'skill-solidity', 'Advanced', 2.0, 'Smart contract security audits', 'PLATFORM_VERIFIED');
-    db.prepare(`INSERT OR REPLACE INTO user_skills (id, user_id, skill_id, proficiency, experience_years, teaching_style, verification_status) VALUES (?, ?, ?, ?, ?, ?, ?)`).run('usk-elena-figma', 'usr-elena', 'skill-figma', 'Expert', 4.0, 'Figma component mastery & prototypes', 'PLATFORM_VERIFIED');
-    db.prepare(`INSERT OR REPLACE INTO user_skills (id, user_id, skill_id, proficiency, experience_years, teaching_style, verification_status) VALUES (?, ?, ?, ?, ?, ?, ?)`).run('usk-david-calculus', 'usr-david', 'skill-calculus', 'Expert', 3.0, 'Step-by-step problem walkthroughs', 'PLATFORM_VERIFIED');
+    db.prepare(`INSERT OR REPLACE INTO user_skills (id, user_id, skill_id, proficiency, experience_years, teaching_style, verification_status) VALUES (?, ?, ?, ?, ?, ?, ?)`).run('usk-keerthana-react', 'usr-keerthana', 'skill-react', 'Advanced', 2.5, 'Hands-on project reviews', 'PLATFORM_VERIFIED');
+    db.prepare(`INSERT OR REPLACE INTO user_skills (id, user_id, skill_id, proficiency, experience_years, teaching_style, verification_status) VALUES (?, ?, ?, ?, ?, ?, ?)`).run('usk-keerthana-node', 'usr-keerthana', 'skill-node', 'Intermediate', 1.5, 'API building workshops', 'PEER_VERIFIED');
+    db.prepare(`INSERT OR REPLACE INTO user_skills (id, user_id, skill_id, proficiency, experience_years, teaching_style, verification_status) VALUES (?, ?, ?, ?, ?, ?, ?)`).run('usk-saikiran-python', 'usr-saikiran', 'skill-python', 'Expert', 3.5, 'Deep dive architecture & debugging', 'PLATFORM_VERIFIED');
+    db.prepare(`INSERT OR REPLACE INTO user_skills (id, user_id, skill_id, proficiency, experience_years, teaching_style, verification_status) VALUES (?, ?, ?, ?, ?, ?, ?)`).run('usk-saikiran-solidity', 'usr-saikiran', 'skill-solidity', 'Advanced', 2.0, 'Smart contract security audits', 'PLATFORM_VERIFIED');
+    db.prepare(`INSERT OR REPLACE INTO user_skills (id, user_id, skill_id, proficiency, experience_years, teaching_style, verification_status) VALUES (?, ?, ?, ?, ?, ?, ?)`).run('usk-bhavya-figma', 'usr-bhavya', 'skill-figma', 'Expert', 4.0, 'Figma component mastery & prototypes', 'PLATFORM_VERIFIED');
+    db.prepare(`INSERT OR REPLACE INTO user_skills (id, user_id, skill_id, proficiency, experience_years, teaching_style, verification_status) VALUES (?, ?, ?, ?, ?, ?, ?)`).run('usk-vamsi-calculus', 'usr-vamsi', 'skill-calculus', 'Expert', 3.0, 'Step-by-step problem walkthroughs', 'PLATFORM_VERIFIED');
 
     // Learning Goals
-    db.prepare(`INSERT OR REPLACE INTO learning_goals (id, user_id, skill_id, target_proficiency, priority, notes) VALUES (?, ?, ?, ?, ?, ?)`).run('goal-alice-solidity', 'usr-alice', 'skill-solidity', 'Intermediate', 'HIGH', 'Want to build DeFi and credential contracts for senior project');
-    db.prepare(`INSERT OR REPLACE INTO learning_goals (id, user_id, skill_id, target_proficiency, priority, notes) VALUES (?, ?, ?, ?, ?, ?)`).run('goal-rahul-figma', 'usr-rahul', 'skill-figma', 'Intermediate', 'HIGH', 'Need better UI/UX skills for my open-source projects');
-    db.prepare(`INSERT OR REPLACE INTO learning_goals (id, user_id, skill_id, target_proficiency, priority, notes) VALUES (?, ?, ?, ?, ?, ?)`).run('goal-elena-python', 'usr-elena', 'skill-python', 'Intermediate', 'HIGH', 'Need Python data scripts for UX analytics');
+    db.prepare(`INSERT OR REPLACE INTO learning_goals (id, user_id, skill_id, target_proficiency, priority, notes) VALUES (?, ?, ?, ?, ?, ?)`).run('goal-keerthana-solidity', 'usr-keerthana', 'skill-solidity', 'Intermediate', 'HIGH', 'Want to build DeFi and credential contracts for senior project');
+    db.prepare(`INSERT OR REPLACE INTO learning_goals (id, user_id, skill_id, target_proficiency, priority, notes) VALUES (?, ?, ?, ?, ?, ?)`).run('goal-saikiran-figma', 'usr-saikiran', 'skill-figma', 'Intermediate', 'HIGH', 'Need better UI/UX skills for my open-source projects');
+    db.prepare(`INSERT OR REPLACE INTO learning_goals (id, user_id, skill_id, target_proficiency, priority, notes) VALUES (?, ?, ?, ?, ?, ?)`).run('goal-bhavya-python', 'usr-bhavya', 'skill-python', 'Intermediate', 'HIGH', 'Need Python data scripts for UX analytics');
 
     // Availability
-    db.prepare(`INSERT OR REPLACE INTO availability_slots (id, user_id, day_of_week, start_time, end_time) VALUES (?, ?, ?, ?, ?)`).run('avail-alice-tue', 'usr-alice', 'Tuesday', '18:00', '20:00');
-    db.prepare(`INSERT OR REPLACE INTO availability_slots (id, user_id, day_of_week, start_time, end_time) VALUES (?, ?, ?, ?, ?)`).run('avail-alice-thu', 'usr-alice', 'Thursday', '18:00', '20:00');
-    db.prepare(`INSERT OR REPLACE INTO availability_slots (id, user_id, day_of_week, start_time, end_time) VALUES (?, ?, ?, ?, ?)`).run('avail-rahul-tue', 'usr-rahul', 'Tuesday', '18:00', '21:00');
-    db.prepare(`INSERT OR REPLACE INTO availability_slots (id, user_id, day_of_week, start_time, end_time) VALUES (?, ?, ?, ?, ?)`).run('avail-rahul-thu', 'usr-rahul', 'Thursday', '18:00', '21:00');
-    db.prepare(`INSERT OR REPLACE INTO availability_slots (id, user_id, day_of_week, start_time, end_time) VALUES (?, ?, ?, ?, ?)`).run('avail-elena-tue', 'usr-elena', 'Tuesday', '18:00', '20:00');
-    db.prepare(`INSERT OR REPLACE INTO availability_slots (id, user_id, day_of_week, start_time, end_time) VALUES (?, ?, ?, ?, ?)`).run('avail-david-mon', 'usr-david', 'Monday', '16:00', '19:00');
+    db.prepare(`INSERT OR REPLACE INTO availability_slots (id, user_id, day_of_week, start_time, end_time) VALUES (?, ?, ?, ?, ?)`).run('avail-keerthana-tue', 'usr-keerthana', 'Tuesday', '18:00', '20:00');
+    db.prepare(`INSERT OR REPLACE INTO availability_slots (id, user_id, day_of_week, start_time, end_time) VALUES (?, ?, ?, ?, ?)`).run('avail-keerthana-thu', 'usr-keerthana', 'Thursday', '18:00', '20:00');
+    db.prepare(`INSERT OR REPLACE INTO availability_slots (id, user_id, day_of_week, start_time, end_time) VALUES (?, ?, ?, ?, ?)`).run('avail-saikiran-tue', 'usr-saikiran', 'Tuesday', '18:00', '21:00');
+    db.prepare(`INSERT OR REPLACE INTO availability_slots (id, user_id, day_of_week, start_time, end_time) VALUES (?, ?, ?, ?, ?)`).run('avail-saikiran-thu', 'usr-saikiran', 'Thursday', '18:00', '21:00');
+    db.prepare(`INSERT OR REPLACE INTO availability_slots (id, user_id, day_of_week, start_time, end_time) VALUES (?, ?, ?, ?, ?)`).run('avail-bhavya-tue', 'usr-bhavya', 'Tuesday', '18:00', '20:00');
+    db.prepare(`INSERT OR REPLACE INTO availability_slots (id, user_id, day_of_week, start_time, end_time) VALUES (?, ?, ?, ?, ?)`).run('avail-vamsi-mon', 'usr-vamsi', 'Monday', '16:00', '19:00');
 
-    // Rahul reputation & reputation
-    db.prepare(`UPDATE reputations SET total_reviews=24, total_sessions_taught=27, bayesian_rating=4.9, reliability_score=99 WHERE user_id='usr-rahul'`).run();
-    db.prepare(`UPDATE reputations SET total_reviews=18, total_sessions_taught=19, bayesian_rating=4.9, reliability_score=97 WHERE user_id='usr-elena'`).run();
-    db.prepare(`UPDATE reputations SET total_reviews=7, total_sessions_taught=8, bayesian_rating=4.8, reliability_score=98 WHERE user_id='usr-alice'`).run();
-    db.prepare(`UPDATE skill_credit_accounts SET lifetime_earned=27, lifetime_spent=12 WHERE user_id='usr-rahul'`).run();
+    // Reputations
+    db.prepare(`UPDATE reputations SET total_reviews=24, total_sessions_taught=27, bayesian_rating=4.9, reliability_score=99 WHERE user_id='usr-saikiran'`).run();
+    db.prepare(`UPDATE reputations SET total_reviews=18, total_sessions_taught=19, bayesian_rating=4.9, reliability_score=97 WHERE user_id='usr-bhavya'`).run();
+    db.prepare(`UPDATE reputations SET total_reviews=7, total_sessions_taught=8, bayesian_rating=4.8, reliability_score=98 WHERE user_id='usr-keerthana'`).run();
+    db.prepare(`UPDATE skill_credit_accounts SET lifetime_earned=27, lifetime_spent=12 WHERE user_id='usr-saikiran'`).run();
 
-    // Verifiable Credential for Rahul
+    // Verifiable Credential for Sai Kiran
     db.prepare(`INSERT OR REPLACE INTO credentials (id, user_id, title, badge_type, skill_id, token_id, tx_hash, criteria_met) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(
-      'cred-rahul-python-1', 'usr-rahul', 'Python Mentor — Level 1', 'MENTOR_TIER_1', 'skill-python', 'CERT-8841',
+      'cred-saikiran-python-1', 'usr-saikiran', 'Python Mentor — Level 1', 'MENTOR_TIER_1', 'skill-python', 'CERT-8841',
       '0x8f28c11e72e128b9d3b4a2e5d6c8109923847162901928374615243123456789',
       JSON.stringify({ sessionsTaught: 27, bayesianRating: 4.9, minSessionsRequired: 3, minRatingRequired: 4.5 })
     );
 
     // StudySphere Groups & Resources
-    db.prepare(`INSERT OR REPLACE INTO study_groups (id, name, description, subject, creator_id, meeting_schedule, max_members) VALUES (?,?,?,?,?,?,?)`).run('grp-1', 'Web3 & EVM Builders Circle', 'Weekly Solidity smart contract collaboration.', 'Computer Science', 'usr-rahul', 'Thursdays 7:00 PM', 10);
-    db.prepare(`INSERT OR REPLACE INTO study_groups (id, name, description, subject, creator_id, meeting_schedule, max_members) VALUES (?,?,?,?,?,?,?)`).run('grp-2', 'Figma Design System Jam', 'Critique and design system token standardization sessions.', 'Design', 'usr-elena', 'Wednesdays 6:00 PM', 8);
+    db.prepare(`INSERT OR REPLACE INTO study_groups (id, name, description, subject, creator_id, meeting_schedule, max_members) VALUES (?,?,?,?,?,?,?)`).run('grp-1', 'Web3 & EVM Builders Circle', 'Weekly Solidity smart contract collaboration.', 'Computer Science', 'usr-saikiran', 'Thursdays 7:00 PM', 10);
+    db.prepare(`INSERT OR REPLACE INTO study_groups (id, name, description, subject, creator_id, meeting_schedule, max_members) VALUES (?,?,?,?,?,?,?)`).run('grp-2', 'Figma Design System Jam', 'Critique and design system token standardization sessions.', 'Design', 'usr-bhavya', 'Wednesdays 6:00 PM', 8);
 
-    db.prepare(`INSERT OR REPLACE INTO study_resources (id, title, description, subject, author_id, resource_type, file_url, upvotes) VALUES (?,?,?,?,?,?,?,?)`).run('res-1', 'Smart Contract Security Audit Checklist', 'Comprehensive checklist: reentrancy, integer overflow, access control.', 'Computer Science', 'usr-rahul', 'PDF', 'https://docs.skillswap.internal/evm-security.pdf', 34);
-    db.prepare(`INSERT OR REPLACE INTO study_resources (id, title, description, subject, author_id, resource_type, file_url, upvotes) VALUES (?,?,?,?,?,?,?,?)`).run('res-2', 'React 18 Server Components Cheat Sheet', 'Visual guide to hydration boundaries and Suspense patterns.', 'Computer Science', 'usr-alice', 'NOTES', 'https://docs.skillswap.internal/react-cheatsheet.pdf', 28);
+    db.prepare(`INSERT OR REPLACE INTO study_resources (id, title, description, subject, author_id, resource_type, file_url, upvotes) VALUES (?,?,?,?,?,?,?,?)`).run('res-1', 'Smart Contract Security Audit Checklist', 'Comprehensive checklist: reentrancy, integer overflow, access control.', 'Computer Science', 'usr-saikiran', 'PDF', 'https://docs.skillswap.internal/evm-security.pdf', 34);
+    db.prepare(`INSERT OR REPLACE INTO study_resources (id, title, description, subject, author_id, resource_type, file_url, upvotes) VALUES (?,?,?,?,?,?,?,?)`).run('res-2', 'React 18 Server Components Cheat Sheet', 'Visual guide to hydration boundaries and Suspense patterns.', 'Computer Science', 'usr-keerthana', 'NOTES', 'https://docs.skillswap.internal/react-cheatsheet.pdf', 28);
 
-    db.prepare(`INSERT OR REPLACE INTO flashcard_decks (id, user_id, title, subject, cards_count, is_public) VALUES (?,?,?,?,?,?)`).run('deck-1', 'usr-rahul', 'Solidity & EVM Opcodes Master Deck', 'Computer Science', 3, 1);
+    db.prepare(`INSERT OR REPLACE INTO flashcard_decks (id, user_id, title, subject, cards_count, is_public) VALUES (?,?,?,?,?,?)`).run('deck-1', 'usr-saikiran', 'Solidity & EVM Opcodes Master Deck', 'Computer Science', 3, 1);
     db.prepare(`INSERT OR REPLACE INTO flashcards (id, deck_id, front, back, mastery_level) VALUES (?,?,?,?,?)`).run('fc-1', 'deck-1', 'What is the Checks-Effects-Interactions pattern?', 'A security pattern: state checks first, internal state modifications second, external calls last — prevents reentrancy.', 4);
     db.prepare(`INSERT OR REPLACE INTO flashcards (id, deck_id, front, back, mastery_level) VALUES (?,?,?,?,?)`).run('fc-2', 'deck-1', 'Gas cost: storage vs memory?', 'Storage SSTORE costs up to 20,000 gas (permanent). Memory is temporary and very cheap.', 3);
     db.prepare(`INSERT OR REPLACE INTO flashcards (id, deck_id, front, back, mastery_level) VALUES (?,?,?,?,?)`).run('fc-3', 'deck-1', 'Why never use tx.origin for authorization?', 'tx.origin returns the original EOA — vulnerable to phishing contracts. Always use msg.sender.', 5);
@@ -101,7 +101,7 @@ export async function POST(req: NextRequest) {
       'PENDING_REVIEW'
     );
 
-    return NextResponse.json({ success: true, message: 'Campus database successfully re-seeded with synthetic data!' });
+    return NextResponse.json({ success: true, message: 'Campus database successfully re-seeded with authentic Indian campus data!' });
   } catch (err: any) {
     console.error('Reseed API Error:', err);
     return NextResponse.json({ error: 'Failed to re-seed database: ' + err.message }, { status: 500 });

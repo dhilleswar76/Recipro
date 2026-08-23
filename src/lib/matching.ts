@@ -1,4 +1,5 @@
 import { getDb } from './db';
+import { getMentorQualityForSkill, MentorQualityResult } from './reputation';
 
 export interface MatchingWeights {
   skillCompatibility: number;     // default 0.30
@@ -28,6 +29,10 @@ export interface CandidateResult {
   college: string | null;
   major: string | null;
   year: string | null;
+  userType: 'TEACHER' | 'LEARNER' | 'TEACHER_LEARNER';
+  teachingPreference: 'Anyone' | 'Women' | 'Men';
+  campusTier: 'OWN_COLLEGE' | 'PARTNER_COLLEGE' | 'NETWORK';
+  isOutsideCollege: boolean;
   isVerifiedStudent: boolean;
   trustScore: number;
   completionRate: number;
@@ -41,7 +46,9 @@ export interface CandidateResult {
     proficiency: string;
     experienceYears: number;
     verificationStatus: string;
+    assessmentScore?: number | null;
   };
+  mentorQuality?: MentorQualityResult;
   reputation: {
     bayesianRating: number;
     totalReviews: number;
@@ -67,6 +74,14 @@ export interface CandidateResult {
   discoveryMode: 'MODE_A_KNOWN_PERSON' | 'MODE_B_KNOWN_SKILL' | 'FALLBACK';
 }
 
+export interface SearchMatchResult {
+  knownPersonMatches: CandidateResult[];
+  skillMatches: CandidateResult[];
+  insideCollegeMatches: CandidateResult[];
+  outsideCollegeMatches: CandidateResult[];
+  totalResults: number;
+}
+
 export interface SearchParams {
   query?: string;
   mode?: 'ALL' | 'MODE_A' | 'MODE_B' | 'MODE_C';
@@ -86,20 +101,19 @@ const PROFICIENCY_RANK: Record<string, number> = {
   'Expert': 4,
 };
 
-export function searchAndMatchCandidates(params: SearchParams, weights: MatchingWeights = DEFAULT_WEIGHTS): {
-  knownPersonMatches: CandidateResult[];
-  skillMatches: CandidateResult[];
-  totalResults: number;
-} {
+export function searchAndMatchCandidates(params: SearchParams, weights: MatchingWeights = DEFAULT_WEIGHTS): SearchMatchResult {
   const db = getDb();
   const q = (params.query || '').trim().toLowerCase();
   const requesterId = params.requesterUserId || '';
 
-  // Get requester's learning goals and availability if requester is logged in
+  let requesterCollege = '';
   let requesterGoals: Array<{ skill_id: string; target_proficiency: string }> = [];
   let requesterAvailability: Array<{ day_of_week: string; start_time: string; end_time: string }> = [];
 
   if (requesterId) {
+    const rProf = db.prepare('SELECT college FROM profiles WHERE user_id = ?').get(requesterId) as { college: string } | undefined;
+    if (rProf) requesterCollege = (rProf.college || '').toLowerCase();
+
     requesterGoals = db.prepare(`
       SELECT skill_id, target_proficiency FROM learning_goals WHERE user_id = ?
     `).all(requesterId) as Array<{ skill_id: string; target_proficiency: string }>;
@@ -118,10 +132,10 @@ export function searchAndMatchCandidates(params: SearchParams, weights: Matching
     // Check if query directly matches a user display name, email handle, or college ID
     const personRows = db.prepare(`
       SELECT 
-        u.id as user_id, u.email, u.status, u.campus_id,
+        u.id as user_id, u.email, u.status, u.campus_id, COALESCE(u.user_type, 'TEACHER_LEARNER') as user_type,
         p.display_name, p.avatar, p.bio, p.college, p.major, p.year,
         p.is_verified_student, p.trust_score, p.completion_rate, p.hourly_rate_credits,
-        p.teaching_style, p.languages,
+        p.teaching_style, p.languages, COALESCE(p.teaching_preference, 'Anyone') as teaching_preference,
         r.bayesian_rating, r.total_reviews, r.total_sessions_taught, r.reliability_score
       FROM users u
       JOIN profiles p ON u.id = p.user_id
@@ -157,37 +171,53 @@ export function searchAndMatchCandidates(params: SearchParams, weights: Matching
         skill_category: 'General',
         proficiency: 'Advanced',
         experience_years: 1,
-        verification_status: 'CLAIMED',
+        verification_status: 'SELF_DECLARED',
       };
 
-      knownPersonMatches.push({
-        userId: pRow.user_id,
-        displayName: pRow.display_name,
-        avatar: pRow.avatar,
-        bio: pRow.bio,
-        college: pRow.college,
-        major: pRow.major,
-        year: pRow.year,
-        isVerifiedStudent: Boolean(pRow.is_verified_student),
-        trustScore: pRow.trust_score || 70,
-        completionRate: pRow.completion_rate || 100,
-        hourlyRateCredits: pRow.hourly_rate_credits || 1,
-        teachingStyle: pRow.teaching_style || 'Interactive & Hands-on',
-        languages: pRow.languages || 'English',
-        matchedSkill: {
-          skillId: primarySkill.skill_id,
-          skillName: primarySkill.skill_name,
-          category: primarySkill.skill_category,
-          proficiency: primarySkill.proficiency,
-          experienceYears: primarySkill.experience_years,
-          verificationStatus: primarySkill.verification_status,
-        },
-        reputation: {
-          bayesianRating: pRow.bayesian_rating || 4.5,
-          totalReviews: pRow.total_reviews || 0,
-          totalSessionsTaught: pRow.total_sessions_taught || 0,
-          reliabilityScore: pRow.reliability_score || 95,
-        },
+      const candCollege = (pRow.college || '').toLowerCase();
+      let campusTier: CandidateResult['campusTier'] = 'NETWORK';
+      if (requesterCollege && candCollege && requesterCollege === candCollege) {
+        campusTier = 'OWN_COLLEGE';
+      } else if (candCollege) {
+        campusTier = 'PARTNER_COLLEGE';
+      }
+
+        const mentorQuality = getMentorQualityForSkill(pRow.user_id, primarySkill.skill_id);
+
+        knownPersonMatches.push({
+          userId: pRow.user_id,
+          displayName: pRow.display_name,
+          avatar: pRow.avatar,
+          bio: pRow.bio,
+          college: pRow.college,
+          major: pRow.major,
+          year: pRow.year,
+          userType: pRow.user_type || 'TEACHER_LEARNER',
+          teachingPreference: pRow.teaching_preference || 'Anyone',
+          campusTier,
+          isOutsideCollege: campusTier !== 'OWN_COLLEGE',
+          isVerifiedStudent: Boolean(pRow.is_verified_student),
+          trustScore: pRow.trust_score || 70,
+          completionRate: pRow.completion_rate || 100,
+          hourlyRateCredits: pRow.hourly_rate_credits || 1,
+          teachingStyle: pRow.teaching_style || 'Interactive & Hands-on',
+          languages: pRow.languages || 'English',
+          matchedSkill: {
+            skillId: primarySkill.skill_id,
+            skillName: primarySkill.skill_name,
+            category: primarySkill.skill_category,
+            proficiency: primarySkill.proficiency,
+            experienceYears: primarySkill.experience_years,
+            verificationStatus: primarySkill.verification_status,
+            assessmentScore: primarySkill.assessment_score,
+          },
+          mentorQuality,
+          reputation: {
+            bayesianRating: pRow.bayesian_rating || 4.5,
+            totalReviews: pRow.total_reviews || 0,
+            totalSessionsTaught: pRow.total_sessions_taught || 0,
+            reliabilityScore: pRow.reliability_score || 95,
+          },
         availability: userAvail.map((a: any) => ({
           dayOfWeek: a.day_of_week,
           startTime: a.start_time,
@@ -206,6 +236,7 @@ export function searchAndMatchCandidates(params: SearchParams, weights: Matching
         explanationPoints: [
           `Exact identity match for "${pRow.display_name}"`,
           `Faculty: ${pRow.college} (${pRow.major})`,
+          `Campus Tier: ${campusTier === 'OWN_COLLEGE' ? 'Your College' : 'SkillSwap Network'}`,
           `Verified Student Badge: ${pRow.is_verified_student ? 'Yes' : 'Unverified'}`,
         ],
         discoveryMode: 'MODE_A_KNOWN_PERSON',
@@ -216,7 +247,11 @@ export function searchAndMatchCandidates(params: SearchParams, weights: Matching
   // ============================================================
   // STAGE 2: MODE B — HARD FILTERS + DETERMINISTIC CANDIDATE SET
   // ============================================================
-  let filterConditions = [`u.status = 'ACTIVE'`, `u.id != ?`];
+  let filterConditions = [
+    `u.status = 'ACTIVE'`,
+    `COALESCE(u.user_type, 'TEACHER_LEARNER') IN ('TEACHER', 'TEACHER_LEARNER')`,
+    `u.id != ?`
+  ];
   let filterParams: any[] = [requesterId];
 
   // Skill keyword or category search
@@ -236,7 +271,7 @@ export function searchAndMatchCandidates(params: SearchParams, weights: Matching
   }
 
   if (params.verifiedOnly) {
-    filterConditions.push(`p.is_verified_student = 1`);
+    filterConditions.push(`us.verification_status IN ('PLATFORM_VERIFIED', 'ASSESSMENT_VERIFIED')`);
   }
 
   if (params.minRating && params.minRating > 0) {
@@ -246,13 +281,13 @@ export function searchAndMatchCandidates(params: SearchParams, weights: Matching
 
   const querySql = `
     SELECT 
-      u.id as user_id, u.email, u.status, u.campus_id,
+      u.id as user_id, u.email, u.status, u.campus_id, COALESCE(u.user_type, 'TEACHER_LEARNER') as user_type,
       p.display_name, p.avatar, p.bio, p.college, p.major, p.year,
       p.is_verified_student, p.trust_score, p.completion_rate, p.hourly_rate_credits,
-      p.teaching_style, p.languages,
+      p.teaching_style, p.languages, COALESCE(p.teaching_preference, 'Anyone') as teaching_preference,
       s.id as skill_id, s.name as skill_name, s.category as skill_category,
       us.proficiency, us.experience_years, us.teaching_style as user_teaching_style,
-      us.verification_status, us.evidence_url,
+      us.verification_status, us.evidence_url, us.assessment_score,
       r.bayesian_rating, r.total_reviews, r.total_sessions_taught, r.reliability_score
     FROM user_skills us
     JOIN skills s ON us.skill_id = s.id
@@ -311,7 +346,8 @@ export function searchAndMatchCandidates(params: SearchParams, weights: Matching
     }
 
     let skillScore = 70 + (teacherProfRank * 6);
-    if (row.verification_status === 'PLATFORM_VERIFIED') skillScore += 10;
+    if (row.verification_status === 'PLATFORM_VERIFIED') skillScore += 12;
+    if (row.verification_status === 'ASSESSMENT_VERIFIED') skillScore += 8;
     if (row.verification_status === 'PEER_VERIFIED') skillScore += 6;
     if (row.experience_years >= 2) skillScore += 6;
     skillScore = Math.min(100, skillScore);
@@ -347,9 +383,23 @@ export function searchAndMatchCandidates(params: SearchParams, weights: Matching
       (styleScore * weights.teachingStyle)
     );
 
+    // Campus Tier Classification
+    const candCollege = (row.college || '').toLowerCase();
+    let campusTier: CandidateResult['campusTier'] = 'NETWORK';
+    if (requesterCollege && candCollege && requesterCollege === candCollege) {
+      campusTier = 'OWN_COLLEGE';
+    } else if (candCollege) {
+      campusTier = 'PARTNER_COLLEGE';
+    }
+
     // Explainable Points
     const explanationPoints: string[] = [];
     explanationPoints.push(`✓ ${row.skill_name} expertise (${row.proficiency} level, ${row.experience_years} yrs)`);
+    if (row.verification_status === 'PLATFORM_VERIFIED') {
+      explanationPoints.push(`✓ Platform Verified Skill Mentor`);
+    } else if (row.verification_status === 'ASSESSMENT_VERIFIED') {
+      explanationPoints.push(`✓ Assessment Verified (${row.assessment_score || 85}% score)`);
+    }
     if (hasScheduleOverlap) {
       explanationPoints.push(`✓ Mutual schedule availability overlap`);
     } else if (userAvail.length > 0) {
@@ -358,9 +408,11 @@ export function searchAndMatchCandidates(params: SearchParams, weights: Matching
     if (row.total_sessions_taught > 0) {
       explanationPoints.push(`✓ Strong verified history: ${bayesianRating.toFixed(1)}⭐ (${row.total_sessions_taught} completed sessions)`);
     }
-    if (row.is_verified_student) {
-      explanationPoints.push(`✓ Verified Campus Student (${row.college || 'Campus'})`);
+    if (campusTier === 'OWN_COLLEGE') {
+      explanationPoints.push(`✓ Classmate at your college (${row.college})`);
     }
+
+    const mentorQuality = getMentorQualityForSkill(row.user_id, row.skill_id);
 
     skillMatches.push({
       userId: row.user_id,
@@ -370,6 +422,10 @@ export function searchAndMatchCandidates(params: SearchParams, weights: Matching
       college: row.college,
       major: row.major,
       year: row.year,
+      userType: row.user_type,
+      teachingPreference: row.teaching_preference,
+      campusTier,
+      isOutsideCollege: campusTier !== 'OWN_COLLEGE',
       isVerifiedStudent: Boolean(row.is_verified_student),
       trustScore: row.trust_score || 70,
       completionRate: row.completion_rate || 100,
@@ -383,7 +439,9 @@ export function searchAndMatchCandidates(params: SearchParams, weights: Matching
         proficiency: row.proficiency,
         experienceYears: row.experience_years,
         verificationStatus: row.verification_status,
+        assessmentScore: row.assessment_score,
       },
+      mentorQuality,
       reputation: {
         bayesianRating,
         totalReviews: row.total_reviews || 0,
@@ -410,12 +468,101 @@ export function searchAndMatchCandidates(params: SearchParams, weights: Matching
     });
   }
 
-  // Sort skill matches by descending ML match score
-  skillMatches.sort((a, b) => b.matchScore - a.matchScore);
+  // Sort skill matches: First by campus tier if logged in with matching college, then by descending ML score
+  skillMatches.sort((a, b) => {
+    if (a.campusTier === 'OWN_COLLEGE' && b.campusTier !== 'OWN_COLLEGE') return -1;
+    if (b.campusTier === 'OWN_COLLEGE' && a.campusTier !== 'OWN_COLLEGE') return 1;
+    return b.matchScore - a.matchScore;
+  });
+
+  const insideCollegeMatches = skillMatches.filter(m => m.campusTier === 'OWN_COLLEGE');
+  const outsideCollegeMatches = skillMatches.filter(m => m.campusTier !== 'OWN_COLLEGE');
 
   return {
     knownPersonMatches,
     skillMatches,
+    insideCollegeMatches,
+    outsideCollegeMatches,
     totalResults: knownPersonMatches.length + skillMatches.length,
   };
+}
+
+export async function searchAndMatchCandidatesAsync(params: SearchParams, weights: MatchingWeights = DEFAULT_WEIGHTS): Promise<SearchMatchResult> {
+  const baseResult = searchAndMatchCandidates(params, weights);
+  if (baseResult.skillMatches.length === 0) {
+    return baseResult;
+  }
+
+  const mlServiceUrl = process.env.ML_SERVICE_URL || 'http://127.0.0.1:8000';
+  try {
+    const payload = {
+      candidates: baseResult.skillMatches.map(c => ({
+        user_id: c.userId,
+        display_name: c.displayName,
+        skill_score: c.matchBreakdown.skillScore,
+        availability_score: c.matchBreakdown.availabilityScore,
+        proficiency_score: c.matchBreakdown.proficiencyScore,
+        goal_score: c.matchBreakdown.goalScore,
+        reliability_score: c.matchBreakdown.reliabilityScore,
+        reputation_score: c.matchBreakdown.reputationScore,
+        style_score: c.matchBreakdown.styleScore,
+      })),
+      weights: {
+        skill: weights.skillCompatibility,
+        availability: weights.availabilityOverlap,
+        proficiency: weights.proficiencyCompatibility,
+        goal: weights.learningGoalSimilarity,
+        reliability: weights.reliability,
+        reputation: weights.reputation,
+        style: weights.teachingStyle,
+      }
+    };
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 800);
+
+    const res = await fetch(`${mlServiceUrl}/match`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    if (res.ok) {
+      const mlData = await res.json() as Array<{
+        user_id: string;
+        match_score: number;
+        breakdown: any;
+        explanation: string[];
+      }>;
+
+      const scoreMap = new Map(mlData.map(item => [item.user_id, item]));
+      for (const candidate of baseResult.skillMatches) {
+        const mlItem = scoreMap.get(candidate.userId);
+        if (mlItem) {
+          candidate.matchScore = mlItem.match_score;
+          if (mlItem.explanation && mlItem.explanation.length > 0) {
+            candidate.explanationPoints = [
+              ...mlItem.explanation.map(e => `✓ ${e}`),
+              ...candidate.explanationPoints.filter(p => p.includes('Verified') || p.includes('history'))
+            ].slice(0, 4);
+          }
+        }
+      }
+
+      baseResult.skillMatches.sort((a, b) => {
+        if (a.campusTier === 'OWN_COLLEGE' && b.campusTier !== 'OWN_COLLEGE') return -1;
+        if (b.campusTier === 'OWN_COLLEGE' && a.campusTier !== 'OWN_COLLEGE') return 1;
+        return b.matchScore - a.matchScore;
+      });
+
+      baseResult.insideCollegeMatches = baseResult.skillMatches.filter(m => m.campusTier === 'OWN_COLLEGE');
+      baseResult.outsideCollegeMatches = baseResult.skillMatches.filter(m => m.campusTier !== 'OWN_COLLEGE');
+    }
+  } catch {
+    // Graceful deterministic fallback
+  }
+
+  return baseResult;
 }

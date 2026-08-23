@@ -15,6 +15,8 @@ export interface UserProfile {
   major?: string;
   year?: string;
   is_verified_student: boolean;
+  email_verified?: boolean;
+  is_academic_email?: boolean;
   trust_score: number;
   completion_rate: number;
   cancellation_rate: number;
@@ -27,7 +29,18 @@ export interface UserProfile {
   total_sessions_taught?: number;
   total_sessions_learned?: number;
   reliability_score?: number;
-  wallet_address?: string;
+  user_type?: string;
+  teaching_preference?: string;
+  daily_session_limit?: number;
+  portfolio_url?: string;
+  skill_visibility?: string;
+  availability_visibility?: string;
+  portfolio_visibility?: string;
+  learning_goal_visibility?: string;
+  profileCompletion?: {
+    percentage: number;
+    checklist: Array<{ label: string; completed: boolean }>;
+  };
   skills?: any[];
   goals?: any[];
   unreadNotificationsCount?: number;

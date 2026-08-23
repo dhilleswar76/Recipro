@@ -107,3 +107,149 @@ export function refreshUserReputation(userId: string): {
     reciprocalRatio,
   };
 }
+
+/**
+ * Proficiency score mapping for initial mentor quality (1st Lecture / 0 Learner Reviews)
+ */
+export const PROFICIENCY_QUALITY_MAP: Record<string, { score: number; percentage: number; label: string }> = {
+  Expert: { score: 5.0, percentage: 100, label: 'Expert (5.0 ★)' },
+  Advanced: { score: 4.5, percentage: 90, label: 'Advanced (4.5 ★)' },
+  Intermediate: { score: 4.0, percentage: 80, label: 'Intermediate (4.0 ★)' },
+  Beginner: { score: 3.0, percentage: 60, label: 'Beginner (3.0 ★)' },
+};
+
+export interface MentorQualityResult {
+  qualityScore: number;         // 1.0 to 5.0
+  qualityPercentage: number;    // 20 to 100
+  qualitySource: 'PROFICIENCY_FIRST_LECTURE' | 'LEARNER_RATINGS';
+  qualityLabel: string;
+  lecturesTaught: number;       // total completed sessions taught
+  totalReviews: number;
+  proficiency: string;
+  proficiencyScore: number;
+  averageLearnerRating: number | null;
+  breakdown: {
+    clarityScore: number;
+    punctualityScore: number;
+  };
+}
+
+/**
+ * Calculates a student's mentor quality:
+ * 1. For the FIRST lecture (0 reviews / 0 completed sessions): based on their proficiency in the specific skill.
+ * 2. From the SECOND lecture onwards (>= 1 learner reviews): based on the ratings given by every learner after completion of the sessions.
+ */
+export function calculateMentorQuality(params: {
+  proficiency?: string;
+  learnerRatings?: Array<{ score: number; punctuality_score?: number; clarity_score?: number; flagged_suspicious?: number }>;
+  lecturesTaught?: number;
+}): MentorQualityResult {
+  const prof = params.proficiency || 'Intermediate';
+  const profInfo = PROFICIENCY_QUALITY_MAP[prof] || PROFICIENCY_QUALITY_MAP['Intermediate'];
+  const ratings = (params.learnerRatings || []).filter(r => !r.flagged_suspicious);
+  const reviewsCount = ratings.length;
+  const lecturesTaught = params.lecturesTaught ?? reviewsCount;
+
+  // Case 1: First Lecture (0 rated sessions / 0 reviews) -> Calculated from skill proficiency
+  if (reviewsCount === 0) {
+    return {
+      qualityScore: profInfo.score,
+      qualityPercentage: profInfo.percentage,
+      qualitySource: 'PROFICIENCY_FIRST_LECTURE',
+      qualityLabel: `Initial Quality: ${profInfo.score.toFixed(1)} ★ (Proficiency: ${prof} • 1st Lecture)`,
+      lecturesTaught: 0,
+      totalReviews: 0,
+      proficiency: prof,
+      proficiencyScore: profInfo.score,
+      averageLearnerRating: null,
+      breakdown: {
+        clarityScore: profInfo.score,
+        punctualityScore: 5.0,
+      },
+    };
+  }
+
+  // Case 2: From the Second Lecture (>= 1 learner reviews) -> Calculated from learner ratings
+  const sumScores = ratings.reduce((acc, r) => acc + r.score, 0);
+  const avgScore = sumScores / reviewsCount;
+  const avgClarity = ratings.reduce((acc, r) => acc + (r.clarity_score || 5.0), 0) / reviewsCount;
+  const avgPunctuality = ratings.reduce((acc, r) => acc + (r.punctuality_score || 5.0), 0) / reviewsCount;
+
+  const qualityScore = Math.round(avgScore * 100) / 100;
+  const qualityPercentage = Math.min(100, Math.max(20, Math.round((qualityScore / 5.0) * 100)));
+
+  return {
+    qualityScore,
+    qualityPercentage,
+    qualitySource: 'LEARNER_RATINGS',
+    qualityLabel: `Learner Verified: ${qualityScore.toFixed(1)} ★ (${reviewsCount} review${reviewsCount > 1 ? 's' : ''})`,
+    lecturesTaught,
+    totalReviews: reviewsCount,
+    proficiency: prof,
+    proficiencyScore: profInfo.score,
+    averageLearnerRating: qualityScore,
+    breakdown: {
+      clarityScore: Math.round(avgClarity * 100) / 100,
+      punctualityScore: Math.round(avgPunctuality * 100) / 100,
+    },
+  };
+}
+
+/**
+ * Convenience query to get mentor quality for a specific user and skill from database
+ */
+export function getMentorQualityForSkill(mentorId: string, skillId?: string): MentorQualityResult {
+  const db = getDb();
+
+  // 1. Get declared/verified proficiency for this skill
+  let proficiency = 'Intermediate';
+  if (skillId) {
+    const userSkill = db.prepare(`
+      SELECT proficiency FROM user_skills WHERE user_id = ? AND skill_id = ?
+    `).get(mentorId, skillId) as any;
+    if (userSkill?.proficiency) {
+      proficiency = userSkill.proficiency;
+    }
+  } else {
+    const primarySkill = db.prepare(`
+      SELECT proficiency FROM user_skills WHERE user_id = ? LIMIT 1
+    `).get(mentorId) as any;
+    if (primarySkill?.proficiency) {
+      proficiency = primarySkill.proficiency;
+    }
+  }
+
+  // 2. Get ratings given by learners for sessions taught by this mentor
+  let ratingsQuery = `
+    SELECT r.score, r.punctuality_score, r.clarity_score, r.flagged_suspicious
+    FROM ratings r
+    JOIN sessions s ON r.session_id = s.id
+    WHERE r.ratee_id = ? AND s.teacher_id = ? AND r.flagged_suspicious = 0
+  `;
+  const queryParams: any[] = [mentorId, mentorId];
+
+  if (skillId) {
+    ratingsQuery += ` AND s.skill_id = ?`;
+    queryParams.push(skillId);
+  }
+
+  const learnerRatings = db.prepare(ratingsQuery).all(...queryParams) as any[];
+
+  // 3. Count completed sessions taught
+  let sessionsQuery = `
+    SELECT COUNT(*) as c FROM sessions
+    WHERE teacher_id = ? AND (status = 'COMPLETED' OR status = 'CREDIT_SETTLED')
+  `;
+  const sessParams: any[] = [mentorId];
+  if (skillId) {
+    sessionsQuery += ` AND skill_id = ?`;
+    sessParams.push(skillId);
+  }
+  const lecturesTaught = (db.prepare(sessionsQuery).get(...sessParams) as any)?.c || 0;
+
+  return calculateMentorQuality({
+    proficiency,
+    learnerRatings,
+    lecturesTaught,
+  });
+}

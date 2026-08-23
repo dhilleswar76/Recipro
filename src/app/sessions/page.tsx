@@ -2,529 +2,562 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
-import { 
-  Calendar, 
-  Clock, 
-  CheckCircle2, 
-  Coins, 
-  Star, 
-  AlertTriangle, 
-  ExternalLink, 
-  Video, 
-  X, 
-  ShieldAlert, 
+import {
+  Calendar,
+  Clock,
+  Video,
+  Search,
+  Filter,
   ArrowRight,
-  ShieldCheck
+  ShieldCheck,
+  Award,
+  RefreshCw,
+  Coins,
+  CheckCircle2,
+  AlertTriangle,
+  BookOpen,
+  User,
+  Users,
+  ChevronRight,
+  SlidersHorizontal,
+  X,
+  PlusCircle,
+  TrendingUp,
+  Star,
 } from 'lucide-react';
 
-export default function SessionsPage() {
-  const { user, refreshUser } = useAuth();
+export default function SessionsListPage() {
+  const { user } = useAuth();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // Search & Filter States
+  const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || '');
+  const [roleFilter, setRoleFilter] = useState<'ALL' | 'TEACHING' | 'LEARNING'>(
+    (searchParams.get('role') as any) || 'ALL'
+  );
+  const [statusFilter, setStatusFilter] = useState<string>(searchParams.get('status') || 'ALL');
+  const [skillFilter, setSkillFilter] = useState<string>(searchParams.get('skill') || 'ALL');
+  const [modeFilter, setModeFilter] = useState<string>(searchParams.get('mode') || 'ALL');
+  const [dateFilter, setDateFilter] = useState<string>(searchParams.get('dateFilter') || 'ALL');
+  const [dateFrom, setDateFrom] = useState<string>(searchParams.get('dateFrom') || '');
+  const [dateTo, setDateTo] = useState<string>(searchParams.get('dateTo') || '');
+  const [sortBy, setSortBy] = useState<string>(searchParams.get('sort') || 'UPCOMING_FIRST');
+  const [page, setPage] = useState<number>(parseInt(searchParams.get('page') || '1', 10));
+
+  // Data states
   const [sessions, setSessions] = useState<any[]>([]);
+  const [pagination, setPagination] = useState<any>({ total: 0, totalPages: 1, page: 1, limit: 15 });
+  const [stats, setStats] = useState<any>({
+    totalSessions: 0,
+    upcomingSessions: 0,
+    pendingRequests: 0,
+    acceptedSessions: 0,
+    completedSessions: 0,
+    cancelledSessions: 0,
+    disputedSessions: 0,
+    creditsEarned: 0,
+    creditsSpent: 0,
+  });
   const [loading, setLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
 
-  // Rating Modal State
-  const [ratingSession, setRatingSession] = useState<any | null>(null);
-  const [ratingScore, setRatingScore] = useState<number>(5);
-  const [punctualityScore, setPunctualityScore] = useState<number>(5);
-  const [clarityScore, setClarityScore] = useState<number>(5);
-  const [reviewText, setReviewText] = useState<string>('');
-  const [ratingSubmitting, setRatingSubmitting] = useState(false);
-
-  // Dispute Modal State
-  const [disputeSession, setDisputeSession] = useState<any | null>(null);
-  const [disputeReason, setDisputeReason] = useState<string>('NO_SHOW');
-  const [disputeDetails, setDisputeDetails] = useState<string>('');
-  const [disputeSubmitting, setDisputeSubmitting] = useState(false);
-
-  const fetchSessions = async () => {
+  // Fetch filtered sessions from backend
+  const fetchSessions = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
-      const res = await fetch('/api/sessions');
+      const query = new URLSearchParams();
+      if (searchTerm) query.set('search', searchTerm);
+      if (roleFilter !== 'ALL') query.set('role', roleFilter);
+      if (statusFilter !== 'ALL') query.set('status', statusFilter);
+      if (skillFilter !== 'ALL') query.set('skill', skillFilter);
+      if (modeFilter !== 'ALL') query.set('mode', modeFilter);
+      if (dateFilter !== 'ALL') query.set('dateFilter', dateFilter);
+      if (dateFilter === 'CUSTOM') {
+        if (dateFrom) query.set('dateFrom', dateFrom);
+        if (dateTo) query.set('dateTo', dateTo);
+      }
+      query.set('sort', sortBy);
+      query.set('page', page.toString());
+      query.set('limit', '15');
+
+      const res = await fetch(`/api/sessions?${query.toString()}`);
       if (res.ok) {
         const data = await res.json();
         setSessions(data.sessions || []);
+        setPagination(data.pagination || { total: 0, totalPages: 1, page: 1 });
+        if (data.stats) setStats(data.stats);
       }
     } catch (err) {
       console.error('Failed to load sessions:', err);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
   useEffect(() => {
     fetchSessions();
-  }, [user]);
+  }, [roleFilter, statusFilter, skillFilter, modeFilter, dateFilter, dateFrom, dateTo, sortBy, page]);
 
-  // Handle Session State Action
-  const handleSessionAction = async (sessionId: string, action: string) => {
-    setActionLoading(sessionId);
-    try {
-      const idempotencyKey = `act-${sessionId}-${action}-${Date.now()}`;
-      const res = await fetch(`/api/sessions/${sessionId}/action`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, idempotencyKey }),
-      });
+  // Live polling (every 4 seconds)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchSessions(true);
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [roleFilter, statusFilter, skillFilter, modeFilter, dateFilter, dateFrom, dateTo, sortBy, page, searchTerm]);
 
-      if (res.ok) {
-        await fetchSessions();
-        await refreshUser();
-      } else {
-        const data = await res.json();
-        alert(data.error || 'Action failed');
-      }
-    } catch (err) {
-      console.error('Action error:', err);
-    } finally {
-      setActionLoading(null);
-    }
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setPage(1);
+    fetchSessions();
   };
 
-  // Submit Rating & Review
-  const handleSubmitRating = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!ratingSession) return;
-    setRatingSubmitting(true);
-
-    try {
-      const res = await fetch('/api/ratings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sessionId: ratingSession.id,
-          score: Number(ratingScore),
-          review: reviewText,
-          punctualityScore: Number(punctualityScore),
-          clarityScore: Number(clarityScore),
-        }),
-      });
-
-      if (res.ok) {
-        setRatingSession(null);
-        setReviewText('');
-        await fetchSessions();
-        await refreshUser();
-      } else {
-        const data = await res.json();
-        alert(data.error || 'Failed to submit rating');
-      }
-    } catch (err) {
-      console.error('Rating submit error:', err);
-    } finally {
-      setRatingSubmitting(false);
-    }
+  const clearFilters = () => {
+    setSearchTerm('');
+    setRoleFilter('ALL');
+    setStatusFilter('ALL');
+    setSkillFilter('ALL');
+    setModeFilter('ALL');
+    setDateFilter('ALL');
+    setDateFrom('');
+    setDateTo('');
+    setSortBy('UPCOMING_FIRST');
+    setPage(1);
   };
 
-  // Submit Dispute
-  const handleSubmitDispute = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!disputeSession) return;
-    setDisputeSubmitting(true);
-
-    try {
-      // 1. Transition session state to DISPUTED
-      await fetch(`/api/sessions/${disputeSession.id}/action`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'DISPUTE',
-          idempotencyKey: `disp-${disputeSession.id}-${Date.now()}`,
-          reason: disputeDetails,
-        }),
-      });
-
-      // 2. Record official report in moderation queue
-      const reportedId = disputeSession.teacher_id === user?.id ? disputeSession.learner_id : disputeSession.teacher_id;
-      await fetch('/api/reports', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          reportedId,
-          sessionId: disputeSession.id,
-          reason: disputeReason,
-          details: disputeDetails,
-        }),
-      });
-
-      setDisputeSession(null);
-      setDisputeDetails('');
-      await fetchSessions();
-      await refreshUser();
-    } catch (err) {
-      console.error('Dispute submit error:', err);
-    } finally {
-      setDisputeSubmitting(false);
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'IN_PROGRESS':
+        return 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 animate-pulse';
+      case 'SCHEDULED':
+      case 'ACCEPTED':
+        return 'bg-sky-500/20 text-sky-300 border-sky-500/40';
+      case 'COMPLETED':
+      case 'CREDIT_SETTLED':
+        return 'bg-brand-500/20 text-brand-300 border-brand-500/40';
+      case 'PENDING_CONFIRMATION':
+        return 'bg-amber-500/20 text-amber-300 border-amber-500/40';
+      case 'DISPUTED':
+        return 'bg-rose-500/20 text-rose-300 border-rose-500/40';
+      case 'CANCELLED':
+        return 'bg-slate-800 text-slate-400 border-slate-700';
+      default:
+        return 'bg-slate-800 text-slate-300 border-slate-700';
     }
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-4 lg:px-8 py-8 space-y-8">
+    <div className="max-w-7xl mx-auto px-4 lg:px-8 py-8 space-y-6">
       
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* Top Header */}
+      <div className="glass-panel p-6 sm:p-8 rounded-3xl border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-display font-extrabold text-white">
-            Session &amp; Escrow Manager
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-400 mt-1">
-            Track your scheduled learning sessions, live rooms, and escrow credit settlements.
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-brand-500/20 text-brand-300 font-bold border border-brand-500/30 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-brand-400 animate-pulse" /> Live Sessions Ledger
+            </span>
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-white">My Campus Skill Sessions</h1>
+          <p className="text-xs text-slate-400 mt-1">
+            Track your 1-on-1 peer teaching and learning sessions, manage exchange agreements, and join live classrooms.
           </p>
         </div>
 
-        <Link
-          href="/explore"
-          className="px-4 py-2 rounded-xl bg-brand-500 hover:bg-brand-400 text-dark-bg font-bold text-xs shadow-glow-brand transition-all self-start sm:self-auto flex items-center gap-1.5"
-        >
-          Book Another Session <ArrowRight className="w-3.5 h-3.5" />
-        </Link>
-      </div>
-
-      {/* Escrow Rule Banner */}
-      <div className="glass-panel p-4 rounded-2xl border border-slate-800 flex items-center justify-between gap-4 text-xs">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-brand-500/20 text-brand-400 flex items-center justify-center font-bold">
-            <Coins className="w-5 h-5" />
-          </div>
-          <div>
-            <span className="font-bold text-white">Automated Escrow Protection</span>
-            <p className="text-slate-400 text-[11px]">1 Skill Credit reserved upon request &rarr; released to mentor upon double completion confirmation.</p>
-          </div>
-        </div>
-        <Link href="/wallet" className="text-brand-400 font-semibold hover:underline text-[11px] whitespace-nowrap">
-          View On-Chain Ledger &rarr;
-        </Link>
-      </div>
-
-      {/* Sessions Feed */}
-      {loading ? (
-        <div className="py-20 text-center text-xs text-slate-400">
-          Loading active and historical campus sessions...
-        </div>
-      ) : sessions.length === 0 ? (
-        <div className="glass-panel p-12 rounded-3xl border border-slate-800 text-center space-y-4">
-          <Calendar className="w-12 h-12 text-slate-600 mx-auto" />
-          <h3 className="text-base font-bold text-white">No Sessions Scheduled Yet</h3>
-          <p className="text-xs text-slate-400 max-w-md mx-auto">
-            Find a peer mentor on the Explore page or add skills to your profile so other students can request sessions from you!
-          </p>
           <Link
             href="/explore"
-            className="inline-flex px-5 py-2.5 rounded-xl bg-brand-500 text-dark-bg font-bold text-xs shadow-glow-brand"
+            className="px-4 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-400 text-dark-bg font-bold text-xs shadow-glow-brand transition-all flex items-center gap-1.5"
           >
-            Explore Mentors Now
+            <PlusCircle className="w-4 h-4" />
+            <span>Book New Session</span>
           </Link>
+          <button
+            onClick={() => fetchSessions()}
+            disabled={loading}
+            className="p-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 transition-colors"
+            title="Refresh sessions"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          </button>
         </div>
-      ) : (
-        <div className="space-y-4">
-          {sessions.map((sess) => {
-            const isTeacher = sess.teacher_id === user?.id;
-            const counterpartyName = isTeacher ? sess.learner_name : sess.teacher_name;
-            const counterpartyCollege = isTeacher ? sess.learner_college : sess.teacher_college;
-            const roleBadge = isTeacher ? 'Teaching Mentor' : 'Learner';
+      </div>
 
-            return (
-              <div key={sess.id} className="glass-panel p-5 rounded-2xl border border-slate-800 space-y-4 glass-panel-hover">
-                
-                {/* Session Header */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="flex items-start gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center font-bold text-xs text-white">
-                      {isTeacher ? 'TEACH' : 'LEARN'}
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-bold text-white text-base">{sess.title}</h3>
-                        <span className={`text-[10px] px-2 py-0.5 rounded font-bold border ${
-                          sess.status === 'CREDIT_SETTLED' ? 'bg-brand-500/20 text-brand-400 border-brand-500/30' :
-                          sess.status === 'IN_PROGRESS' ? 'bg-accent-500/20 text-accent-400 border-accent-500/30 animate-pulse' :
-                          sess.status === 'DISPUTED' ? 'bg-rose-500/20 text-rose-400 border-rose-500/30' :
-                          'bg-slate-800 text-slate-300 border-slate-700'
-                        }`}>
-                          {sess.status.replace('_', ' ')}
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-400 mt-0.5">
-                        With <strong className="text-slate-200">{counterpartyName}</strong> ({counterpartyCollege}) • <span className="text-brand-400">{roleBadge}</span>
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Scheduled Time & Credits */}
-                  <div className="flex items-center gap-4 text-xs self-start sm:self-auto">
-                    <div className="flex items-center gap-1.5 text-slate-300">
-                      <Clock className="w-3.5 h-3.5 text-slate-500" />
-                      <span>{new Date(sess.scheduled_start).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</span>
-                    </div>
-                    <div className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-brand-400 font-bold">
-                      {sess.credits_amount} Credit
-                    </div>
-                  </div>
-                </div>
-
-                {sess.notes && (
-                  <p className="text-xs text-slate-300 bg-slate-900/60 p-2.5 rounded-xl border border-slate-800/80">
-                    <span className="text-slate-400 font-medium">Session Goal: </span>{sess.notes}
-                  </p>
-                )}
-
-                {/* State-Dependent Action Buttons */}
-                <div className="pt-2 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3">
-                  
-                  {/* Left: State status indicators */}
-                  <div className="text-[11px] text-slate-400 flex items-center gap-2">
-                    {sess.status === 'REQUESTED' && <span>Awaiting mentor acceptance. Escrow locked.</span>}
-                    {sess.status === 'ACCEPTED' && <span>Session accepted! Ready to start when scheduled.</span>}
-                    {sess.status === 'PENDING_CONFIRMATION' && (
-                      <span className="text-amber-300">
-                        {isTeacher 
-                          ? (sess.teacher_confirmed ? 'You confirmed. Waiting for learner confirmation.' : 'Learner has confirmed. Please confirm completion to settle credit!')
-                          : (sess.learner_confirmed ? 'You confirmed. Waiting for mentor confirmation.' : 'Mentor has confirmed. Please confirm completion to release escrow!')
-                        }
-                      </span>
-                    )}
-                    {sess.status === 'CREDIT_SETTLED' && (
-                      <span className="text-brand-400 flex items-center gap-1">
-                        <CheckCircle2 className="w-3.5 h-3.5" /> 1 Credit Settled to Mentor
-                      </span>
-                    )}
-                    {sess.status === 'DISPUTED' && (
-                      <span className="text-rose-400 flex items-center gap-1">
-                        <AlertTriangle className="w-3.5 h-3.5" /> Under Moderator Review (Credits Frozen)
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Right: Interactive Actions */}
-                  <div className="flex flex-wrap items-center gap-2">
-                    
-                    {/* Teacher: Accept / Reject Request */}
-                    {sess.status === 'REQUESTED' && isTeacher && (
-                      <>
-                        <button
-                          onClick={() => handleSessionAction(sess.id, 'CANCEL')}
-                          disabled={actionLoading === sess.id}
-                          className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-rose-300 font-semibold text-xs border border-slate-700"
-                        >
-                          Decline Request
-                        </button>
-                        <button
-                          onClick={() => handleSessionAction(sess.id, 'ACCEPT')}
-                          disabled={actionLoading === sess.id}
-                          className="px-4 py-1.5 rounded-lg bg-brand-500 hover:bg-brand-400 text-dark-bg font-bold text-xs shadow-glow-brand"
-                        >
-                          Accept Session Request
-                        </button>
-                      </>
-                    )}
-
-                    {/* Learner: Cancel Request before Accepted */}
-                    {sess.status === 'REQUESTED' && !isTeacher && (
-                      <button
-                        onClick={() => handleSessionAction(sess.id, 'CANCEL')}
-                        disabled={actionLoading === sess.id}
-                        className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs border border-slate-700"
-                      >
-                        Cancel Request &amp; Refund Escrow
-                      </button>
-                    )}
-
-                    {/* Join Live Session Room */}
-                    {(sess.status === 'ACCEPTED' || sess.status === 'IN_PROGRESS' || sess.status === 'PENDING_CONFIRMATION') && (
-                      <Link
-                        href={`/live/${sess.id}`}
-                        className="px-4 py-1.5 rounded-lg bg-accent-500 hover:bg-accent-400 text-white font-bold text-xs shadow-glow-accent flex items-center gap-1.5"
-                      >
-                        <Video className="w-3.5 h-3.5" /> Enter Live Peer Room
-                      </Link>
-                    )}
-
-                    {/* Confirm Completion */}
-                    {(sess.status === 'IN_PROGRESS' || sess.status === 'PENDING_CONFIRMATION') && (
-                      <button
-                        onClick={() => handleSessionAction(sess.id, 'CONFIRM_COMPLETION')}
-                        disabled={actionLoading === sess.id}
-                        className="px-4 py-1.5 rounded-lg bg-brand-500 hover:bg-brand-400 text-dark-bg font-bold text-xs shadow-glow-brand"
-                      >
-                        Confirm Session Complete
-                      </button>
-                    )}
-
-                    {/* Submit Rating if Settled and not yet rated */}
-                    {sess.status === 'CREDIT_SETTLED' && !sess.rating_id && (
-                      <button
-                        onClick={() => setRatingSession(sess)}
-                        className="px-3.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-dark-bg font-bold text-xs flex items-center gap-1"
-                      >
-                        <Star className="w-3.5 h-3.5 fill-dark-bg" /> Leave Peer Review
-                      </button>
-                    )}
-
-                    {/* Flag Dispute if not resolved */}
-                    {sess.status !== 'DISPUTED' && sess.status !== 'CANCELLED' && (
-                      <button
-                        onClick={() => setDisputeSession(sess)}
-                        className="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-rose-400 text-xs border border-slate-800"
-                        title="Report an issue with this session"
-                      >
-                        <ShieldAlert className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-
-                  </div>
-
-                </div>
-
-              </div>
-            );
-          })}
+      {/* Real-time Calculated Summary Counters Bar */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+        <div className="glass-panel p-3.5 rounded-2xl border border-slate-800 space-y-1">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total</span>
+          <div className="text-xl font-extrabold text-white">{stats.totalSessions}</div>
         </div>
-      )}
+        <div className="glass-panel p-3.5 rounded-2xl border border-emerald-500/30 bg-emerald-500/5 space-y-1">
+          <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">Upcoming</span>
+          <div className="text-xl font-extrabold text-emerald-300">{stats.upcomingSessions}</div>
+        </div>
+        <div className="glass-panel p-3.5 rounded-2xl border border-amber-500/30 bg-amber-500/5 space-y-1">
+          <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">Pending</span>
+          <div className="text-xl font-extrabold text-amber-300">{stats.pendingRequests}</div>
+        </div>
+        <div className="glass-panel p-3.5 rounded-2xl border border-sky-500/30 bg-sky-500/5 space-y-1">
+          <span className="text-[10px] font-bold text-sky-400 uppercase tracking-wider">Accepted</span>
+          <div className="text-xl font-extrabold text-sky-300">{stats.acceptedSessions}</div>
+        </div>
+        <div className="glass-panel p-3.5 rounded-2xl border border-brand-500/30 bg-brand-500/5 space-y-1">
+          <span className="text-[10px] font-bold text-brand-400 uppercase tracking-wider">Completed</span>
+          <div className="text-xl font-extrabold text-brand-300">{stats.completedSessions}</div>
+        </div>
+        <div className="glass-panel p-3.5 rounded-2xl border border-rose-500/30 bg-rose-500/5 space-y-1">
+          <span className="text-[10px] font-bold text-rose-400 uppercase tracking-wider">Cancelled</span>
+          <div className="text-xl font-extrabold text-rose-300">{stats.cancelledSessions}</div>
+        </div>
+        <div className="glass-panel p-3.5 rounded-2xl border border-indigo-500/30 bg-indigo-500/5 space-y-1">
+          <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider">Earned</span>
+          <div className="text-xl font-extrabold text-indigo-300">+{stats.creditsEarned} Cr</div>
+        </div>
+        <div className="glass-panel p-3.5 rounded-2xl border border-cyan-500/30 bg-cyan-500/5 space-y-1">
+          <span className="text-[10px] font-bold text-cyan-400 uppercase tracking-wider">Spent</span>
+          <div className="text-xl font-extrabold text-cyan-300">-{stats.creditsSpent} Cr</div>
+        </div>
+      </div>
 
-      {/* ============================================================ */}
-      {/* MODAL: SUBMIT PEER RATING & REVIEW */}
-      {/* ============================================================ */}
-      {ratingSession && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <form onSubmit={handleSubmitRating} className="glass-panel w-full max-w-md rounded-3xl border border-slate-700 shadow-2xl p-6 relative space-y-4">
-            <button type="button" onClick={() => setRatingSession(null)} className="absolute right-4 top-4 text-slate-400 hover:text-white">
-              <X className="w-5 h-5" />
-            </button>
-
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold">
-                <Star className="w-5 h-5 fill-amber-400" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-white">Peer Review &amp; Trust Rating</h3>
-                <p className="text-xs text-slate-400">{ratingSession.title}</p>
-              </div>
-            </div>
-
-            {/* Star Score Selector */}
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">Overall Rating (1 - 5 Stars)</label>
-              <div className="flex items-center gap-2">
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <button
-                    type="button"
-                    key={star}
-                    onClick={() => setRatingScore(star)}
-                    className={`p-2 rounded-xl border transition-colors ${
-                      ratingScore >= star ? 'bg-amber-500/20 border-amber-500/50 text-amber-400' : 'bg-slate-900 border-slate-800 text-slate-600'
-                    }`}
-                  >
-                    <Star className={`w-5 h-5 ${ratingScore >= star ? 'fill-amber-400' : ''}`} />
-                  </button>
-                ))}
-                <span className="ml-2 font-bold text-amber-300 text-sm">{ratingScore}.0</span>
-              </div>
-            </div>
-
-            {/* Detailed Sliders */}
-            <div className="grid grid-cols-2 gap-3 text-xs">
-              <div>
-                <label className="block text-[11px] text-slate-400 mb-1">Punctuality: {punctualityScore}/5</label>
-                <input 
-                  type="range" min="1" max="5" 
-                  value={punctualityScore} 
-                  onChange={(e) => setPunctualityScore(Number(e.target.value))}
-                  className="w-full accent-brand-500"
-                />
-              </div>
-              <div>
-                <label className="block text-[11px] text-slate-400 mb-1">Clarity &amp; Helpfulness: {clarityScore}/5</label>
-                <input 
-                  type="range" min="1" max="5" 
-                  value={clarityScore} 
-                  onChange={(e) => setClarityScore(Number(e.target.value))}
-                  className="w-full accent-brand-500"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Written Review</label>
-              <textarea 
-                required
-                minLength={5}
-                value={reviewText}
-                onChange={(e) => setReviewText(e.target.value)}
-                placeholder="Share constructive feedback regarding topics covered, mentoring style, and takeaways..."
-                rows={3}
-                className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-brand-500"
-              />
-            </div>
-
+      {/* Role Selector Tabs */}
+      <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div className="flex items-center gap-2">
+          {[
+            { id: 'ALL', label: 'All My Sessions' },
+            { id: 'TEACHING', label: 'Teaching Sessions (As Mentor)' },
+            { id: 'LEARNING', label: 'Learning Sessions (As Learner)' },
+          ].map(tab => (
             <button
-              type="submit"
-              disabled={ratingSubmitting}
-              className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-dark-bg font-bold text-xs transition-colors"
+              key={tab.id}
+              onClick={() => { setRoleFilter(tab.id as any); setPage(1); }}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                roleFilter === tab.id
+                  ? 'bg-slate-800 text-white border border-slate-700 shadow-sm'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-900'
+              }`}
             >
-              {ratingSubmitting ? 'Recording Rating...' : 'Submit Rating & Update Bayesian Trust'}
+              {tab.label}
             </button>
-          </form>
+          ))}
         </div>
-      )}
 
-      {/* ============================================================ */}
-      {/* MODAL: SUBMIT DISPUTE */}
-      {/* ============================================================ */}
-      {disputeSession && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <form onSubmit={handleSubmitDispute} className="glass-panel w-full max-w-md rounded-3xl border border-rose-500/40 shadow-2xl p-6 relative space-y-4">
-            <button type="button" onClick={() => setDisputeSession(null)} className="absolute right-4 top-4 text-slate-400 hover:text-white">
-              <X className="w-5 h-5" />
-            </button>
+        <button
+          onClick={() => setShowFilters(!showFilters)}
+          className={`px-3 py-1.5 rounded-xl text-xs font-semibold border flex items-center gap-1.5 transition-colors ${
+            showFilters ? 'bg-brand-500/20 text-brand-300 border-brand-500/40' : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white'
+          }`}
+        >
+          <SlidersHorizontal className="w-3.5 h-3.5" />
+          <span>Advanced Filters</span>
+        </button>
+      </div>
 
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center font-bold">
-                <ShieldAlert className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-white">Open Campus Dispute</h3>
-                <p className="text-xs text-slate-400">Escrow credits will freeze pending moderator review</p>
-              </div>
-            </div>
+      {/* Quick Status Filter Pills */}
+      <div className="flex flex-wrap items-center gap-2">
+        {[
+          { id: 'ALL', label: 'All Statuses' },
+          { id: 'UPCOMING', label: '🟢 Upcoming / Live' },
+          { id: 'REQUESTED', label: '⏳ Requested' },
+          { id: 'ACCEPTED', label: '🤝 Accepted' },
+          { id: 'SCHEDULED', label: '📅 Scheduled' },
+          { id: 'IN_PROGRESS', label: 'Live In-Progress' },
+          { id: 'COMPLETED', label: '✓ Completed & Settled' },
+          { id: 'DISPUTED', label: '⚠️ Disputed' },
+          { id: 'CANCELLED', label: '❌ Cancelled' },
+        ].map(pill => (
+          <button
+            key={pill.id}
+            onClick={() => { setStatusFilter(pill.id); setPage(1); }}
+            className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
+              statusFilter === pill.id
+                ? 'bg-brand-500 text-dark-bg shadow-glow-brand'
+                : 'bg-slate-900 hover:bg-slate-800 text-slate-400 border border-slate-800'
+            }`}
+          >
+            {pill.label}
+          </button>
+        ))}
+      </div>
 
+      {/* Search & Filter Controls Bar */}
+      <div className="glass-panel p-4 rounded-2xl border border-slate-800 space-y-3">
+        <form onSubmit={handleSearchSubmit} className="flex flex-wrap items-center gap-3">
+          <div className="flex-1 min-w-[240px] relative">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search skill (e.g. Python), mentor name, learner name, or session ID..."
+              className="w-full bg-slate-900 border border-slate-700 rounded-xl pl-10 pr-3 py-2 text-xs text-white focus:outline-none focus:border-brand-500"
+            />
+          </div>
+
+          <select
+            value={skillFilter}
+            onChange={(e) => { setSkillFilter(e.target.value); setPage(1); }}
+            className="bg-slate-900 border border-slate-700 text-xs text-slate-300 rounded-xl px-3 py-2"
+          >
+            <option value="ALL">All Skills</option>
+            <option value="Python">Python</option>
+            <option value="React">React</option>
+            <option value="Solidity">Solidity</option>
+            <option value="Data Structures">Data Structures</option>
+            <option value="Machine Learning">Machine Learning</option>
+          </select>
+
+          <select
+            value={sortBy}
+            onChange={(e) => { setSortBy(e.target.value); setPage(1); }}
+            className="bg-slate-900 border border-slate-700 text-xs text-slate-300 rounded-xl px-3 py-2"
+          >
+            <option value="UPCOMING_FIRST">Sort: Upcoming First</option>
+            <option value="NEWEST_FIRST">Sort: Newest First</option>
+            <option value="OLDEST_FIRST">Sort: Oldest First</option>
+            <option value="RECENTLY_UPDATED">Sort: Recently Updated</option>
+            <option value="RECENTLY_COMPLETED">Sort: Recently Completed</option>
+          </select>
+
+          <button
+            type="submit"
+            className="px-4 py-2 rounded-xl bg-brand-500 hover:bg-brand-400 text-dark-bg font-bold text-xs shadow-glow-brand"
+          >
+            Search
+          </button>
+        </form>
+
+        {/* Extended Filter Options Drawer */}
+        {showFilters && (
+          <div className="pt-3 border-t border-slate-800 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
             <div>
-              <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Dispute Reason</label>
+              <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                Date Range Filter
+              </label>
               <select
-                value={disputeReason}
-                onChange={(e) => setDisputeReason(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-xl px-3 py-2"
+                value={dateFilter}
+                onChange={(e) => { setDateFilter(e.target.value); setPage(1); }}
+                className="w-full bg-slate-900 border border-slate-700 text-xs text-slate-300 rounded-xl px-3 py-2"
               >
-                <option value="NO_SHOW">Participant No-Show</option>
-                <option value="INCOMPLETE">Incomplete / Ended Prematurely</option>
-                <option value="WRONG_SKILL">Skill Mismatch / Inaccurate Knowledge</option>
-                <option value="CREDIT_FRAUD">Credit Farming / Unethical Activity</option>
-                <option value="OTHER">Other Issue</option>
+                <option value="ALL">All Dates</option>
+                <option value="TODAY">Today</option>
+                <option value="TOMORROW">Tomorrow</option>
+                <option value="THIS_WEEK">This Week (Next 7 Days)</option>
+                <option value="THIS_MONTH">This Month</option>
+                <option value="CUSTOM">Custom Date Range</option>
               </select>
             </div>
 
+            {dateFilter === 'CUSTOM' && (
+              <div className="sm:col-span-2 flex items-center gap-2">
+                <div className="flex-1">
+                  <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">From</label>
+                  <input
+                    type="date"
+                    value={dateFrom}
+                    onChange={(e) => setDateFrom(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 text-xs text-white rounded-xl px-3 py-1.5"
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">To</label>
+                  <input
+                    type="date"
+                    value={dateTo}
+                    onChange={(e) => setDateTo(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 text-xs text-white rounded-xl px-3 py-1.5"
+                  />
+                </div>
+              </div>
+            )}
+
             <div>
-              <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Details &amp; Evidence</label>
-              <textarea 
-                required
-                minLength={10}
-                value={disputeDetails}
-                onChange={(e) => setDisputeDetails(e.target.value)}
-                placeholder="Describe what occurred during the scheduled session window..."
-                rows={3}
-                className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-rose-500"
-              />
+              <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                Session Mode
+              </label>
+              <select
+                value={modeFilter}
+                onChange={(e) => { setModeFilter(e.target.value); setPage(1); }}
+                className="w-full bg-slate-900 border border-slate-700 text-xs text-slate-300 rounded-xl px-3 py-2"
+              >
+                <option value="ALL">All Modes</option>
+                <option value="ONLINE">Online Video Classroom</option>
+                <option value="CAMPUS_IN_PERSON">In-Person Campus Lab</option>
+              </select>
             </div>
 
-            <button
-              type="submit"
-              disabled={disputeSubmitting}
-              className="w-full py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs transition-colors"
-            >
-              {disputeSubmitting ? 'Freezing Escrow...' : 'Submit to Campus Moderator Queue'}
-            </button>
-          </form>
-        </div>
-      )}
+            <div className="sm:col-span-3 flex justify-end">
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="text-xs text-slate-400 hover:text-white underline font-semibold"
+              >
+                Reset All Filters
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Sessions Grid */}
+      <div className="space-y-4">
+        {loading ? (
+          <div className="py-20 text-center text-xs text-slate-400 space-y-3">
+            <RefreshCw className="w-6 h-6 animate-spin mx-auto text-brand-400" />
+            <p>Loading sessions from database...</p>
+          </div>
+        ) : sessions.length === 0 ? (
+          <div className="glass-panel p-12 rounded-3xl border border-slate-800 text-center space-y-4">
+            <BookOpen className="w-12 h-12 text-slate-600 mx-auto" />
+            <div>
+              <h3 className="text-base font-bold text-white">No Sessions Found</h3>
+              <p className="text-xs text-slate-400 mt-1">
+                {searchTerm || statusFilter !== 'ALL' || skillFilter !== 'ALL'
+                  ? 'No sessions match your search criteria and active filters.'
+                  : "You haven't booked or conducted any sessions yet."}
+              </p>
+            </div>
+            <div className="pt-2 flex items-center justify-center gap-3">
+              {(searchTerm || statusFilter !== 'ALL' || skillFilter !== 'ALL' || dateFilter !== 'ALL') ? (
+                <button
+                  onClick={clearFilters}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs"
+                >
+                  Clear Filters
+                </button>
+              ) : (
+                <Link
+                  href="/explore"
+                  className="px-4 py-2 rounded-xl bg-brand-500 hover:bg-brand-400 text-dark-bg font-bold text-xs shadow-glow-brand"
+                >
+                  Find Python Mentors
+                </Link>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {sessions.map((sess: any) => {
+              const isTeacher = sess.teacher_id === (user?.id || (user as any)?.userId);
+              return (
+                <div
+                  key={sess.id}
+                  className="glass-panel p-5 rounded-3xl border border-slate-800 hover:border-slate-700 transition-all flex flex-col justify-between space-y-4 group"
+                >
+                  <div className="space-y-3">
+                    
+                    {/* Header Row: Skill & Status */}
+                    <div className="flex items-center justify-between">
+                      <span className={`text-[10px] px-2.5 py-0.5 rounded-full font-bold border ${getStatusBadge(sess.status)}`}>
+                        {sess.status}
+                      </span>
+                      <span className="text-[11px] text-brand-400 font-semibold font-mono">
+                        {sess.credits_amount || 1} Credit(s)
+                      </span>
+                    </div>
+
+                    {/* Title */}
+                    <div>
+                      <h3 className="text-base font-bold text-white group-hover:text-brand-300 transition-colors">
+                        {sess.title || `${sess.skill_name} Learning Session`}
+                      </h3>
+                      <div className="text-xs text-slate-400 mt-0.5 font-medium">{sess.skill_category || 'Peer Mentorship'}</div>
+                    </div>
+
+                    {/* Participants */}
+                    <div className="p-3 rounded-2xl bg-slate-900/80 border border-slate-800/80 space-y-1.5 text-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-400 text-[11px]">Mentor:</span>
+                        <strong className="text-white flex items-center gap-1">
+                          {sess.teacher_name} {isTeacher && <span className="text-brand-400 text-[10px]">(You)</span>}
+                        </strong>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-400 text-[11px]">Learner:</span>
+                        <strong className="text-white flex items-center gap-1">
+                          {sess.learner_name} {!isTeacher && <span className="text-indigo-400 text-[10px]">(You)</span>}
+                        </strong>
+                      </div>
+                    </div>
+
+                    {/* Schedule Time & Mode */}
+                    <div className="flex items-center justify-between text-xs text-slate-400">
+                      <div className="flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5 text-slate-500" />
+                        <span>
+                          {sess.scheduled_start
+                            ? `${new Date(sess.scheduled_start).toLocaleDateString([], { month: 'short', day: 'numeric' })} • ${new Date(sess.scheduled_start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                            : 'Time Pending'}
+                        </span>
+                      </div>
+                      <span className="text-[11px] text-slate-500">{sess.mode || 'Online'}</span>
+                    </div>
+
+                  </div>
+
+                  {/* Footer Actions */}
+                  <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between gap-2">
+                    <Link
+                      href={`/sessions/${sess.id}`}
+                      className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs border border-slate-700 flex items-center gap-1 transition-colors"
+                    >
+                      <span>Inspect Details</span>
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </Link>
+
+                    {['SCHEDULED', 'ACCEPTED', 'IN_PROGRESS'].includes(sess.status) && (
+                      <Link
+                        href={`/live/${sess.id}`}
+                        className="px-3.5 py-1.5 rounded-xl bg-brand-500 hover:bg-brand-400 text-dark-bg font-extrabold text-xs shadow-glow-brand transition-all flex items-center gap-1"
+                      >
+                        <Video className="w-3.5 h-3.5" />
+                        <span>Live Classroom</span>
+                      </Link>
+                    )}
+
+                    {['COMPLETED', 'CREDIT_SETTLED'].includes(sess.status) && !isTeacher && (
+                      <Link
+                        href={`/sessions/${sess.id}`}
+                        className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-dark-bg font-extrabold text-xs shadow-glow-brand transition-all flex items-center gap-1"
+                      >
+                        <Star className="w-3.5 h-3.5 fill-current" />
+                        <span>Rate Mentor</span>
+                      </Link>
+                    )}
+                  </div>
+
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Pagination Controls */}
+        {pagination.totalPages > 1 && (
+          <div className="glass-panel p-4 rounded-2xl border border-slate-800 flex items-center justify-between text-xs text-slate-400">
+            <span>
+              Showing Page {pagination.page} of {pagination.totalPages} ({pagination.total} total sessions)
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                disabled={page <= 1}
+                onClick={() => setPage(p => p - 1)}
+                className="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-white disabled:opacity-40"
+              >
+                Previous
+              </button>
+              <button
+                disabled={page >= pagination.totalPages}
+                onClick={() => setPage(p => p + 1)}
+                className="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-white disabled:opacity-40"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
 
     </div>
   );

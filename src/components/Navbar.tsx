@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
@@ -8,33 +8,37 @@ import {
   Sparkles, 
   Search, 
   Calendar, 
-  Award, 
   Coins, 
   Brain, 
   ShieldAlert, 
-  GraduationCap, 
-  User, 
   LogOut, 
-  ChevronDown, 
-  CheckCircle2, 
   Activity,
-  Layers
+  Layers,
+  HelpCircle,
+  Bell
 } from 'lucide-react';
 
 export function Navbar() {
   const pathname = usePathname();
-  const { user, logout, switchDemoUser } = useAuth();
-  const [demoMenuOpen, setDemoMenuOpen] = useState(false);
+  const { user, logout } = useAuth();
+  const [unreadCount, setUnreadCount] = useState<number>(0);
 
-  const demoPersonas = [
-    { email: 'alice@campus.edu', name: 'Alice Chen', role: 'Student (React/Node)', badge: 'Learner/Mentor' },
-    { email: 'rahul.kumar@campus.edu', name: 'Rahul Kumar', role: 'Senior Mentor (Python/Solidity)', badge: 'Top Mentor' },
-    { email: 'elena.rostova@campus.edu', name: 'Elena Rostova', role: 'Design TA (Figma/UX)', badge: 'Top Designer' },
-    { email: 'david.kim@campus.edu', name: 'David Kim', role: 'Applied Math Tutor', badge: 'Calculus TA' },
-    { email: 'botfarm1@external-temp.net', name: 'QuickSwap Pro', role: 'Suspicious Ring Account', badge: 'Flagged / Sybil' },
-    { email: 'moderator.sarah@campus.edu', name: 'Sarah Jenkins', role: 'Campus Moderator', badge: 'Moderator' },
-    { email: 'admin@skillswap.campus.edu', name: 'Campus Admin', role: 'System SRE & Admin', badge: 'Admin' },
-  ];
+  useEffect(() => {
+    if (!user) return;
+    const fetchUnread = async () => {
+      try {
+        const res = await fetch('/api/notifications/unread-count');
+        if (res.ok) {
+          const data = await res.json();
+          setUnreadCount(data.unreadCount || 0);
+        }
+      } catch {}
+    };
+
+    fetchUnread();
+    const interval = setInterval(fetchUnread, 4000);
+    return () => clearInterval(interval);
+  }, [user]);
 
   return (
     <header className="sticky top-0 z-50 glass-panel border-b border-slate-800/80 px-4 lg:px-8 py-3">
@@ -50,74 +54,77 @@ export function Navbar() {
               <span className="font-display font-bold text-xl tracking-tight text-white">SKILLSWAP</span>
               <span className="text-xs px-2 py-0.5 rounded-full bg-brand-500/20 text-brand-400 font-semibold border border-brand-500/30">CAMPUS</span>
             </div>
-            <p className="text-[10px] text-slate-400 font-medium tracking-wide">Exchange skills instead of money</p>
+            <p className="text-[10px] text-slate-400 font-medium tracking-wide">Peer skill exchange for students</p>
           </div>
         </Link>
 
-        {/* Navigation Links */}
+        {/* Clean Public & App Navigation */}
         <nav className="hidden md:flex items-center gap-1 bg-slate-900/60 p-1 rounded-xl border border-slate-800">
+          <Link 
+            href="/" 
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+              pathname === '/' ? 'bg-slate-800 text-white' : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
+            }`}
+          >
+            Home
+          </Link>
+
           <Link 
             href="/explore" 
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-              pathname === '/explore' ? 'bg-brand-500 text-dark-bg shadow-sm' : 'text-slate-300 hover:text-white hover:bg-slate-800'
+              pathname === '/explore' ? 'bg-brand-500 text-dark-bg shadow-sm' : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
             }`}
           >
             <Search className="w-3.5 h-3.5" />
-            Explore Skills
+            <span>Find Skills</span>
           </Link>
 
           <Link 
-            href="/studysphere" 
+            href="/#how-it-works" 
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-              pathname === '/studysphere' ? 'bg-accent-500 text-white shadow-sm' : 'text-slate-300 hover:text-white hover:bg-slate-800'
+              pathname === '/#how-it-works' ? 'bg-slate-800 text-white' : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
             }`}
           >
-            <Layers className="w-3.5 h-3.5" />
-            StudySphere
-          </Link>
-
-          <Link 
-            href="/sessions" 
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-              pathname === '/sessions' ? 'bg-slate-800 text-white' : 'text-slate-300 hover:text-white hover:bg-slate-800'
-            }`}
-          >
-            <Calendar className="w-3.5 h-3.5" />
-            Sessions
+            <HelpCircle className="w-3.5 h-3.5" />
+            <span>How It Works</span>
           </Link>
 
           <Link 
             href="/study-coach" 
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-              pathname === '/study-coach' ? 'bg-indigo-600 text-white' : 'text-slate-300 hover:text-white hover:bg-slate-800'
+              pathname === '/study-coach' ? 'bg-indigo-600 text-white' : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
             }`}
           >
             <Brain className="w-3.5 h-3.5" />
-            AI Coach
+            <span>Study Coach</span>
           </Link>
 
-          <Link 
-            href="/credentials" 
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-              pathname === '/credentials' ? 'bg-slate-800 text-white' : 'text-slate-300 hover:text-white hover:bg-slate-800'
-            }`}
-          >
-            <Award className="w-3.5 h-3.5" />
-            Badges
-          </Link>
+          {user && (
+            <>
+              <Link 
+                href="/studysphere" 
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                  pathname === '/studysphere' ? 'bg-accent-500 text-white' : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5" />
+                <span>Circles</span>
+              </Link>
 
-          <Link 
-            href="/wallet" 
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-              pathname === '/wallet' ? 'bg-slate-800 text-white' : 'text-slate-300 hover:text-white hover:bg-slate-800'
-            }`}
-          >
-            <Coins className="w-3.5 h-3.5" />
-            Ledger
-          </Link>
+              <Link 
+                href="/sessions" 
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                  pathname === '/sessions' ? 'bg-slate-800 text-white' : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
+                }`}
+              >
+                <Calendar className="w-3.5 h-3.5" />
+                <span>Sessions</span>
+              </Link>
+            </>
+          )}
 
-          {/* Moderator / Admin Access */}
-          {(user?.role === 'MODERATOR' || user?.role === 'ADMIN') && (
+          {/* Moderator Access */}
+          {user?.role === 'MODERATOR' && (
             <Link 
               href="/moderator" 
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
@@ -125,10 +132,11 @@ export function Navbar() {
               }`}
             >
               <ShieldAlert className="w-3.5 h-3.5" />
-              Moderation
+              <span>Moderation</span>
             </Link>
           )}
 
+          {/* Admin Access (Visible only to authenticated ADMIN role) */}
           {user?.role === 'ADMIN' && (
             <Link 
               href="/admin" 
@@ -137,14 +145,29 @@ export function Navbar() {
               }`}
             >
               <Activity className="w-3.5 h-3.5" />
-              Admin
+              <span>Admin</span>
             </Link>
           )}
         </nav>
 
-        {/* Right Section: Skill Credit Balance, Demo Persona Switcher & Profile */}
+        {/* Right Section: Balance & Auth */}
         <div className="flex items-center gap-3">
-          
+          {/* Notification Inbox Bell */}
+          {user && (
+            <Link
+              href="/notifications"
+              className="relative p-2 rounded-xl bg-slate-900/80 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white transition-colors"
+              title="Notification Center"
+            >
+              <Bell className="w-4 h-4" />
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-rose-500 text-white font-extrabold text-[10px] flex items-center justify-center ring-2 ring-slate-950 animate-pulse">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
+            </Link>
+          )}
+
           {/* Skill Credit Balance Capsule */}
           {user && (
             <Link href="/wallet" className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-brand-950/60 border border-brand-500/30 hover:border-brand-500/60 transition-colors">
@@ -162,68 +185,39 @@ export function Navbar() {
             </Link>
           )}
 
-          {/* Demo Persona Switcher Dropdown (Essential for testing all flows) */}
-          <div className="relative">
-            <button 
-              onClick={() => setDemoMenuOpen(!demoMenuOpen)}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-xs font-medium text-slate-200 border border-slate-700 transition-colors"
-            >
-              <span className="w-2 h-2 rounded-full bg-brand-400"></span>
-              <span className="hidden sm:inline">Demo:</span>
-              <span className="font-semibold text-white truncate max-w-[90px]">{user?.display_name?.split(' ')[0] || 'Alice'}</span>
-              <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
-            </button>
-
-            {demoMenuOpen && (
-              <div className="absolute right-0 mt-2 w-72 glass-panel rounded-xl shadow-2xl p-2 border border-slate-700 z-50">
-                <div className="px-2 py-1 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                  Switch Campus Persona
-                </div>
-                <div className="divide-y divide-slate-800">
-                  {demoPersonas.map((p) => (
-                    <button
-                      key={p.email}
-                      onClick={async () => {
-                        await switchDemoUser(p.email);
-                        setDemoMenuOpen(false);
-                      }}
-                      className={`w-full text-left p-2 rounded-lg text-xs flex items-center justify-between hover:bg-slate-800/80 transition-colors ${
-                        user?.email === p.email ? 'bg-slate-800 text-brand-400 font-semibold' : 'text-slate-300'
-                      }`}
-                    >
-                      <div>
-                        <div className="font-medium text-white flex items-center gap-1.5">
-                          {p.name}
-                          {user?.email === p.email && <CheckCircle2 className="w-3.5 h-3.5 text-brand-400" />}
-                        </div>
-                        <div className="text-[11px] text-slate-400">{p.role}</div>
-                      </div>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-900 text-slate-400 border border-slate-700">
-                        {p.badge}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* User Profile / Logout */}
+          {/* User Profile / Logout vs Login / Sign Up */}
           {user ? (
-            <Link 
-              href="/profile" 
-              className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-xs shadow-md hover:scale-105 transition-transform"
-              title="View Profile & Manage Skills"
-            >
-              {user.display_name?.substring(0, 2).toUpperCase() || 'U'}
-            </Link>
+            <div className="flex items-center gap-2">
+              <Link 
+                href="/profile" 
+                className="w-9 h-9 rounded-xl bg-gradient-to-br from-brand-500 to-accent-600 flex items-center justify-center text-dark-bg font-extrabold text-xs shadow-md hover:scale-105 transition-transform"
+                title={`${user.display_name} • View Profile`}
+              >
+                {user.display_name?.substring(0, 2).toUpperCase() || 'U'}
+              </Link>
+              <button
+                onClick={() => logout()}
+                className="text-slate-400 hover:text-rose-400 p-1.5 rounded-lg hover:bg-slate-800 transition-colors"
+                title="Log Out"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
           ) : (
-            <Link 
-              href="/explore" 
-              className="px-4 py-1.5 rounded-lg bg-brand-500 hover:bg-brand-400 text-dark-bg font-bold text-xs transition-colors"
-            >
-              Get Started
-            </Link>
+            <div className="flex items-center gap-2">
+              <Link 
+                href="/login" 
+                className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold text-xs transition-colors border border-slate-700"
+              >
+                Log In
+              </Link>
+              <Link 
+                href="/register" 
+                className="px-4 py-1.5 rounded-xl bg-brand-500 hover:bg-brand-400 text-dark-bg font-bold text-xs transition-colors shadow-glow-brand"
+              >
+                Sign Up
+              </Link>
+            </div>
           )}
 
         </div>

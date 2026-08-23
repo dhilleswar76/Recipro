@@ -22,17 +22,18 @@ export async function POST(
     }
 
     const { action, reason, idempotencyKey } = parsed.data;
+    const resolvedIdempotencyKey = idempotencyKey || `${sessionId}-${action}-${Date.now()}`;
 
     let targetState: SessionState = 'REQUESTED';
     if (action === 'ACCEPT') targetState = 'ACCEPTED';
     else if (action === 'START') targetState = 'IN_PROGRESS';
-    else if (action === 'CONFIRM_COMPLETION') targetState = 'COMPLETED';
+    else if (action === 'CONFIRM_COMPLETION' || action === 'CONFIRM') targetState = 'COMPLETED';
     else if (action === 'CANCEL' || action === 'REJECT') targetState = 'CANCELLED';
     else if (action === 'DISPUTE') targetState = 'DISPUTED';
 
     const result = transitionSessionState(sessionId, targetState, user.userId, {
       reason,
-      idempotencyKey,
+      idempotencyKey: resolvedIdempotencyKey,
     });
 
     if (!result.success) {

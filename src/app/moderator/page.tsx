@@ -69,7 +69,7 @@ export default function ModeratorPage() {
         <ShieldAlert className="w-12 h-12 text-amber-500 mx-auto" />
         <h2 className="text-xl font-bold text-white">Campus Moderator Authentication Required</h2>
         <p className="text-xs text-slate-400">
-          Use the demo profile switcher in the top navigation bar to switch to Sarah Jenkins (Campus Moderator) or Campus Admin.
+          Please log in with a campus moderator or administrator account to access the moderation portal.
         </p>
       </div>
     );

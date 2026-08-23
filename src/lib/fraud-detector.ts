@@ -219,3 +219,69 @@ export function scanAndRecordFraudAlert(userId: string): FraudEvaluationResult {
 
   return result;
 }
+
+export async function evaluateUserFraudRiskAsync(userId: string): Promise<FraudEvaluationResult> {
+  const baseResult = evaluateUserFraudRisk(userId);
+  const mlServiceUrl = process.env.ML_SERVICE_URL || 'http://127.0.0.1:8000';
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 800);
+
+    const res = await fetch(`${mlServiceUrl}/detect_fraud`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_id: userId,
+        reciprocity_index: baseResult.signals.reciprocityIndex,
+        rating_concentration: baseResult.signals.ratingConcentration,
+        daily_session_velocity: baseResult.signals.dailySessionVelocity,
+        cancellation_rate: baseResult.signals.cancellationRate,
+        credit_velocity: baseResult.signals.creditVelocity,
+        wallet_reuse: baseResult.signals.walletReuseDetected,
+        account_age_days: baseResult.signals.accountAgeDays,
+      }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    if (res.ok) {
+      const mlData = await res.json();
+      baseResult.riskScore = Math.max(baseResult.riskScore, mlData.risk_score);
+      baseResult.riskLevel = mlData.risk_level;
+      if (mlData.anomaly_reasons && mlData.anomaly_reasons.length > 0) {
+        baseResult.anomalyReasons = Array.from(new Set([...baseResult.anomalyReasons, ...mlData.anomaly_reasons]));
+      }
+    }
+  } catch {
+    // Graceful fallback to heuristic evaluation
+  }
+
+  return baseResult;
+}
+
+export async function scanAndRecordFraudAlertAsync(userId: string): Promise<FraudEvaluationResult> {
+  const result = await evaluateUserFraudRiskAsync(userId);
+  const db = getDb();
+
+  if (result.riskLevel === 'HIGH' || result.riskLevel === 'MEDIUM') {
+    const existing = db.prepare(`
+      SELECT id FROM fraud_alerts WHERE user_id = ? AND status = 'PENDING_REVIEW'
+    `).get(userId);
+
+    if (!existing) {
+      db.prepare(`
+        INSERT INTO fraud_alerts (id, user_id, risk_score, risk_level, anomaly_reasons, status)
+        VALUES (?, ?, ?, ?, ?, 'PENDING_REVIEW')
+      `).run(
+        `alert-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+        userId,
+        result.riskScore,
+        result.riskLevel,
+        JSON.stringify(result.anomalyReasons)
+      );
+    }
+  }
+
+  return result;
+}

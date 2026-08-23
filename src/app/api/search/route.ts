@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { SearchQuerySchema } from '@/lib/validations';
-import { searchAndMatchCandidates } from '@/lib/matching';
+import { searchAndMatchCandidates, searchAndMatchCandidatesAsync } from '@/lib/matching';
 import { discoverExchangeCycles } from '@/lib/cycle-finder';
 import { getAuthUser } from '@/lib/auth';
 
@@ -29,8 +29,8 @@ export async function GET(req: NextRequest) {
 
     const { q, mode, skillCategory, minProficiency, dayOfWeek, verifiedOnly, minRating, sessionMode } = parsed.data;
 
-    // Execute 3-Mode Matching Engine
-    const matchResults = searchAndMatchCandidates({
+    // Execute 3-Mode Matching Engine (ML Service with TypeScript Fallback)
+    const matchResults = await searchAndMatchCandidatesAsync({
       query: q,
       skillCategory,
       minProficiency,
@@ -54,11 +54,15 @@ export async function GET(req: NextRequest) {
       results: {
         modeA_knownPerson: matchResults.knownPersonMatches,
         modeB_skillMatches: matchResults.skillMatches,
+        insideCollegeMatches: matchResults.insideCollegeMatches,
+        outsideCollegeMatches: matchResults.outsideCollegeMatches,
         modeC_exchangeCycles: cycles,
       },
       summary: {
         exactMatchesCount: matchResults.knownPersonMatches.length,
         skillCandidatesCount: matchResults.skillMatches.length,
+        insideMatchesCount: matchResults.insideCollegeMatches.length,
+        outsideMatchesCount: matchResults.outsideCollegeMatches.length,
         exchangeCyclesCount: cycles.length,
       }
     });

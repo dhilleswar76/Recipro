@@ -22,6 +22,7 @@ export async function POST(
     }
 
     const { action, reason, idempotencyKey } = parsed.data;
+    const resolvedIdempotencyKey = idempotencyKey || `${sessionId}-${action}-${Date.now()}`;
 
     let targetState: SessionState = 'REQUESTED';
     if (action === 'ACCEPT') targetState = 'ACCEPTED';
@@ -32,7 +33,7 @@ export async function POST(
 
     const result = transitionSessionState(sessionId, targetState, user.userId, {
       reason,
-      idempotencyKey,
+      idempotencyKey: resolvedIdempotencyKey,
     });
 
     if (!result.success) {

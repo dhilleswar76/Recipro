@@ -311,25 +311,35 @@ export default function MyLearningRequests() {
                     </button>
                   )}
 
-                  <button
-                    onClick={() => {
-                      setSelectedRequest(req);
-                      if (isMentorFound) {
-                        handleViewSlots(req);
-                      }
-                    }}
-                    className={`px-3.5 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1 ${
-                      isMentorFound
-                        ? 'bg-emerald-500 hover:bg-emerald-400 text-dark-bg shadow-md shadow-emerald-500/20'
-                        : 'bg-slate-800 hover:bg-slate-700 text-white'
-                    }`}
-                  >
-                    {isMentorFound ? (
-                      <>View Mentor &amp; Slots <ChevronRight className="w-3.5 h-3.5" /></>
-                    ) : (
-                      <>View Request <ChevronRight className="w-3.5 h-3.5" /></>
-                    )}
-                  </button>
+                  {isMentorFound ? (
+                    <>
+                      <button
+                        onClick={() => {
+                          setSelectedRequest(req);
+                          handleViewSlots(req);
+                        }}
+                        className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs transition-colors"
+                      >
+                        View Mentor
+                      </button>
+
+                      <button
+                        onClick={() => router.push(`/learner-requests/${req.id}/confirm-match?mentorId=${req.matchedMentor?.userId || ''}`)}
+                        className="px-3.5 py-1.5 rounded-xl bg-brand-500 hover:bg-brand-400 text-dark-bg font-extrabold text-xs shadow-glow-brand transition-all flex items-center gap-1"
+                      >
+                        <span>Take Course</span>
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      onClick={() => setSelectedRequest(req)}
+                      className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs transition-colors flex items-center gap-1"
+                    >
+                      <span>View Request</span>
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
               </div>
 

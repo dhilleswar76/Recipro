@@ -24,7 +24,10 @@ import {
   Sparkles,
   XCircle,
   HelpCircle,
+  Star,
+  ThumbsUp,
 } from 'lucide-react';
+import RatingModal from '@/components/RatingModal';
 
 export default function SessionDetailPage() {
   const params = useParams();
@@ -36,6 +39,10 @@ export default function SessionDetailPage() {
   const [events, setEvents] = useState<any[]>([]);
   const [callerRole, setCallerRole] = useState<string>('LEARNER');
   const [authorizedActions, setAuthorizedActions] = useState<string[]>([]);
+  const [userRating, setUserRating] = useState<any | null>(null);
+  const [peerRating, setPeerRating] = useState<any | null>(null);
+  const [hasRated, setHasRated] = useState<boolean>(false);
+  const [showRatingModal, setShowRatingModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -58,6 +65,9 @@ export default function SessionDetailPage() {
         setEvents(data.events || []);
         setCallerRole(data.callerRole || 'LEARNER');
         setAuthorizedActions(data.authorizedActions || []);
+        setUserRating(data.userRating || null);
+        setPeerRating(data.peerRating || null);
+        setHasRated(Boolean(data.hasRated));
       } else if (res.status === 404) {
         setActionError('Session not found');
       } else if (res.status === 403) {
@@ -438,6 +448,26 @@ export default function SessionDetailPage() {
                   </button>
                 )}
 
+                {/* Rating Prompt & Action for Completed Session */}
+                {['COMPLETED', 'CREDIT_SETTLED'].includes(sessionData.status) && (
+                  <>
+                    {!hasRated && callerRole === 'LEARNER' ? (
+                      <button
+                        onClick={() => setShowRatingModal(true)}
+                        className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-dark-bg font-extrabold text-xs shadow-glow-brand transition-all flex items-center gap-1.5"
+                      >
+                        <Star className="w-3.5 h-3.5 fill-current" />
+                        <span>Rate Mentor ({sessionData.teacher_name})</span>
+                      </button>
+                    ) : userRating ? (
+                      <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-bold">
+                        <Star className="w-3.5 h-3.5 fill-current" />
+                        <span>You Rated: {userRating.score} / 5 Stars</span>
+                      </div>
+                    ) : null}
+                  </>
+                )}
+
                 {/* Return Skill Link */}
                 {sessionData.status === 'ACCEPTED' && (
                   <Link
@@ -450,6 +480,86 @@ export default function SessionDetailPage() {
                 )}
               </div>
             </div>
+
+            {/* Verified Rating & Feedback Display Card (When completed) */}
+            {['COMPLETED', 'CREDIT_SETTLED'].includes(sessionData.status) && (
+              <div className="p-5 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
+                    <span>Peer Review &amp; Mentoring Rating</span>
+                  </h3>
+                  {hasRated ? (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30 flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3 text-emerald-400" /> Feedback Submitted
+                    </span>
+                  ) : callerRole === 'LEARNER' ? (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30 animate-pulse">
+                      Pending Your Rating
+                    </span>
+                  ) : null}
+                </div>
+
+                {userRating ? (
+                  <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <div className="flex text-amber-400">
+                          {[1, 2, 3, 4, 5].map((s) => (
+                            <Star
+                              key={s}
+                              className={`w-4 h-4 ${s <= userRating.score ? 'fill-amber-400 text-amber-400' : 'text-slate-700'}`}
+                            />
+                          ))}
+                        </div>
+                        <span className="text-xs font-bold text-white ml-1">{userRating.score}.0 / 5.0</span>
+                      </div>
+                      <span className="text-[10px] text-slate-500">
+                        {new Date(userRating.created_at).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </span>
+                    </div>
+
+                    <p className="text-xs text-slate-300 italic bg-slate-900/50 p-3 rounded-lg border border-slate-800/80">
+                      "{userRating.review}"
+                    </p>
+
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                      <span className="text-[11px] px-2 py-0.5 rounded bg-brand-500/10 text-brand-300 border border-brand-500/30">
+                        Clarity: {userRating.clarity_score}/5
+                      </span>
+                      <span className="text-[11px] px-2 py-0.5 rounded bg-sky-500/10 text-sky-300 border border-sky-500/30">
+                        Punctuality: {userRating.punctuality_score}/5
+                      </span>
+                      {userRating.skills_demonstrated && userRating.skills_demonstrated.split(',').map((tag: string, idx: number) => (
+                        <span key={idx} className="text-[11px] px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
+                          ✓ {tag.trim()}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ) : !hasRated && callerRole === 'LEARNER' ? (
+                  <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row items-center justify-between gap-3">
+                    <div className="space-y-1 text-center sm:text-left">
+                      <div className="font-bold text-white text-xs">How was your learning session?</div>
+                      <div className="text-[11px] text-slate-400">
+                        Rate {sessionData.teacher_name}'s teaching to update their peer reputation score.
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setShowRatingModal(true)}
+                      className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-dark-bg font-extrabold text-xs shadow-glow-brand transition-all flex items-center gap-1.5 whitespace-nowrap"
+                    >
+                      <Star className="w-3.5 h-3.5 fill-current" />
+                      <span>Rate Mentor Now</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="text-center py-4 text-xs text-slate-500">
+                    Awaiting learner review and rating submission.
+                  </div>
+                )}
+              </div>
+            )}
 
           </div>
 
@@ -597,6 +707,21 @@ export default function SessionDetailPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Rating & Review Modal */}
+      {sessionData && (
+        <RatingModal
+          isOpen={showRatingModal}
+          onClose={() => setShowRatingModal(false)}
+          sessionId={sessionId}
+          mentorName={sessionData.teacher_name || 'Mentor'}
+          mentorAvatar={sessionData.teacher_avatar}
+          skillName={sessionData.skill_name || 'Skill Mentorship'}
+          onRatingSubmitted={() => {
+            fetchSessionDetail();
+          }}
+        />
       )}
 
     </div>

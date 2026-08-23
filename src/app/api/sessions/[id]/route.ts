@@ -148,11 +148,29 @@ export async function GET(
       creditStatus = 'FROZEN_IN_DISPUTE';
     }
 
+    // Fetch existing ratings for this session
+    const userRating = db.prepare(`
+      SELECT r.*, p.display_name as rater_name
+      FROM ratings r
+      LEFT JOIN profiles p ON r.rater_id = p.user_id
+      WHERE r.session_id = ? AND r.rater_id = ?
+    `).get(sessionId, user.userId) as any;
+
+    const peerRating = db.prepare(`
+      SELECT r.*, p.display_name as rater_name
+      FROM ratings r
+      LEFT JOIN profiles p ON r.rater_id = p.user_id
+      WHERE r.session_id = ? AND r.rater_id != ?
+    `).get(sessionId, user.userId) as any;
+
     return NextResponse.json({
       session: {
         ...session,
         credit_status: creditStatus,
       },
+      userRating: userRating || null,
+      peerRating: peerRating || null,
+      hasRated: Boolean(userRating),
       events,
       callerRole,
       authorizedActions,

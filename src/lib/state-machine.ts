@@ -747,6 +747,32 @@ export function transitionSessionState(
       UPDATE sessions SET status = 'CANCELLED', cancellation_reason = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
     `).run(metadata?.reason || 'Cancelled', sessionId);
 
+    recordSessionEvent(
+      sessionId,
+      actorUserId,
+      'CANCELLED',
+      'Session Cancelled',
+      metadata?.reason ? `Session cancelled. Reason: ${metadata.reason}` : 'Session was cancelled. Escrow credits refunded.',
+      currentState,
+      'CANCELLED',
+      metadata
+    );
+
+    // Notify other participant
+    const otherUserId = isTeacher ? session.learner_id : session.teacher_id;
+    try {
+      const { NotificationService } = require('./notifications');
+      NotificationService.send(db, {
+        userId: otherUserId,
+        type: 'SESSION_CANCELLED',
+        title: 'Session Cancelled',
+        message: `The session was cancelled: ${metadata?.reason || 'Cancelled by participant'}. Any reserved credits have been refunded.`,
+        relatedEntityType: 'SESSION',
+        relatedEntityId: sessionId,
+        actionUrl: `/sessions/${sessionId}`,
+      });
+    } catch {}
+
     return {
       success: true,
       previousState: currentState,
@@ -761,6 +787,30 @@ export function transitionSessionState(
       return { success: false, previousState: currentState, newState: currentState, sessionId, message: 'Only the mentor can accept this session request' };
     }
     db.prepare(`UPDATE sessions SET status = 'ACCEPTED', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(sessionId);
+
+    recordSessionEvent(
+      sessionId,
+      actorUserId,
+      'ACCEPTED',
+      'Session Accepted by Mentor',
+      'The mentor has accepted the session booking request.',
+      currentState,
+      'ACCEPTED'
+    );
+
+    try {
+      const { NotificationService } = require('./notifications');
+      NotificationService.send(db, {
+        userId: session.learner_id,
+        type: 'SESSION_ACCEPTED',
+        title: 'Session Request Accepted!',
+        message: 'Your mentor accepted the session. You can now review exchange terms or enter the classroom when scheduled.',
+        relatedEntityType: 'SESSION',
+        relatedEntityId: sessionId,
+        actionUrl: `/sessions/${sessionId}`,
+      });
+    } catch {}
+
     return { success: true, previousState: currentState, newState: 'ACCEPTED', sessionId, message: 'Session accepted by mentor' };
   }
 
@@ -781,6 +831,17 @@ export function transitionSessionState(
     }
 
     db.prepare(`UPDATE sessions SET status = 'IN_PROGRESS', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(sessionId);
+
+    recordSessionEvent(
+      sessionId,
+      actorUserId,
+      'STARTED',
+      'Session Started Live',
+      'Participants joined the live collaborative classroom.',
+      currentState,
+      'IN_PROGRESS'
+    );
+
     return { success: true, previousState: currentState, newState: 'IN_PROGRESS', sessionId, message: 'Session is now live in progress' };
   }
 
@@ -802,6 +863,39 @@ export function transitionSessionState(
 
       const settleRes = settleSessionCredits(sessionId);
 
+      recordSessionEvent(
+        sessionId,
+        actorUserId,
+        'CREDITS_SETTLED',
+        'Session Completed & Credits Settled',
+        'Both participants confirmed completion. Escrow credits successfully transferred.',
+        currentState,
+        'CREDIT_SETTLED',
+        { txHash: settleRes.txHash }
+      );
+
+      try {
+        const { NotificationService } = require('./notifications');
+        NotificationService.send(db, {
+          userId: session.teacher_id,
+          type: 'CREDIT_SETTLED',
+          title: 'Skill Credit Earned!',
+          message: `Your mentoring session is complete. ${session.credits_amount || 1} Skill Credit was added to your balance.`,
+          relatedEntityType: 'CREDIT',
+          relatedEntityId: sessionId,
+          actionUrl: `/wallet`,
+        });
+        NotificationService.send(db, {
+          userId: session.learner_id,
+          type: 'SESSION_COMPLETED',
+          title: 'Session Completed',
+          message: `Your learning session has been finalized and settled. Don't forget to leave a review!`,
+          relatedEntityType: 'SESSION',
+          relatedEntityId: sessionId,
+          actionUrl: `/sessions/${sessionId}`,
+        });
+      } catch {}
+
       return {
         success: true,
         previousState: currentState,
@@ -817,6 +911,30 @@ export function transitionSessionState(
         WHERE id = ?
       `).run(learnerConfirmed, teacherConfirmed, sessionId);
 
+      recordSessionEvent(
+        sessionId,
+        actorUserId,
+        'CONFIRMED',
+        'Completion Confirmed',
+        `${isTeacher ? 'Mentor' : 'Learner'} confirmed session completion. Waiting for counterparty confirmation.`,
+        currentState,
+        'PENDING_CONFIRMATION'
+      );
+
+      const waitingUserId = isTeacher ? session.learner_id : session.teacher_id;
+      try {
+        const { NotificationService } = require('./notifications');
+        NotificationService.send(db, {
+          userId: waitingUserId,
+          type: 'SESSION_COMPLETION_PENDING',
+          title: 'Session Completion Awaiting Confirmation',
+          message: 'The other participant marked the session as complete. Please confirm completion to finalize escrow settlement.',
+          relatedEntityType: 'SESSION',
+          relatedEntityId: sessionId,
+          actionUrl: `/sessions/${sessionId}`,
+        });
+      } catch {}
+
       return {
         success: true,
         previousState: currentState,
@@ -829,6 +947,18 @@ export function transitionSessionState(
 
   if (targetState === 'DISPUTED') {
     db.prepare(`UPDATE sessions SET status = 'DISPUTED', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(sessionId);
+
+    recordSessionEvent(
+      sessionId,
+      actorUserId,
+      'DISPUTED',
+      'Session Flagged for Dispute',
+      metadata?.reason ? `Dispute filed: ${metadata.reason}` : 'Session was flagged for dispute. Escrow credits frozen pending review.',
+      currentState,
+      'DISPUTED',
+      metadata
+    );
+
     return {
       success: true,
       previousState: currentState,
@@ -845,4 +975,81 @@ export function transitionSessionState(
     sessionId,
     message: 'Unhandled transition state',
   };
+}
+
+/**
+ * Record historical session lifecycle event
+ */
+export function recordSessionEvent(
+  sessionId: string,
+  actorId: string | null,
+  eventType: string,
+  title: string,
+  description: string,
+  previousState?: string,
+  newState?: string,
+  metadata?: any
+) {
+  const db = getDb();
+  const eventId = `sev-${sessionId}-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+  try {
+    db.prepare(`
+      INSERT INTO session_events (
+        id, session_id, actor_id, event_type, title, description, previous_state, new_state, metadata_json, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `).run(
+      eventId,
+      sessionId,
+      actorId,
+      eventType,
+      title,
+      description,
+      previousState || null,
+      newState || null,
+      JSON.stringify(metadata || {})
+    );
+  } catch (err) {
+    console.error('Record Session Event Error:', err);
+  }
+}
+
+/**
+ * Get all historical session timeline events
+ */
+export function getSessionEvents(sessionId: string) {
+  const db = getDb();
+  try {
+    return db.prepare(`
+      SELECT se.*, p.display_name as actor_name
+      FROM session_events se
+      LEFT JOIN profiles p ON se.actor_id = p.user_id
+      WHERE se.session_id = ?
+      ORDER BY se.created_at ASC
+    `).all(sessionId);
+  } catch (err) {
+    return [];
+  }
+}
+
+/**
+ * Centralized State Machine Validation Helper
+ */
+export function canTransition(
+  currentState: SessionState,
+  targetState: SessionState,
+  actorRole: 'TEACHER' | 'LEARNER' | 'ADMIN'
+): { allowed: boolean; reason?: string } {
+  const allowedNext = VALID_TRANSITIONS[currentState] || [];
+  if (!allowedNext.includes(targetState) && actorRole !== 'ADMIN') {
+    return {
+      allowed: false,
+      reason: `Cannot transition from ${currentState} to ${targetState}`,
+    };
+  }
+
+  if (targetState === 'ACCEPTED' && actorRole !== 'TEACHER' && actorRole !== 'ADMIN') {
+    return { allowed: false, reason: 'Only the mentor can accept a session' };
+  }
+
+  return { allowed: true };
 }

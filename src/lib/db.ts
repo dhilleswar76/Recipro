@@ -337,11 +337,42 @@ export function initDatabase(db: Database.Database) {
       user_id TEXT NOT NULL,
       title TEXT NOT NULL,
       message TEXT NOT NULL,
-      type TEXT NOT NULL DEFAULT 'INFO', -- 'SESSION_REQUEST', 'SESSION_ACCEPTED', 'SESSION_COMPLETED', 'CREDIT_UPDATE', 'CREDENTIAL_ISSUED', 'DISPUTE_UPDATE', 'SECURITY_ALERT'
+      type TEXT NOT NULL DEFAULT 'INFO',
+      related_entity_type TEXT, -- 'SESSION', 'MENTOR', 'LEARNER_REQUEST', 'CREDIT', 'SECURITY', 'SYSTEM'
+      related_entity_id TEXT,
+      action_url TEXT,
       link TEXT,
       is_read INTEGER NOT NULL DEFAULT 0,
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      read_at DATETIME,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS notification_preferences (
+      user_id TEXT PRIMARY KEY,
+      in_app_enabled INTEGER NOT NULL DEFAULT 1,
+      email_enabled INTEGER NOT NULL DEFAULT 1,
+      session_updates INTEGER NOT NULL DEFAULT 1,
+      mentor_available INTEGER NOT NULL DEFAULT 1,
+      credits INTEGER NOT NULL DEFAULT 1,
+      security INTEGER NOT NULL DEFAULT 1,
+      system INTEGER NOT NULL DEFAULT 1,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS session_events (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      actor_id TEXT,
+      event_type TEXT NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT,
+      previous_state TEXT,
+      new_state TEXT,
+      metadata_json TEXT DEFAULT '{}',
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
     );
 
     -- 13. Web3 Wallets & Blockchain Anchors
@@ -765,6 +796,12 @@ export function initDatabase(db: Database.Database) {
   safeAddColumn(db, 'availability_slots', 'is_preferred', 'INTEGER DEFAULT 0');
   safeAddColumn(db, 'availability_slots', 'skill_id', 'TEXT');
   safeAddColumn(db, 'availability_slots', 'window_label', "TEXT DEFAULT 'General'");
+
+  // Notifications Entity Link & Read Timestamps
+  safeAddColumn(db, 'notifications', 'related_entity_type', 'TEXT');
+  safeAddColumn(db, 'notifications', 'related_entity_id', 'TEXT');
+  safeAddColumn(db, 'notifications', 'action_url', 'TEXT');
+  safeAddColumn(db, 'notifications', 'read_at', 'DATETIME');
 }
 
 function safeAddColumn(db: Database.Database, table: string, column: string, definition: string) {

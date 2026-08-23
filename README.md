@@ -197,6 +197,15 @@ The application uses an ACID-compliant SQLite database with WAL mode enabled:
 - `GET & POST /api/sessions/:id/chat` — Send and retrieve persistent in-room chat messages.
 - `POST /api/sessions/:id/attendance` — Log telemetry events (`JOINED`, `LEFT`, `MUTED`, `VIDEO_ON`).
 
+### Notifications & Learning Requests
+- `GET & POST /api/notifications` — Notification inbox list and dispatch.
+- `GET /api/notifications/unread-count` — Live unread notification counter.
+- `PATCH /api/notifications/:id/read` — Mark individual notification as read.
+- `POST /api/notifications/read-all` — Mark all user notifications as read.
+- `GET & POST /api/notifications/settings` — Notification preferences (in-app & email per category).
+- `POST /api/learning-requests/:id/accept-match` — YES Flow: Confirm matched course & reserve escrow credit.
+- `POST /api/learning-requests/:id/decline-match` — NO Flow: Keep request active in search queue.
+
 ### Admin & Operational Auditing
 - `GET /api/admin/reports/daily` — Daily report and lifetime platform metrics.
 - `GET /api/admin/reports/sessions` — Comprehensive sessions directory with search, filter, and pagination.
@@ -242,6 +251,9 @@ NEXT_PUBLIC_APP_URL="http://localhost:3000"
 DATABASE_URL="./data/skillswap.db"
 AUTH_SECRET="skillswap-super-secret-jwt-key-for-local-development-min32bytes"
 GEMINI_API_KEY="" # Optional: Leave blank for curated local assessment bank fallback
+EMAIL_PROVIDER="development" # Options: resend | sendgrid | smtp | development
+EMAIL_API_KEY=""
+EMAIL_FROM="notifications@skillswapcampus.edu"
 ```
 
 ### 4. Database Initialization & Seeding
@@ -260,23 +272,27 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ## 🧪 Automated Test Suites
 
-The codebase includes 12 automated test suites covering 38 unit and integration tests:
+The codebase includes 13 automated test suites covering 39 unit and integration tests:
 
 ```bash
-# Run all 12 test suites
-node --test tests/admin_reporting.test.js tests/domain.test.js tests/extension.test.js tests/fallback_discovery.test.js tests/flexible_auth_email_verification.test.js tests/gemini_quiz_roadmap.test.js tests/learning_requests_video_session.test.js tests/pre_session_return.test.js tests/return_skill_flow.test.js tests/role_auth_demo.test.js tests/smart_slot_finder.test.js tests/video_classroom_signaling.test.js
+# Run all 13 test suites
+node --test tests/session_tracking_notifications.test.js tests/admin_reporting.test.js tests/domain.test.js tests/extension.test.js tests/fallback_discovery.test.js tests/flexible_auth_email_verification.test.js tests/gemini_quiz_roadmap.test.js tests/learning_requests_video_session.test.js tests/pre_session_return.test.js tests/return_skill_flow.test.js tests/role_auth_demo.test.js tests/smart_slot_finder.test.js tests/video_classroom_signaling.test.js
 ```
 
 ### Test Suite Breakdown
-1. `smart_slot_finder.test.js` — Availability vs. preference ranking, 15-min gap buffer calculation, double-booking race condition prevention.
-2. `fallback_discovery.test.js` — Staged discovery fallback (Inside-College $\rightarrow$ Outside-College $\rightarrow$ Request Pool).
-3. `return_skill_flow.test.js` — Pre-session exchange proposal, counter-proposal, learner acceptance, and session start lock.
-4. `video_classroom_signaling.test.js` — WebRTC SDP/ICE signaling, room presence, synced scratchpad, and chat message persistence.
-5. `learning_requests_video_session.test.js` — End-to-end demand request matching, classroom authorization, attendance logging, and settlement.
-6. `admin_reporting.test.js` — Daily operational report, user-wise activity, session classification, and dispute resolution.
-7. `flexible_auth_email_verification.test.js` — Campus email validation and registration invariants.
-8. `gemini_quiz_roadmap.test.js` — AI-generated and local fallback quiz generation and curriculum roadmaps.
-9. `role_auth_demo.test.js` — Clean authentication UI, bcrypt password hashes, and database idempotency.
+1. `session_tracking_notifications.test.js` — State machine transitions, persistent audit timeline in `session_events`, multi-field search & filters, notifications inbox, unread counts, mentor allocation idempotency, and email delivery logging.
+2. `smart_slot_finder.test.js` — Availability vs. preference ranking, 15-min gap buffer calculation, double-booking race condition prevention.
+3. `fallback_discovery.test.js` — Staged discovery fallback (Inside-College $\rightarrow$ Outside-College $\rightarrow$ Request Pool).
+4. `return_skill_flow.test.js` — Pre-session exchange proposal, counter-proposal, learner acceptance, and session start lock.
+5. `video_classroom_signaling.test.js` — WebRTC SDP/ICE signaling, room presence, synced scratchpad, and chat message persistence.
+6. `learning_requests_video_session.test.js` — End-to-end demand request matching, classroom authorization, attendance logging, and settlement.
+7. `admin_reporting.test.js` — Daily operational report, user-wise activity, session classification, and dispute resolution.
+8. `flexible_auth_email_verification.test.js` — Campus email validation and registration invariants.
+9. `gemini_quiz_roadmap.test.js` — AI-generated and local fallback quiz generation and curriculum roadmaps.
+10. `role_auth_demo.test.js` — Clean authentication UI, bcrypt password hashes, and database idempotency.
+11. `pre_session_return.test.js` — Exchange agreement lifecycle, counter-proposals, and credit escrow reservation.
+12. `domain.test.js` — Data models and validation rules.
+13. `extension.test.js` — Verification extensions and API helpers.
 
 ---
 

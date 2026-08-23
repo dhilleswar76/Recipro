@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { getDb, isAcademicEmail } from '@/lib/db';
 import { RegisterSchema } from '@/lib/validations';
 import { hashPassword, signToken } from '@/lib/auth';
+import { EmailService } from '@/lib/email-service';
 
 export async function POST(req: NextRequest) {
   try {
@@ -79,6 +80,23 @@ export async function POST(req: NextRequest) {
     });
 
     tx();
+
+    // Automatically dispatch account verification email via configured SMTP / API / Dev provider
+    try {
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin || 'http://localhost:3000';
+      const verificationUrl = `${baseUrl}/verify-email?token=${verificationToken}`;
+
+      await EmailService.sendVerificationEmail(db, {
+        to: cleanEmail,
+        displayName,
+        verificationUrl,
+        token: verificationToken,
+        userId,
+        expiresInHours: 24,
+      });
+    } catch (mailErr) {
+      console.warn('[Register:EMAIL_DISPATCH_WARN]', mailErr);
+    }
 
     const token = signToken({
       userId,

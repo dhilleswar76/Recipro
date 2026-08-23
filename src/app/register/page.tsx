@@ -81,8 +81,8 @@ export default function RegisterPage() {
       }
 
       await refreshUser();
-      // Redirect to email verification flow
-      router.push('/verify-email');
+      // Redirect directly to campus onboarding setup
+      router.push('/onboarding');
     } catch (err: any) {
       setError('A network error occurred. Please try again.');
       setLoading(false);

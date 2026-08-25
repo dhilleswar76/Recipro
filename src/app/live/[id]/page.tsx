@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
+import io, { Socket } from 'socket.io-client';
 import { 
   Video, 
   Mic, 
@@ -32,7 +33,8 @@ import {
   X,
   Users,
   Layers,
-  FileText
+  FileText,
+  Radio
 } from 'lucide-react';
 import RatingModal from '@/components/RatingModal';
 
@@ -64,6 +66,11 @@ export default function LiveRoomPage() {
   const makingOfferRef = useRef<boolean>(false);
   const lastOfferAttemptRef = useRef<number>(0);
 
+  // Socket.io Real-Time Signaling Refs
+  const socketRef = useRef<Socket | null>(null);
+  const targetSocketIdRef = useRef<string | null>(null);
+  const [socketConnected, setSocketConnected] = useState<boolean>(false);
+
   // Google Meet / Zoom Classroom Controls & Panels
   const [micOn, setMicOn] = useState(true);
   const [cameraOn, setCameraOn] = useState(true);
@@ -73,7 +80,7 @@ export default function LiveRoomPage() {
   const [meetingSeconds, setMeetingSeconds] = useState(0);
   const [hasRealWebcam, setHasRealWebcam] = useState(false);
   const [hasRemotePeerStream, setHasRemotePeerStream] = useState(false);
-  const [videoEngine, setVideoEngine] = useState<'DAILY' | 'STUDIO' | 'P2P'>('DAILY');
+  const [videoEngine, setVideoEngine] = useState<'SOCKET_WEBRTC' | 'STUDIO' | 'DAILY'>('SOCKET_WEBRTC');
 
   // Daily.co State & Refs (10,000 Free Minutes)
   const dailyCallFrameRef = useRef<any>(null);
@@ -275,9 +282,15 @@ function processLearningGoal() {
       setConnectionState('CONNECTED');
     };
 
-    // Forward ICE Candidates to Opponent via Signaling
+    // Forward ICE Candidates to Opponent via Socket.io & HTTP Signaling
     pc.onicecandidate = (event) => {
       if (event.candidate) {
+        if (socketRef.current && targetSocketIdRef.current) {
+          socketRef.current.emit('signal', {
+            to: targetSocketIdRef.current,
+            signalData: { type: 'candidate', candidate: event.candidate.toJSON() },
+          });
+        }
         sendSignal('ICE_CANDIDATE', event.candidate.toJSON());
       }
     };
@@ -536,17 +549,18 @@ function processLearningGoal() {
       setMeetingSeconds(s => s + 1);
     }, 1000);
 
-    // Fast 1000ms polling for real-time WebRTC signals, chat, and presence
+    // Fast 1000ms polling for real-time presence & fallback signaling
     const interval = setInterval(() => {
       pollSignaling();
-      fetchChat();
-      fetchScratchpad();
     }, 1000);
 
     return () => {
       clearInterval(durationTimer);
       clearInterval(interval);
       leaveDailyCall();
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
       if (peerConnectionRef.current) {
         peerConnectionRef.current.close();
@@ -560,7 +574,14 @@ function processLearningGoal() {
     };
   }, [sessionId]);
 
-  // Auto-start Daily.co call when authorized
+  // Connect Socket.io signaling once participant is verified
+  useEffect(() => {
+    if (participantInfo) {
+      initSocketSignaling();
+    }
+  }, [participantInfo]);
+
+  // Auto-start Daily.co call when selected
   useEffect(() => {
     if (participantInfo && videoEngine === 'DAILY' && !dailyJoined && !dailyLoading) {
       initDailyCall();
@@ -571,6 +592,140 @@ function processLearningGoal() {
     const mins = Math.floor(totalSec / 60);
     const secs = totalSec % 60;
     return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  };
+
+  // Initialize Socket.io Real-Time Signaling Server Connection
+  const initSocketSignaling = async () => {
+    try {
+      // Ensure Socket.io API route is warm
+      await fetch('/api/socket').catch(() => {});
+
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
+
+      const socket = io({
+        path: '/api/socketio',
+        transports: ['websocket', 'polling'],
+        reconnectionAttempts: 15,
+        reconnectionDelay: 1000,
+      });
+
+      socketRef.current = socket;
+
+      socket.on('connect', () => {
+        setSocketConnected(true);
+        console.log('[Socket.io] Connected to signaling channel:', socket.id);
+        socket.emit('join-room', {
+          roomId: sessionId,
+          userId: user?.id,
+          userName: user?.display_name || participantInfo?.displayName || 'Participant',
+          role: participantInfo?.role,
+        });
+      });
+
+      socket.on('disconnect', () => {
+        setSocketConnected(false);
+      });
+
+      socket.on('room-users', async ({ users }: { users: any[] }) => {
+        console.log('[Socket.io] Existing room users:', users);
+        if (users.length > 0) {
+          const peer = users[0];
+          targetSocketIdRef.current = peer.socketId;
+          const pc = peerConnectionRef.current || createPeerConnection();
+          if (isInitiatorRef.current || participantInfo?.role === 'TRAINER') {
+            try {
+              const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true });
+              await pc.setLocalDescription(offer);
+              socket.emit('signal', {
+                to: peer.socketId,
+                signalData: { type: 'offer', sdp: offer.sdp },
+              });
+            } catch (e) {
+              console.error('Socket.io offer failed:', e);
+            }
+          }
+        }
+      });
+
+      socket.on('user-joined', async ({ socketId, userName }: any) => {
+        console.log('[Socket.io] User joined:', userName, socketId);
+        targetSocketIdRef.current = socketId;
+        const pc = peerConnectionRef.current || createPeerConnection();
+        try {
+          const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true });
+          await pc.setLocalDescription(offer);
+          socket.emit('signal', {
+            to: socketId,
+            signalData: { type: 'offer', sdp: offer.sdp },
+          });
+        } catch (e) {
+          console.error('Socket.io offer on user-joined failed:', e);
+        }
+      });
+
+      socket.on('signal', async ({ from, signalData }: any) => {
+        targetSocketIdRef.current = from;
+        const pc = peerConnectionRef.current || createPeerConnection();
+
+        if (signalData.type === 'offer') {
+          try {
+            console.log('[Socket.io] Received OFFER from peer');
+            await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: signalData.sdp }));
+            await flushIceCandidates(pc);
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            socket.emit('signal', {
+              to: from,
+              signalData: { type: 'answer', sdp: answer.sdp },
+            });
+          } catch (e) {
+            console.error('Socket.io answer generation error:', e);
+          }
+        } else if (signalData.type === 'answer') {
+          try {
+            console.log('[Socket.io] Received ANSWER from peer');
+            await pc.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: signalData.sdp }));
+            await flushIceCandidates(pc);
+            setConnectionState('CONNECTED');
+            setHasRemotePeerStream(true);
+          } catch (e) {
+            console.error('Socket.io answer setting error:', e);
+          }
+        } else if (signalData.type === 'candidate' && signalData.candidate) {
+          try {
+            if (pc.remoteDescription && pc.remoteDescription.type) {
+              await pc.addIceCandidate(new RTCIceCandidate(signalData.candidate));
+            } else {
+              iceCandidateQueueRef.current.push(signalData.candidate);
+            }
+          } catch (e) {
+            console.warn('Socket.io ICE addition error:', e);
+          }
+        }
+      });
+
+      socket.on('new-message', (msg: any) => {
+        setChatMessages(prev => {
+          if (prev.some(m => m.id === msg.id)) return prev;
+          return [...prev, msg];
+        });
+      });
+
+      socket.on('scratchpad-update', ({ content }: { content: string }) => {
+        setCodeContent(content);
+        setScratchpadSaved(true);
+      });
+
+      socket.on('user-left', () => {
+        setHasRemotePeerStream(false);
+        setConnectionState('CONNECTING');
+      });
+
+    } catch (err) {
+      console.error('Failed to initialize Socket.io client:', err);
+    }
   };
 
   // Daily.co Video Call Engine Logic (10,000 Free Minutes)
@@ -786,12 +941,15 @@ function processLearningGoal() {
     }).catch(() => {});
   };
 
-  // Save Scratchpad Content to SQLite
+  // Save Scratchpad Content to SQLite & Broadcast via Socket.io
   const handleScratchpadChange = (newText: string) => {
     setCodeContent(newText);
     setScratchpadSaved(false);
     
-    // Debounce save to backend
+    if (socketRef.current) {
+      socketRef.current.emit('scratchpad-update', { roomId: sessionId, content: newText });
+    }
+    
     fetch(`/api/sessions/${sessionId}/scratchpad`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -801,7 +959,7 @@ function processLearningGoal() {
       .catch(console.error);
   };
 
-  // Send Text Chat Message
+  // Send Text Chat Message & Broadcast via Socket.io
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim() || sendingMessage) return;
@@ -821,6 +979,9 @@ function processLearningGoal() {
         const data = await res.json();
         if (data.message) {
           setChatMessages((prev) => [...prev, data.message]);
+          if (socketRef.current) {
+            socketRef.current.emit('send-message', { roomId: sessionId, message: data.message });
+          }
         }
       }
     } catch (err) {
@@ -935,16 +1096,17 @@ function processLearningGoal() {
         <div className="flex items-center gap-1 bg-slate-950/80 border border-slate-800 p-0.5 rounded-xl">
           <button
             onClick={() => {
-              setVideoEngine('DAILY');
-              initDailyCall();
+              if (videoEngine === 'DAILY') leaveDailyCall();
+              setVideoEngine('SOCKET_WEBRTC');
             }}
-            className={`px-3 py-1 rounded-lg text-[11px] font-bold transition-all ${
-              videoEngine === 'DAILY'
+            className={`px-3 py-1 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1.5 ${
+              videoEngine === 'SOCKET_WEBRTC'
                 ? 'bg-brand-500 text-dark-bg shadow-glow-brand'
                 : 'text-slate-400 hover:text-white'
             }`}
           >
-            🌟 Daily.co HD
+            <Radio className="w-3 h-3 text-emerald-400 animate-pulse" />
+            <span>WebRTC + Socket.io</span>
           </button>
           <button
             onClick={() => {
@@ -961,16 +1123,16 @@ function processLearningGoal() {
           </button>
           <button
             onClick={() => {
-              if (videoEngine === 'DAILY') leaveDailyCall();
-              setVideoEngine('P2P');
+              setVideoEngine('DAILY');
+              initDailyCall();
             }}
             className={`px-3 py-1 rounded-lg text-[11px] font-bold transition-all ${
-              videoEngine === 'P2P'
+              videoEngine === 'DAILY'
                 ? 'bg-brand-500 text-dark-bg shadow-glow-brand'
                 : 'text-slate-400 hover:text-white'
             }`}
           >
-            🔗 P2P WebRTC
+            🌟 Daily.co
           </button>
         </div>
 
@@ -1002,55 +1164,8 @@ function processLearningGoal() {
         {/* Video Stage (Expands to 12 cols when drawer is closed, 8-9 cols when open) */}
         <div className={`${sidePanelOpen ? 'lg:col-span-8 xl:col-span-9' : 'lg:col-span-12'} flex flex-col transition-all duration-300`}>
           
-          {videoEngine === 'DAILY' ? (
-            /* Mode 1: Daily.co HD Classroom (10,000 Free Minutes) */
-            <div className="flex-1 flex flex-col space-y-2 h-[calc(100vh-210px)] min-h-[500px]">
-              <div className="p-2.5 bg-slate-900 border border-brand-500/30 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-brand-400" />
-                  <div>
-                    <span className="font-bold text-white">Daily.co Live HD Classroom (10,000 Free Minutes)</span>
-                    <p className="text-[11px] text-slate-400">Join room directly or paste your custom Daily.co room URL</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 w-full sm:w-auto">
-                  <input
-                    type="text"
-                    value={dailyRoomUrlInput}
-                    onChange={(e) => setDailyRoomUrlInput(e.target.value)}
-                    placeholder="https://your-team.daily.co/room-name"
-                    className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-brand-500 w-full sm:w-56"
-                  />
-                  <button
-                    onClick={() => initDailyCall(dailyRoomUrlInput)}
-                    disabled={dailyLoading}
-                    className="px-3 py-1.5 rounded-xl bg-brand-500 hover:bg-brand-400 text-dark-bg font-bold text-xs shadow-glow-brand transition-colors whitespace-nowrap disabled:opacity-40"
-                  >
-                    {dailyLoading ? 'Connecting...' : 'Connect Daily'}
-                  </button>
-                </div>
-              </div>
-
-              {dailyError && (
-                <div className="p-2.5 rounded-xl bg-rose-500/20 border border-rose-500/30 text-rose-300 text-xs flex items-center justify-between">
-                  <span>{dailyError}</span>
-                  <button onClick={() => setVideoEngine('STUDIO')} className="underline font-semibold ml-2">Switch to Studio SFU</button>
-                </div>
-              )}
-
-              <div id="daily-video-container" className="w-full flex-1 min-h-[460px] rounded-3xl overflow-hidden border border-slate-800 bg-[#0e1017] shadow-2xl relative" />
-            </div>
-          ) : videoEngine === 'STUDIO' ? (
-            /* Mode 2: Full-Stage Google Meet / Zoom Style Studio Room */
-            <div className="w-full flex-1 min-h-[500px] h-[calc(100vh-210px)] rounded-3xl overflow-hidden border border-slate-800 bg-[#0e1017] shadow-2xl relative">
-              <iframe
-                src={`https://meet.jit.si/ReciproCampus_${sessionId.replace(/[^a-zA-Z0-9]/g, '_')}#userInfo.displayName="${encodeURIComponent(user?.display_name || participantInfo?.displayName || 'Participant')}"&config.prejoinPageEnabled=false&config.startWithAudioMuted=false&config.startWithVideoMuted=false&config.disableDeepLinking=true`}
-                allow="camera; microphone; fullscreen; display-capture; autoplay"
-                className="w-full h-full border-0 rounded-3xl"
-              />
-            </div>
-          ) : (
-            /* Mode 2: Custom P2P Video Grid */
+          {videoEngine === 'SOCKET_WEBRTC' ? (
+            /* Mode 1: Real-Time WebRTC + Socket.io Video Grid */
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 flex-1 h-[calc(100vh-210px)] min-h-[500px]">
               
               {/* Tile 1: Local Video */}
@@ -1105,7 +1220,7 @@ function processLearningGoal() {
                         Waiting for {participantInfo?.role === 'TRAINER' ? (exchangeData?.session?.learner_name || 'Learner') : (exchangeData?.session?.teacher_name || 'Mentor')}...
                       </p>
                       <p className="text-[10px] text-slate-400">
-                        Live WebRTC audio &amp; video will start automatically when they join
+                        {socketConnected ? '🟢 Socket.io connected • Streaming will start automatically' : 'Connecting to Socket.io signaling...'}
                       </p>
                     </div>
                     <button
@@ -1115,7 +1230,7 @@ function processLearningGoal() {
                       }}
                       className="px-3.5 py-1.5 rounded-xl bg-brand-500/20 hover:bg-brand-500/30 text-brand-300 font-semibold text-xs border border-brand-500/40 transition-colors flex items-center gap-1.5 shadow-sm"
                     >
-                      <RefreshCw className="w-3.5 h-3.5" /> Connect Video
+                      <RefreshCw className="w-3.5 h-3.5" /> Reconnect WebRTC
                     </button>
                   </div>
                 )}
@@ -1126,6 +1241,53 @@ function processLearningGoal() {
                 </div>
               </div>
 
+            </div>
+          ) : videoEngine === 'STUDIO' ? (
+            /* Mode 2: Full-Stage Google Meet / Zoom Style Studio Room */
+            <div className="w-full flex-1 min-h-[500px] h-[calc(100vh-210px)] rounded-3xl overflow-hidden border border-slate-800 bg-[#0e1017] shadow-2xl relative">
+              <iframe
+                src={`https://meet.jit.si/ReciproCampus_${sessionId.replace(/[^a-zA-Z0-9]/g, '_')}#userInfo.displayName="${encodeURIComponent(user?.display_name || participantInfo?.displayName || 'Participant')}"&config.prejoinPageEnabled=false&config.startWithAudioMuted=false&config.startWithVideoMuted=false&config.disableDeepLinking=true`}
+                allow="camera; microphone; fullscreen; display-capture; autoplay"
+                className="w-full h-full border-0 rounded-3xl"
+              />
+            </div>
+          ) : (
+            /* Mode 3: Daily.co HD Classroom (10,000 Free Minutes) */
+            <div className="flex-1 flex flex-col space-y-2 h-[calc(100vh-210px)] min-h-[500px]">
+              <div className="p-2.5 bg-slate-900 border border-brand-500/30 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-brand-400" />
+                  <div>
+                    <span className="font-bold text-white">Daily.co Live HD Classroom (10,000 Free Minutes)</span>
+                    <p className="text-[11px] text-slate-400">Join room directly or paste your custom Daily.co room URL</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <input
+                    type="text"
+                    value={dailyRoomUrlInput}
+                    onChange={(e) => setDailyRoomUrlInput(e.target.value)}
+                    placeholder="https://your-team.daily.co/room-name"
+                    className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-brand-500 w-full sm:w-56"
+                  />
+                  <button
+                    onClick={() => initDailyCall(dailyRoomUrlInput)}
+                    disabled={dailyLoading}
+                    className="px-3 py-1.5 rounded-xl bg-brand-500 hover:bg-brand-400 text-dark-bg font-bold text-xs shadow-glow-brand transition-colors whitespace-nowrap disabled:opacity-40"
+                  >
+                    {dailyLoading ? 'Connecting...' : 'Connect Daily'}
+                  </button>
+                </div>
+              </div>
+
+              {dailyError && (
+                <div className="p-2.5 rounded-xl bg-rose-500/20 border border-rose-500/30 text-rose-300 text-xs flex items-center justify-between">
+                  <span>{dailyError}</span>
+                  <button onClick={() => setVideoEngine('STUDIO')} className="underline font-semibold ml-2">Switch to Studio SFU</button>
+                </div>
+              )}
+
+              <div id="daily-video-container" className="w-full flex-1 min-h-[460px] rounded-3xl overflow-hidden border border-slate-800 bg-[#0e1017] shadow-2xl relative" />
             </div>
           )}
 

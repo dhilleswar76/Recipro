@@ -28,7 +28,11 @@ import {
   Settings,
   ChevronRight,
   ChevronLeft,
-  Maximize2
+  Maximize2,
+  X,
+  Users,
+  Layers,
+  FileText
 } from 'lucide-react';
 import RatingModal from '@/components/RatingModal';
 
@@ -60,11 +64,13 @@ export default function LiveRoomPage() {
   const makingOfferRef = useRef<boolean>(false);
   const lastOfferAttemptRef = useRef<number>(0);
 
-  // Video & Classroom Controls
+  // Google Meet / Zoom Classroom Controls & Panels
   const [micOn, setMicOn] = useState(true);
   const [cameraOn, setCameraOn] = useState(true);
   const [screenShare, setScreenShare] = useState(false);
-  const [chatDrawerOpen, setChatDrawerOpen] = useState(true);
+  const [sidePanelOpen, setSidePanelOpen] = useState(false);
+  const [activeSideTab, setActiveSideTab] = useState<'CHAT' | 'SCRATCHPAD' | 'DETAILS'>('CHAT');
+  const [meetingSeconds, setMeetingSeconds] = useState(0);
   const [hasRealWebcam, setHasRealWebcam] = useState(false);
   const [hasRemotePeerStream, setHasRemotePeerStream] = useState(false);
   const [videoEngine, setVideoEngine] = useState<'STUDIO' | 'P2P'>('STUDIO');
@@ -518,6 +524,11 @@ function processLearningGoal() {
     fetchChat();
     fetchScratchpad();
 
+    // Meeting Duration Timer
+    const durationTimer = setInterval(() => {
+      setMeetingSeconds(s => s + 1);
+    }, 1000);
+
     // Fast 1000ms polling for real-time WebRTC signals, chat, and presence
     const interval = setInterval(() => {
       pollSignaling();
@@ -526,6 +537,7 @@ function processLearningGoal() {
     }, 1000);
 
     return () => {
+      clearInterval(durationTimer);
       clearInterval(interval);
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
       if (peerConnectionRef.current) {
@@ -539,6 +551,12 @@ function processLearningGoal() {
       }
     };
   }, [sessionId]);
+
+  const formatDuration = (totalSec: number) => {
+    const mins = Math.floor(totalSec / 60);
+    const secs = totalSec % 60;
+    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  };
 
   // Telemetry event logger
   const logAttendance = (eventType: string, metadata?: any) => {
@@ -682,18 +700,7 @@ function processLearningGoal() {
     e.preventDefault();
     if (!newMessage.trim() || sendingMessage) return;
 
-    const messageText = newMessage.trim();
-    const tempId = `temp-${Date.now()}`;
-    const optimisticMsg = {
-      id: tempId,
-      senderId: user?.id || 'me',
-      senderName: user?.display_name || 'You',
-      message: messageText,
-      status: 'SENDING' as const,
-      createdAt: new Date().toISOString(),
-    };
-
-    setChatMessages(prev => [...prev, optimisticMsg]);
+    const tempText = newMessage;
     setNewMessage('');
     setSendingMessage(true);
 
@@ -701,17 +708,17 @@ function processLearningGoal() {
       const res = await fetch(`/api/sessions/${sessionId}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: messageText }),
+        body: JSON.stringify({ message: tempText }),
       });
 
       if (res.ok) {
         const data = await res.json();
-        setChatMessages(prev => prev.map(m => m.id === tempId ? { ...data.message, status: 'SENT' } : m));
-      } else {
-        setChatMessages(prev => prev.map(m => m.id === tempId ? { ...m, status: 'FAILED' } : m));
+        if (data.message) {
+          setChatMessages((prev) => [...prev, data.message]);
+        }
       }
     } catch (err) {
-      setChatMessages(prev => prev.map(m => m.id === tempId ? { ...m, status: 'FAILED' } : m));
+      console.error('Failed to send chat message:', err);
     } finally {
       setSendingMessage(false);
     }
@@ -792,364 +799,426 @@ function processLearningGoal() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 lg:px-8 py-6 space-y-4">
+    <div className="w-full max-w-[1680px] mx-auto px-2 sm:px-4 py-3 min-h-[calc(100vh-80px)] flex flex-col justify-between space-y-3 font-sans">
       
-      {/* Pinned SkillSwap Exchange Agreement Banner */}
-      {exchangeData && (
-        <div className="glass-panel p-3.5 rounded-2xl border border-brand-500/30 bg-brand-500/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-2.5">
-            <span className="text-base">🤝</span>
-            <div>
-              <span className="font-bold text-white flex items-center gap-2">
-                Agreed SkillSwap Exchange:
-                <span className="px-2 py-0.5 rounded bg-brand-500/20 text-brand-300 font-extrabold border border-brand-500/40">
-                  {exchangeData.session.skill_name} ↔ {exchangeData.agreement?.return_type === 'SKILL' ? exchangeData.agreement?.requested_return_skill_name : `${exchangeData.agreement?.credit_amount || exchangeData.requiredCredits} Skill Credit(s)`}
-                </span>
-              </span>
-              <p className="text-[11px] text-slate-300 mt-0.5">
-                {exchangeData.session.teacher_name} teaches {exchangeData.session.skill_name} • {exchangeData.session.learner_name} provides {exchangeData.agreement?.return_type === 'SKILL' ? exchangeData.agreement?.requested_return_skill_name : `${exchangeData.agreement?.credit_amount || exchangeData.requiredCredits} Skill Credit(s)`}
-              </p>
-            </div>
+      {/* 1. Top Google Meet / Zoom Style Header Bar */}
+      <div className="flex items-center justify-between gap-3 bg-slate-900/95 px-4 py-2.5 rounded-2xl border border-slate-800 shadow-lg backdrop-blur-xl">
+        
+        {/* Left: Meeting Info & Timer */}
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shadow-glow-brand" />
+            <span className="font-mono text-xs font-bold text-white tracking-wide bg-slate-800/80 px-2 py-0.5 rounded-lg border border-slate-700">
+              {formatDuration(meetingSeconds)}
+            </span>
           </div>
-          <div className="flex items-center gap-2 self-start sm:self-auto">
-            <span className="text-[10px] px-2 py-1 rounded-lg bg-slate-900 border border-slate-700 text-brand-400 font-bold flex items-center gap-1">
-              <ShieldCheck className="w-3 h-3" /> Pre-Session Terms Verified
+
+          <div className="h-4 w-px bg-slate-700 hidden sm:block" />
+
+          <div className="hidden sm:flex items-center gap-2">
+            <h1 className="text-xs sm:text-sm font-bold text-white">
+              {participantInfo?.skillName || exchangeData?.session?.skill_name || 'Live Mentoring Classroom'}
+            </h1>
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-brand-500/20 text-brand-300 font-bold border border-brand-500/30">
+              {participantInfo?.role === 'TRAINER' ? '👨‍🏫 Mentor' : '🎓 Learner'}
             </span>
           </div>
         </div>
-      )}
 
-      {/* Room Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-900/90 p-4 rounded-2xl border border-slate-800">
-        <div className="flex items-center gap-3">
-          <div className={`w-3 h-3 rounded-full ${connectionState === 'CONNECTED' ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400 animate-ping'}`} />
-          <div>
-            <h1 className="text-base font-bold text-white flex items-center gap-2">
-              Online Classroom: {participantInfo?.skillName || exchangeData?.session?.skill_name || 'Skill Mentorship'}
-              <span className="text-[10px] px-2 py-0.5 rounded bg-brand-500/20 text-brand-400 font-semibold border border-brand-500/30">
-                {participantInfo?.role === 'TRAINER' ? 'Teacher / Mentor' : 'Learner'}
-              </span>
-            </h1>
-            <div className="flex items-center gap-2 mt-1">
-              <div className="flex items-center gap-1 bg-slate-900/90 border border-slate-800 p-0.5 rounded-xl">
-                <button
-                  onClick={() => setVideoEngine('STUDIO')}
-                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all ${
-                    videoEngine === 'STUDIO'
-                      ? 'bg-brand-500 text-dark-bg shadow-glow-brand'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  ⚡ Studio Room (Instant HD)
-                </button>
-                <button
-                  onClick={() => setVideoEngine('P2P')}
-                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all ${
-                    videoEngine === 'P2P'
-                      ? 'bg-brand-500 text-dark-bg shadow-glow-brand'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  🔗 Custom P2P
-                </button>
-              </div>
-
-              <span className="text-xs text-slate-400">•</span>
-              <span className="text-xs text-slate-400">
-                State: <strong className="text-emerald-400">{connectionState}</strong>
-              </span>
-            </div>
-          </div>
+        {/* Center: Engine Mode Switcher */}
+        <div className="flex items-center gap-1 bg-slate-950/80 border border-slate-800 p-0.5 rounded-xl">
+          <button
+            onClick={() => setVideoEngine('STUDIO')}
+            className={`px-3 py-1 rounded-lg text-[11px] font-bold transition-all ${
+              videoEngine === 'STUDIO'
+                ? 'bg-brand-500 text-dark-bg shadow-glow-brand'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            ⚡ Studio HD (SFU)
+          </button>
+          <button
+            onClick={() => setVideoEngine('P2P')}
+            className={`px-3 py-1 rounded-lg text-[11px] font-bold transition-all ${
+              videoEngine === 'P2P'
+                ? 'bg-brand-500 text-dark-bg shadow-glow-brand'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            🔗 P2P WebRTC
+          </button>
         </div>
 
+        {/* Right: Settle Escrow Action */}
         <div className="flex items-center gap-2">
           <button
             onClick={handleConfirmAndSettle}
             disabled={completing || completionSuccess}
-            className="px-4 py-2 rounded-xl bg-brand-500 hover:bg-brand-400 text-dark-bg font-bold text-xs shadow-glow-brand transition-all flex items-center gap-1.5 disabled:opacity-50"
+            className="px-3.5 py-1.5 rounded-xl bg-brand-500 hover:bg-brand-400 text-dark-bg font-bold text-xs shadow-glow-brand transition-all flex items-center gap-1.5 disabled:opacity-50"
           >
             {completionSuccess ? (
               <>
-                <CheckCircle2 className="w-4 h-4" /> Credit Settled!
+                <CheckCircle2 className="w-3.5 h-3.5" /> Credit Settled!
               </>
             ) : completing ? (
-              'Settling Escrow...'
+              'Settling...'
             ) : (
               <>
-                <CheckCircle2 className="w-4 h-4" /> Confirm &amp; End Session
+                <CheckCircle2 className="w-3.5 h-3.5" /> Confirm &amp; End
               </>
             )}
-          </button>
-
-          <button
-            onClick={() => setLeaveModalOpen(true)}
-            className="p-2 rounded-xl bg-slate-800 hover:bg-rose-500/20 text-slate-400 hover:text-rose-300 border border-slate-700 transition-colors"
-            title="Leave room"
-            aria-label="Leave video session"
-          >
-            <PhoneOff className="w-4 h-4" />
           </button>
         </div>
       </div>
 
-      {/* Main Grid: Video Streams + Scratchpad + Live Chat */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      {/* 2. Main Stage: Video Arena (Left) + Sliding Side Drawer (Right) */}
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-3 min-h-[540px]">
         
-        {/* Left 2 Columns: Video Classroom & Code Scratchpad */}
-        <div className="lg:col-span-2 space-y-4">
+        {/* Video Stage (Expands to 12 cols when drawer is closed, 8-9 cols when open) */}
+        <div className={`${sidePanelOpen ? 'lg:col-span-8 xl:col-span-9' : 'lg:col-span-12'} flex flex-col transition-all duration-300`}>
           
           {videoEngine === 'STUDIO' ? (
-            /* Mode 1: Enterprise SFU Studio Room (Guaranteed 2-way Audio/Video & Screen Share on any network) */
-            <div className="glass-panel h-[480px] sm:h-[540px] rounded-2xl border border-slate-800 relative overflow-hidden bg-slate-950 shadow-2xl">
+            /* Mode 1: Full-Stage Google Meet / Zoom Style Studio Room */
+            <div className="w-full flex-1 min-h-[500px] h-[calc(100vh-210px)] rounded-3xl overflow-hidden border border-slate-800 bg-[#0e1017] shadow-2xl relative">
               <iframe
                 src={`https://meet.jit.si/ReciproCampus_${sessionId.replace(/[^a-zA-Z0-9]/g, '_')}#userInfo.displayName="${encodeURIComponent(user?.display_name || participantInfo?.displayName || 'Participant')}"&config.prejoinPageEnabled=false&config.startWithAudioMuted=false&config.startWithVideoMuted=false&config.disableDeepLinking=true`}
                 allow="camera; microphone; fullscreen; display-capture; autoplay"
-                className="w-full h-full rounded-2xl border-0 bg-slate-950"
+                className="w-full h-full border-0 rounded-3xl"
               />
             </div>
           ) : (
-            /* Mode 2: Direct Peer-to-Peer Custom WebRTC Grid */
-            <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                
-                {/* Stream 1: Local Stream */}
-                <div className="glass-panel h-56 sm:h-64 rounded-2xl border border-slate-800 relative flex items-center justify-center overflow-hidden bg-slate-950 shadow-2xl">
-                  <video
-                    ref={localVideoRef}
-                    autoPlay
-                    playsInline
-                    muted
-                    className={`w-full h-full object-cover rounded-2xl transition-opacity duration-300 ${cameraOn ? 'opacity-100' : 'opacity-0'}`}
-                  />
+            /* Mode 2: Custom P2P Video Grid */
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 flex-1 h-[calc(100vh-210px)] min-h-[500px]">
+              
+              {/* Tile 1: Local Video */}
+              <div className="glass-panel rounded-3xl border border-slate-800 relative flex items-center justify-center overflow-hidden bg-slate-950 shadow-2xl">
+                <video
+                  ref={localVideoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className={`w-full h-full object-cover rounded-3xl transition-opacity duration-300 ${cameraOn ? 'opacity-100' : 'opacity-0'}`}
+                />
 
-                  {!cameraOn && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/90 text-slate-400 space-y-2">
-                      <div className="w-16 h-16 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-brand-400 font-bold text-xl">
-                        {user?.display_name?.substring(0, 2).toUpperCase() || 'ME'}
-                      </div>
-                      <span className="text-xs text-slate-400 flex items-center gap-1">
-                        <VideoOff className="w-3.5 h-3.5 text-rose-400" /> Camera Muted
-                      </span>
+                {!cameraOn && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/90 text-slate-400 space-y-2">
+                    <div className="w-16 h-16 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-brand-400 font-bold text-xl shadow-inner">
+                      {user?.display_name?.substring(0, 2).toUpperCase() || 'ME'}
                     </div>
-                  )}
-
-                  <div className="absolute top-3 left-3 flex items-center gap-1.5">
-                    <span className="bg-black/70 px-2 py-0.5 rounded text-[10px] font-bold text-brand-300 border border-brand-500/30 backdrop-blur-sm">
-                      {screenShare ? '🖥️ Presenting Screen' : '📹 HD Video'}
+                    <span className="text-xs text-slate-400 flex items-center gap-1">
+                      <VideoOff className="w-3.5 h-3.5 text-rose-400" /> Camera Muted
                     </span>
                   </div>
+                )}
 
-                  {!micOn && (
-                    <span className="absolute top-3 right-3 px-2 py-0.5 rounded-lg bg-rose-500/80 text-white text-[10px] font-bold flex items-center gap-1 backdrop-blur-sm">
-                      <MicOff className="w-3 h-3" /> Muted
-                    </span>
-                  )}
-
-                  <div className="absolute bottom-3 left-3 bg-black/70 px-2.5 py-1 rounded-xl text-[11px] font-bold text-white backdrop-blur-sm flex items-center gap-1.5 border border-slate-800">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                    <span>You ({user?.display_name || 'Participant'})</span>
-                  </div>
+                <div className="absolute top-3 left-3 bg-black/70 px-2.5 py-1 rounded-xl text-[11px] font-bold text-white backdrop-blur-md border border-slate-800 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span>You ({user?.display_name || 'Participant'})</span>
                 </div>
 
-                {/* Stream 2: Peer Stream */}
-                <div className="glass-panel h-56 sm:h-64 rounded-2xl border border-slate-800 relative flex items-center justify-center overflow-hidden bg-slate-950 shadow-2xl">
-                  <video
-                    ref={remoteVideoRef}
-                    autoPlay
-                    playsInline
-                    className={`w-full h-full object-cover rounded-2xl transition-opacity duration-300 ${hasRemotePeerStream ? 'opacity-100' : 'opacity-0'}`}
-                  />
+                {!micOn && (
+                  <span className="absolute top-3 right-3 px-2 py-0.5 rounded-lg bg-rose-500/90 text-white text-[10px] font-bold flex items-center gap-1 backdrop-blur-sm shadow-md">
+                    <MicOff className="w-3 h-3" /> Muted
+                  </span>
+                )}
+              </div>
 
-                  {!hasRemotePeerStream && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/95 text-slate-400 space-y-3 p-4 text-center z-10">
-                      <div className="w-16 h-16 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-cyan-400 font-bold text-xl animate-pulse">
-                        {participantInfo?.role === 'TRAINER' ? 'L' : 'M'}
-                      </div>
-                      <div className="space-y-1">
-                        <p className="text-xs font-bold text-white">
-                          Waiting for {participantInfo?.role === 'TRAINER' ? (exchangeData?.session?.learner_name || 'Learner') : (exchangeData?.session?.teacher_name || 'Mentor')}...
-                        </p>
-                        <p className="text-[10px] text-slate-400">
-                          Live WebRTC audio &amp; video will start automatically when they join
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => {
-                          const pc = createPeerConnection();
-                          initiateWebRTCCall(pc);
-                        }}
-                        className="px-3 py-1.5 rounded-xl bg-brand-500/20 hover:bg-brand-500/30 text-brand-300 font-semibold text-[11px] border border-brand-500/40 transition-colors flex items-center gap-1.5 shadow-sm"
-                      >
-                        <RefreshCw className="w-3 h-3" /> Connect Peer Video
-                      </button>
+              {/* Tile 2: Peer Remote Video */}
+              <div className="glass-panel rounded-3xl border border-slate-800 relative flex items-center justify-center overflow-hidden bg-slate-950 shadow-2xl">
+                <video
+                  ref={remoteVideoRef}
+                  autoPlay
+                  playsInline
+                  className={`w-full h-full object-cover rounded-3xl transition-opacity duration-300 ${hasRemotePeerStream ? 'opacity-100' : 'opacity-0'}`}
+                />
+
+                {!hasRemotePeerStream && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/95 text-slate-400 space-y-3 p-4 text-center z-10">
+                    <div className="w-16 h-16 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-cyan-400 font-bold text-xl animate-pulse shadow-inner">
+                      {participantInfo?.role === 'TRAINER' ? 'L' : 'M'}
                     </div>
-                  )}
-
-                  <div className="absolute top-3 left-3 flex items-center gap-1.5">
-                    <span className="bg-black/70 px-2 py-0.5 rounded text-[10px] font-bold text-cyan-300 border border-cyan-500/30 backdrop-blur-sm">
-                      {participantInfo?.role === 'TRAINER' ? '🎓 Learner Video' : '🧑‍🏫 Mentor Video'}
-                    </span>
+                    <div className="space-y-1">
+                      <p className="text-xs font-bold text-white">
+                        Waiting for {participantInfo?.role === 'TRAINER' ? (exchangeData?.session?.learner_name || 'Learner') : (exchangeData?.session?.teacher_name || 'Mentor')}...
+                      </p>
+                      <p className="text-[10px] text-slate-400">
+                        Live WebRTC audio &amp; video will start automatically when they join
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        const pc = createPeerConnection();
+                        initiateWebRTCCall(pc);
+                      }}
+                      className="px-3.5 py-1.5 rounded-xl bg-brand-500/20 hover:bg-brand-500/30 text-brand-300 font-semibold text-xs border border-brand-500/40 transition-colors flex items-center gap-1.5 shadow-sm"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" /> Connect Video
+                    </button>
                   </div>
+                )}
 
-                  <div className="absolute top-3 right-3 flex items-center gap-1.5">
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-semibold flex items-center gap-1 backdrop-blur-sm border ${
-                      hasRemotePeerStream ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-300' : 'bg-amber-500/20 border-amber-500/30 text-amber-300'
-                    }`}>
-                      <Signal className="w-2.5 h-2.5" /> {hasRemotePeerStream ? 'HD Connected' : 'Waiting for Peer'}
-                    </span>
-                  </div>
-
-                  <div className="absolute bottom-3 left-3 bg-black/70 px-2.5 py-1 rounded-xl text-[11px] font-bold text-white backdrop-blur-sm flex items-center gap-1.5 border border-slate-800">
-                    <span className={`w-2 h-2 rounded-full ${hasRemotePeerStream ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400 animate-ping'}`} />
-                    <span>{participantInfo?.role === 'TRAINER' ? (exchangeData?.session?.learner_name || 'Learner') : (exchangeData?.session?.teacher_name || 'Mentor')}</span>
-                  </div>
+                <div className="absolute top-3 left-3 bg-black/70 px-2.5 py-1 rounded-xl text-[11px] font-bold text-white backdrop-blur-md border border-slate-800 flex items-center gap-1.5">
+                  <span className={`w-2 h-2 rounded-full ${hasRemotePeerStream ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400 animate-ping'}`} />
+                  <span>{participantInfo?.role === 'TRAINER' ? (exchangeData?.session?.learner_name || 'Learner') : (exchangeData?.session?.teacher_name || 'Mentor')}</span>
                 </div>
-
               </div>
 
-              {/* Accessible Classroom Control Bar for P2P Mode */}
-              <div className="glass-panel p-3 rounded-2xl border border-slate-800 flex items-center justify-center gap-3 shadow-lg">
-                <button
-                  onClick={toggleMic}
-                  aria-label={micOn ? 'Mute microphone' : 'Unmute microphone'}
-                  className={`p-3 rounded-xl transition-all flex items-center gap-2 text-xs font-bold ${
-                    micOn ? 'bg-slate-800 text-white hover:bg-slate-700 border border-slate-700' : 'bg-rose-500/20 text-rose-300 border border-rose-500/40 shadow-lg'
-                  }`}
-                >
-                  {micOn ? <Mic className="w-4 h-4 text-emerald-400" /> : <MicOff className="w-4 h-4 text-rose-400" />}
-                  <span>{micOn ? 'Mute' : 'Unmute'}</span>
-                </button>
-
-                <button
-                  onClick={toggleCamera}
-                  aria-label={cameraOn ? 'Turn camera off' : 'Turn camera on'}
-                  className={`p-3 rounded-xl transition-all flex items-center gap-2 text-xs font-bold ${
-                    cameraOn ? 'bg-slate-800 text-white hover:bg-slate-700 border border-slate-700' : 'bg-rose-500/20 text-rose-300 border border-rose-500/40 shadow-lg'
-                  }`}
-                >
-                  {cameraOn ? <Video className="w-4 h-4 text-brand-400" /> : <VideoOff className="w-4 h-4 text-rose-400" />}
-                  <span>{cameraOn ? 'Stop Video' : 'Start Video'}</span>
-                </button>
-
-                <button
-                  onClick={toggleScreenShare}
-                  aria-label={screenShare ? 'Stop screen share' : 'Start screen share'}
-                  className={`p-3 rounded-xl transition-all flex items-center gap-2 text-xs font-bold ${
-                    screenShare ? 'bg-brand-500 text-dark-bg shadow-glow-brand' : 'bg-slate-800 text-white hover:bg-slate-700 border border-slate-700'
-                  }`}
-                >
-                  <Monitor className="w-4 h-4" />
-                  <span>{screenShare ? 'Stop Sharing' : 'Share Screen'}</span>
-                </button>
-
-                <button
-                  onClick={() => setChatDrawerOpen(!chatDrawerOpen)}
-                  aria-label="Toggle chat stream"
-                  className={`p-3 rounded-xl transition-all flex items-center gap-2 text-xs font-bold ${
-                    chatDrawerOpen ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-800 text-slate-400 hover:text-white border border-slate-700'
-                  }`}
-                >
-                  <MessageSquare className="w-4 h-4" />
-                  <span>In-Room Chat</span>
-                </button>
-              </div>
-            </>
-          )}
-
-          {/* Collaborative Live Code & Notes Scratchpad */}
-          <div className="glass-panel rounded-2xl border border-slate-800 overflow-hidden shadow-xl">
-            <div className="bg-slate-900 px-4 py-2.5 border-b border-slate-800 flex items-center justify-between text-xs">
-              <div className="flex items-center gap-2 text-slate-300 font-bold">
-                <Code className="w-4 h-4 text-brand-400" />
-                <span>Shared Interactive Code &amp; Scratchpad</span>
-              </div>
-              <span className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1">
-                <Check className="w-3 h-3" /> Live SQLite Database Synced
-              </span>
             </div>
-            <textarea
-              value={codeContent}
-              onChange={(e) => handleScratchpadChange(e.target.value)}
-              rows={8}
-              placeholder="Type notes, code snippets, algorithms, or concept explanations here..."
-              className="w-full bg-slate-950 text-slate-200 p-4 font-mono text-xs focus:outline-none resize-y border-none leading-relaxed"
-            />
-          </div>
+          )}
 
         </div>
 
-        {/* Right Column: Live Chat Drawer */}
-        {chatDrawerOpen && (
-          <div className="glass-panel rounded-2xl border border-slate-800 flex flex-col h-[580px] shadow-2xl overflow-hidden">
+        {/* 3. Google Meet Style Sliding Side Drawer (Chat / Scratchpad / Exchange Terms) */}
+        {sidePanelOpen && (
+          <div className="lg:col-span-4 xl:col-span-3 glass-panel rounded-3xl border border-slate-800 flex flex-col h-[calc(100vh-210px)] min-h-[500px] shadow-2xl overflow-hidden bg-slate-900/90 backdrop-blur-xl">
             
-            {/* Chat Header */}
-            <div className="p-3.5 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
-              <div className="flex items-center gap-2 font-bold text-white text-xs">
-                <MessageSquare className="w-4 h-4 text-indigo-400" />
-                <span>Live Classroom Chat</span>
+            {/* Drawer Header Tabs */}
+            <div className="p-2 bg-slate-950/80 border-b border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setActiveSideTab('CHAT')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                    activeSideTab === 'CHAT' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <MessageSquare className="w-3.5 h-3.5" /> Chat
+                </button>
+
+                <button
+                  onClick={() => setActiveSideTab('SCRATCHPAD')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                    activeSideTab === 'SCRATCHPAD' ? 'bg-brand-500 text-dark-bg shadow-md' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <Code className="w-3.5 h-3.5" /> Code
+                </button>
+
+                <button
+                  onClick={() => setActiveSideTab('DETAILS')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                    activeSideTab === 'DETAILS' ? 'bg-slate-800 text-white border border-slate-700' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <ShieldCheck className="w-3.5 h-3.5" /> Terms
+                </button>
               </div>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30">
-                Encrypted &amp; Persisted
-              </span>
-            </div>
 
-            {/* Messages List */}
-            <div className="flex-1 p-4 overflow-y-auto space-y-3">
-              {chatMessages.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-center text-slate-500 text-xs space-y-1">
-                  <MessageSquare className="w-8 h-8 text-slate-700" />
-                  <p>No messages yet.</p>
-                  <p className="text-[11px]">Send a greeting or ask a question during your session!</p>
-                </div>
-              ) : (
-                chatMessages.map((msg) => {
-                  const isMe = msg.senderId === user?.id || msg.senderId === 'me';
-                  return (
-                    <div
-                      key={msg.id}
-                      className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}
-                    >
-                      <div className="flex items-center gap-1.5 text-[10px] text-slate-400 mb-0.5">
-                        <span className="font-semibold">{msg.senderName}</span>
-                        <span>•</span>
-                        <span>{new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                      </div>
-                      <div
-                        className={`px-3.5 py-2 rounded-2xl text-xs max-w-[85%] break-words ${
-                          isMe
-                            ? 'bg-brand-500 text-dark-bg font-medium rounded-tr-none'
-                            : 'bg-slate-800 text-slate-200 rounded-tl-none border border-slate-700'
-                        }`}
-                      >
-                        {msg.message}
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-
-            {/* Message Input Form */}
-            <form onSubmit={handleSendMessage} className="p-3 bg-slate-900 border-t border-slate-800 flex items-center gap-2">
-              <input
-                type="text"
-                value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
-                placeholder="Type in-room chat message..."
-                className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
-              />
               <button
-                type="submit"
-                disabled={sendingMessage || !newMessage.trim()}
-                className="p-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold transition-colors disabled:opacity-40"
+                onClick={() => setSidePanelOpen(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+                title="Close drawer"
               >
-                <Send className="w-4 h-4" />
+                <X className="w-4 h-4" />
               </button>
-            </form>
+            </div>
+
+            {/* Tab 1: Live Chat Stream */}
+            {activeSideTab === 'CHAT' && (
+              <div className="flex-1 flex flex-col overflow-hidden">
+                <div className="flex-1 p-3.5 overflow-y-auto space-y-2.5">
+                  {chatMessages.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center text-center text-slate-500 text-xs space-y-1">
+                      <MessageSquare className="w-7 h-7 text-slate-700" />
+                      <p className="font-semibold text-slate-400">In-Room Chat</p>
+                      <p className="text-[11px]">Send notes, links, or code snippets during your call.</p>
+                    </div>
+                  ) : (
+                    chatMessages.map((msg) => {
+                      const isMe = msg.senderId === user?.id || msg.senderId === 'me';
+                      return (
+                        <div
+                          key={msg.id}
+                          className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}
+                        >
+                          <div className="flex items-center gap-1 text-[10px] text-slate-400 mb-0.5">
+                            <span className="font-semibold">{msg.senderName}</span>
+                            <span>•</span>
+                            <span>{new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                          </div>
+                          <div
+                            className={`px-3 py-2 rounded-2xl text-xs max-w-[88%] break-words leading-relaxed ${
+                              isMe
+                                ? 'bg-indigo-600 text-white font-medium rounded-tr-none shadow-md'
+                                : 'bg-slate-800 text-slate-200 rounded-tl-none border border-slate-700'
+                            }`}
+                          >
+                            {msg.message}
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+
+                <form onSubmit={handleSendMessage} className="p-2.5 bg-slate-950/90 border-t border-slate-800 flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={newMessage}
+                    onChange={(e) => setNewMessage(e.target.value)}
+                    placeholder="Send a message to everyone..."
+                    className="flex-1 bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                  />
+                  <button
+                    type="submit"
+                    disabled={sendingMessage || !newMessage.trim()}
+                    className="p-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold transition-colors disabled:opacity-40 shadow-md"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                  </button>
+                </form>
+              </div>
+            )}
+
+            {/* Tab 2: Collaborative Code & Notes Scratchpad */}
+            {activeSideTab === 'SCRATCHPAD' && (
+              <div className="flex-1 flex flex-col overflow-hidden">
+                <div className="px-3 py-2 bg-slate-950/60 border-b border-slate-800 flex items-center justify-between text-[11px]">
+                  <span className="text-slate-300 font-bold flex items-center gap-1.5">
+                    <Code className="w-3.5 h-3.5 text-brand-400" /> JavaScript Scratchpad
+                  </span>
+                  <span className="text-emerald-400 font-semibold flex items-center gap-1">
+                    <Check className="w-3 h-3" /> Auto-Saved
+                  </span>
+                </div>
+                <textarea
+                  value={codeContent}
+                  onChange={(e) => handleScratchpadChange(e.target.value)}
+                  placeholder="Collaborative code workspace..."
+                  className="flex-1 bg-slate-950 text-slate-200 p-3 font-mono text-xs focus:outline-none resize-none border-none leading-relaxed"
+                />
+              </div>
+            )}
+
+            {/* Tab 3: Session Details & Escrow Terms */}
+            {activeSideTab === 'DETAILS' && (
+              <div className="p-4 space-y-3.5 text-xs text-slate-300 overflow-y-auto">
+                <div className="p-3 rounded-2xl bg-slate-950/80 border border-slate-800 space-y-2">
+                  <div className="flex items-center gap-2 font-bold text-white">
+                    <ShieldCheck className="w-4 h-4 text-brand-400" />
+                    <span>SkillSwap Escrow Agreement</span>
+                  </div>
+                  <div className="space-y-1 text-[11px] text-slate-400">
+                    <p>Skill: <strong className="text-white">{exchangeData?.session?.skill_name || 'Mentorship'}</strong></p>
+                    <p>Mentor: <strong className="text-white">{exchangeData?.session?.teacher_name || 'Teacher'}</strong></p>
+                    <p>Learner: <strong className="text-white">{exchangeData?.session?.learner_name || 'Learner'}</strong></p>
+                    <p>Escrow: <strong className="text-brand-300">{exchangeData?.agreement?.credit_amount || 1} Credit Locked</strong></p>
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-2xl bg-brand-500/10 border border-brand-500/30 text-[11px] space-y-1.5 text-slate-300">
+                  <p className="font-bold text-white">🤝 Automated Settlement</p>
+                  <p>When the session concludes, tap <strong>Confirm &amp; End</strong> to release the locked credit to the mentor and submit your peer rating.</p>
+                </div>
+              </div>
+            )}
 
           </div>
         )}
 
+      </div>
+
+      {/* 4. Google Meet / Zoom Floating Bottom Control Dock */}
+      <div className="flex items-center justify-center pt-2">
+        <div className="bg-slate-900/95 border border-slate-700/80 shadow-2xl backdrop-blur-2xl px-5 py-2.5 rounded-full flex items-center gap-3">
+          
+          {/* Microphone */}
+          <button
+            onClick={toggleMic}
+            aria-label={micOn ? 'Mute microphone' : 'Unmute microphone'}
+            className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
+              micOn ? 'bg-slate-800 hover:bg-slate-700 text-white border border-slate-700' : 'bg-rose-600 hover:bg-rose-500 text-white shadow-lg'
+            }`}
+            title={micOn ? 'Mute mic' : 'Unmute mic'}
+          >
+            {micOn ? <Mic className="w-4 h-4 text-emerald-400" /> : <MicOff className="w-4 h-4" />}
+          </button>
+
+          {/* Camera */}
+          <button
+            onClick={toggleCamera}
+            aria-label={cameraOn ? 'Turn camera off' : 'Turn camera on'}
+            className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
+              cameraOn ? 'bg-slate-800 hover:bg-slate-700 text-white border border-slate-700' : 'bg-rose-600 hover:bg-rose-500 text-white shadow-lg'
+            }`}
+            title={cameraOn ? 'Turn off camera' : 'Turn on camera'}
+          >
+            {cameraOn ? <Video className="w-4 h-4 text-brand-400" /> : <VideoOff className="w-4 h-4" />}
+          </button>
+
+          {/* Screen Share */}
+          <button
+            onClick={toggleScreenShare}
+            aria-label={screenShare ? 'Stop screen share' : 'Share screen'}
+            className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
+              screenShare ? 'bg-brand-500 text-dark-bg shadow-glow-brand' : 'bg-slate-800 hover:bg-slate-700 text-white border border-slate-700'
+            }`}
+            title="Present Screen"
+          >
+            <Monitor className="w-4 h-4" />
+          </button>
+
+          <div className="h-6 w-px bg-slate-700" />
+
+          {/* Live Code Scratchpad Toggle */}
+          <button
+            onClick={() => {
+              setActiveSideTab('SCRATCHPAD');
+              setSidePanelOpen(true);
+            }}
+            className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
+              sidePanelOpen && activeSideTab === 'SCRATCHPAD' ? 'bg-brand-500 text-dark-bg shadow-glow-brand' : 'bg-slate-800 hover:bg-slate-700 text-white border border-slate-700'
+            }`}
+            title="Shared Code Scratchpad"
+          >
+            <Code className="w-4 h-4" />
+          </button>
+
+          {/* In-Room Chat Toggle */}
+          <button
+            onClick={() => {
+              setActiveSideTab('CHAT');
+              setSidePanelOpen(!sidePanelOpen || activeSideTab !== 'CHAT');
+            }}
+            className={`w-10 h-10 rounded-full flex items-center justify-center transition-all relative ${
+              sidePanelOpen && activeSideTab === 'CHAT' ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-800 hover:bg-slate-700 text-white border border-slate-700'
+            }`}
+            title="In-Room Chat"
+          >
+            <MessageSquare className="w-4 h-4" />
+            {chatMessages.length > 0 && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-brand-500 text-dark-bg text-[9px] font-extrabold flex items-center justify-center shadow">
+                {chatMessages.length}
+              </span>
+            )}
+          </button>
+
+          {/* Agreement & Details */}
+          <button
+            onClick={() => {
+              setActiveSideTab('DETAILS');
+              setSidePanelOpen(true);
+            }}
+            className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
+              sidePanelOpen && activeSideTab === 'DETAILS' ? 'bg-slate-700 text-white' : 'bg-slate-800 hover:bg-slate-700 text-white border border-slate-700'
+            }`}
+            title="Session Agreement & Escrow"
+          >
+            <ShieldCheck className="w-4 h-4 text-emerald-400" />
+          </button>
+
+          <div className="h-6 w-px bg-slate-700" />
+
+          {/* End Call / Leave Pill */}
+          <button
+            onClick={() => setLeaveModalOpen(true)}
+            className="px-4 h-10 rounded-full bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs transition-all flex items-center gap-1.5 shadow-lg"
+            title="Leave Meeting"
+          >
+            <PhoneOff className="w-4 h-4" />
+            <span className="hidden sm:inline">Leave</span>
+          </button>
+
+        </div>
       </div>
 
       {/* Leave Room Modal */}
@@ -1162,7 +1231,7 @@ function processLearningGoal() {
             <div className="space-y-1">
               <h3 className="text-base font-bold text-white">Leave Video Classroom?</h3>
               <p className="text-xs text-slate-400">
-                You can rejoin anytime while the session is scheduled. (To finalize and transfer credits, use Confirm &amp; End Session).
+                You can rejoin anytime while the session is active. (To finalize and release skill credits, use Confirm &amp; End).
               </p>
             </div>
             <div className="flex gap-2 pt-2">
@@ -1170,7 +1239,7 @@ function processLearningGoal() {
                 onClick={() => setLeaveModalOpen(false)}
                 className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs border border-slate-700"
               >
-                Stay in Room
+                Stay
               </button>
               <button
                 onClick={handleConfirmLeave}

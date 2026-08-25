@@ -682,14 +682,10 @@ function processLearningGoal() {
     }).catch(() => {});
   };
 
-  // Save Scratchpad Content to SQLite & Broadcast via Socket.io
+  // Save Scratchpad Content to Database & Sync
   const handleScratchpadChange = (newText: string) => {
     setCodeContent(newText);
     setScratchpadSaved(false);
-    
-    if (socketRef.current) {
-      socketRef.current.emit('scratchpad-update', { roomId: sessionId, content: newText });
-    }
     
     fetch(`/api/sessions/${sessionId}/scratchpad`, {
       method: 'POST',
@@ -700,7 +696,7 @@ function processLearningGoal() {
       .catch(console.error);
   };
 
-  // Send Text Chat Message & Broadcast via Socket.io
+  // Send Text Chat Message to Database & Sync
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim() || sendingMessage) return;
@@ -720,9 +716,6 @@ function processLearningGoal() {
         const data = await res.json();
         if (data.message) {
           setChatMessages((prev) => [...prev, data.message]);
-          if (socketRef.current) {
-            socketRef.current.emit('send-message', { roomId: sessionId, message: data.message });
-          }
         }
       }
     } catch (err) {

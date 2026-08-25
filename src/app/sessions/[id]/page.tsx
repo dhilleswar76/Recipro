@@ -33,7 +33,7 @@ export default function SessionDetailPage() {
   const params = useParams();
   const router = useRouter();
   const { user } = useAuth();
-  const sessionId = params.id as string;
+  const sessionId = (params?.id as string) || '';
 
   const [sessionData, setSessionData] = useState<any | null>(null);
   const [events, setEvents] = useState<any[]>([]);

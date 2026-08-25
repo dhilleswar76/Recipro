@@ -25,7 +25,7 @@ import {
 
 export default function AdminSessionReportPage() {
   const params = useParams();
-  const sessionId = params.id as string;
+  const sessionId = (params?.id as string) || '';
   const router = useRouter();
   const { user: authUser, loading: authLoading } = useAuth();
 

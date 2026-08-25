@@ -253,16 +253,14 @@ export async function searchAndMatchCandidates(params: SearchParams, weights: Ma
   ];
   let filterParams: any[] = [requesterId];
 
-  // Skill keyword or category search
+  // Skill keyword or category search (strict skill match)
   if (q.length > 0) {
     const searchParam = filterParams.length + 1;
     filterConditions.push(`(
       LOWER(s.name) LIKE $${searchParam}
       OR LOWER(s.category) LIKE $${searchParam + 1}
-      OR LOWER(us.teaching_style) LIKE $${searchParam + 2}
-      OR LOWER(p.bio) LIKE $${searchParam + 3}
     )`);
-    filterParams.push(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`);
+    filterParams.push(`%${q}%`, `%${q}%`);
   }
 
   if (params.skillCategory) {

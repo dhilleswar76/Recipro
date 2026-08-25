@@ -80,7 +80,7 @@ export async function createLearningRequest(
     const newSkillId = `skill-${normalizedSkill.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
     await query(`
       INSERT INTO skills (id, name, category, icon, is_verified)
-      VALUES ($1, $2, $3, 'BookOpen', 1)
+      VALUES ($1, $2, $3, 'BookOpen', true)
       ON CONFLICT (id) DO NOTHING
     `, [newSkillId, normalizedSkill, category]);
     skill = { id: newSkillId, name: normalizedSkill };

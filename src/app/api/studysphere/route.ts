@@ -81,12 +81,12 @@ export async function POST(req: NextRequest) {
       await withTransaction(async (client) => {
         await client.query(`
           INSERT INTO study_groups (id, name, description, subject, creator_id, meeting_schedule, max_members)
-          VALUES (?, ?, ?, ?, ?, ?, ?)
+          VALUES ($1, $2, $3, $4, $5, $6, $7)
         `, [groupId, name, description, subject, user.userId, meetingSchedule || 'Weekly', maxMembers || 10]);
 
         await client.query(`
           INSERT INTO study_group_members (id, group_id, user_id, role)
-          VALUES (?, ?, ?, 'ADMIN')
+          VALUES ($1, $2, $3, 'ADMIN')
         `, [`sgm-${Date.now()}`, groupId, user.userId]);
       });
       return NextResponse.json({ success: true, message: 'Study circle created!', groupId }, { status: 201 });

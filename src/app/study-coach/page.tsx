@@ -410,8 +410,8 @@ export default function StudyCoachPage() {
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {result.recommendedMentors.map((mentor: any) => (
-                  <div key={mentor.userId} className="glass-panel p-5 rounded-2xl border border-slate-800 flex flex-col justify-between space-y-4 hover:border-brand-500/40 transition-colors">
+                {result.recommendedMentors.map((mentor: any, index: number) => (
+                  <div key={`${mentor.userId}-${mentor.skillId || mentor.skillName || index}`} className="glass-panel p-5 rounded-2xl border border-slate-800 flex flex-col justify-between space-y-4 hover:border-brand-500/40 transition-colors">
                     <div>
                       <div className="flex items-start justify-between gap-3 mb-3">
                         <div className="flex items-center gap-2.5">

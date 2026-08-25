@@ -67,7 +67,7 @@ export async function GET(req: NextRequest) {
       }
     });
   } catch (err: any) {
-    console.error('Search API Error:', err);
-    return NextResponse.json({ error: 'Search processing error occurred' }, { status: 500 });
+    console.error('Search API Error:', err.message || err);
+    return NextResponse.json({ error: err.message || 'Search processing error occurred' }, { status: 500 });
   }
 }

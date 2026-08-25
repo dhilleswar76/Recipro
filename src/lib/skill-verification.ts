@@ -426,7 +426,7 @@ export async function evaluateSkillAssessment(
       score,
       maxScore,
       percentage,
-      passed ? 1 : 0,
+      Boolean(passed),
       params.requestedProficiency,
       verifiedLevel,
       JSON.stringify(params.answers)
@@ -439,17 +439,17 @@ export async function evaluateSkillAssessment(
         SET 
           verification_status = $1,
           assessment_score = $2,
-          proficiency = CASE WHEN $3 = 1 THEN $4 ELSE proficiency END,
+          proficiency = CASE WHEN $3 = true THEN $4 ELSE proficiency END,
           verified_at = CURRENT_TIMESTAMP,
           verified_by = 'SYSTEM_ASSESSMENT_ENGINE',
-          reassessment_required = CASE WHEN $5 = 1 THEN 0 ELSE 1 END
+          reassessment_required = CASE WHEN $5 = true THEN false ELSE true END
         WHERE user_id = $6 AND skill_id = $7
       `, [
         verificationStatus,
         percentage,
-        passed ? 1 : 0,
+        Boolean(passed),
         verifiedLevel,
-        passed ? 1 : 0,
+        Boolean(passed),
         params.userId,
         params.skillId
       ]);

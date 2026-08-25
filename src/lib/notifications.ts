@@ -225,7 +225,7 @@ export class NotificationService {
     let queryParams: any[] = [userId];
 
     if (params.unreadOnly) {
-      whereClauses.push('is_read = 0');
+      whereClauses.push('is_read = FALSE');
     }
 
     if (params.category && params.category !== 'ALL') {
@@ -253,7 +253,7 @@ export class NotificationService {
     const totalCount = Number((totalResult.rows[0] as any).count);
 
     const unreadResult = await query(`
-      SELECT COUNT(*) as count FROM notifications WHERE user_id = $1 AND is_read = 0
+      SELECT COUNT(*) as count FROM notifications WHERE user_id = $1 AND is_read = FALSE
     `, [userId]);
     const unreadCount = Number((unreadResult.rows[0] as any).count);
 
@@ -281,7 +281,7 @@ export class NotificationService {
    */
   static async getUnreadCount(userId: string): Promise<number> {
     const result = await query(`
-      SELECT COUNT(*) as count FROM notifications WHERE user_id = $1 AND is_read = 0
+      SELECT COUNT(*) as count FROM notifications WHERE user_id = $1 AND is_read = FALSE
     `, [userId]);
     return Number((result.rows[0] as any)?.count || 0);
   }
@@ -292,7 +292,7 @@ export class NotificationService {
   static async markAsRead(notificationId: string, userId: string): Promise<boolean> {
     const res = await query(`
       UPDATE notifications 
-      SET is_read = 1, read_at = CURRENT_TIMESTAMP 
+      SET is_read = TRUE, read_at = CURRENT_TIMESTAMP 
       WHERE id = $1 AND user_id = $2
     `, [notificationId, userId]);
     return (res.rowCount || 0) > 0;
@@ -304,8 +304,8 @@ export class NotificationService {
   static async markAllAsRead(userId: string): Promise<number> {
     const res = await query(`
       UPDATE notifications 
-      SET is_read = 1, read_at = CURRENT_TIMESTAMP 
-      WHERE user_id = $1 AND is_read = 0
+      SET is_read = TRUE, read_at = CURRENT_TIMESTAMP 
+      WHERE user_id = $1 AND is_read = FALSE
     `, [userId]);
     return res.rowCount || 0;
   }
@@ -319,17 +319,18 @@ export class NotificationService {
     if (!prefs) {
       await query(`
         INSERT INTO notification_preferences (user_id, in_app_enabled, email_enabled, session_updates, mentor_available, credits, security, system)
-        VALUES ($1, 1, 1, 1, 1, 1, 1, 1)
+        VALUES ($1, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE)
+        ON CONFLICT (user_id) DO NOTHING
       `, [userId]);
       prefs = {
         user_id: userId,
-        in_app_enabled: 1,
-        email_enabled: 1,
-        session_updates: 1,
-        mentor_available: 1,
-        credits: 1,
-        security: 1,
-        system: 1,
+        in_app_enabled: true,
+        email_enabled: true,
+        session_updates: true,
+        mentor_available: true,
+        credits: true,
+        security: true,
+        system: true,
       };
     }
     return prefs;
@@ -352,7 +353,7 @@ export class NotificationService {
     await query(`
       INSERT INTO notification_preferences (
         user_id, in_app_enabled, email_enabled, session_updates, mentor_available, credits, security, system, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, 1, $7, CURRENT_TIMESTAMP)
+      ) VALUES ($1, $2, $3, $4, $5, $6, TRUE, $7, CURRENT_TIMESTAMP)
       ON CONFLICT(user_id) DO UPDATE SET
         in_app_enabled = COALESCE(excluded.in_app_enabled, notification_preferences.in_app_enabled),
         email_enabled = COALESCE(excluded.email_enabled, notification_preferences.email_enabled),
@@ -363,12 +364,12 @@ export class NotificationService {
         updated_at = CURRENT_TIMESTAMP
     `, [
       userId,
-      prefs.inAppEnabled !== undefined ? (prefs.inAppEnabled ? 1 : 0) : 1,
-      prefs.emailEnabled !== undefined ? (prefs.emailEnabled ? 1 : 0) : 1,
-      prefs.sessionUpdates !== undefined ? (prefs.sessionUpdates ? 1 : 0) : 1,
-      prefs.mentorAvailable !== undefined ? (prefs.mentorAvailable ? 1 : 0) : 1,
-      prefs.credits !== undefined ? (prefs.credits ? 1 : 0) : 1,
-      prefs.system !== undefined ? (prefs.system ? 1 : 0) : 1,
+      prefs.inAppEnabled !== undefined ? Boolean(prefs.inAppEnabled) : true,
+      prefs.emailEnabled !== undefined ? Boolean(prefs.emailEnabled) : true,
+      prefs.sessionUpdates !== undefined ? Boolean(prefs.sessionUpdates) : true,
+      prefs.mentorAvailable !== undefined ? Boolean(prefs.mentorAvailable) : true,
+      prefs.credits !== undefined ? Boolean(prefs.credits) : true,
+      prefs.system !== undefined ? Boolean(prefs.system) : true,
     ]);
 
     return this.getUserPreferences(userId);

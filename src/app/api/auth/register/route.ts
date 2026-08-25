@@ -138,7 +138,10 @@ export async function POST(req: NextRequest) {
 
     return response;
   } catch (err: any) {
-    console.error('Register API Error:', err);
-    return NextResponse.json({ error: 'Internal server error occurred' }, { status: 500 });
+    console.error('Register API Error:', err.message || err);
+    return NextResponse.json({
+      error: err.message || 'Internal server error occurred',
+      code: err.code || undefined,
+    }, { status: 500 });
   }
 }

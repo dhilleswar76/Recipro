@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
     // Save linked wallet
     await query(`
       INSERT INTO wallets (id, user_id, address, chain_id, signature_proof, is_verified)
-      VALUES ($1, $2, $3, $4, $5, 1)
+      VALUES ($1, $2, $3, $4, $5, TRUE)
       ON CONFLICT(user_id) DO UPDATE SET
         address = excluded.address,
         chain_id = excluded.chain_id,

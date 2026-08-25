@@ -29,7 +29,7 @@ import {
 } from 'lucide-react';
 
 function SessionsListPageContent() {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -66,6 +66,10 @@ function SessionsListPageContent() {
 
   // Fetch filtered sessions from backend
   const fetchSessions = async (silent = false) => {
+    if (!user) {
+      setLoading(false);
+      return;
+    }
     if (!silent) setLoading(true);
     try {
       const query = new URLSearchParams();
@@ -98,16 +102,21 @@ function SessionsListPageContent() {
   };
 
   useEffect(() => {
-    fetchSessions();
-  }, [roleFilter, statusFilter, skillFilter, modeFilter, dateFilter, dateFrom, dateTo, sortBy, page]);
+    if (user) {
+      fetchSessions();
+    } else if (!authLoading) {
+      setLoading(false);
+    }
+  }, [user, authLoading, roleFilter, statusFilter, skillFilter, modeFilter, dateFilter, dateFrom, dateTo, sortBy, page]);
 
-  // Live polling (every 4 seconds)
+  // Live polling (every 8 seconds when user is authenticated)
   useEffect(() => {
+    if (!user) return;
     const interval = setInterval(() => {
       fetchSessions(true);
-    }, 4000);
+    }, 8000);
     return () => clearInterval(interval);
-  }, [roleFilter, statusFilter, skillFilter, modeFilter, dateFilter, dateFrom, dateTo, sortBy, page, searchTerm]);
+  }, [user, roleFilter, statusFilter, skillFilter, modeFilter, dateFilter, dateFrom, dateTo, sortBy, page, searchTerm]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -406,6 +415,24 @@ function SessionsListPageContent() {
           <div className="py-20 text-center text-xs text-slate-400 space-y-3">
             <RefreshCw className="w-6 h-6 animate-spin mx-auto text-brand-400" />
             <p>Loading sessions from database...</p>
+          </div>
+        ) : !user ? (
+          <div className="glass-panel p-12 rounded-3xl border border-slate-800 text-center space-y-4">
+            <User className="w-12 h-12 text-brand-400 mx-auto" />
+            <div>
+              <h3 className="text-base font-bold text-white">Sign In to View Your Sessions</h3>
+              <p className="text-xs text-slate-400 mt-1">
+                Log into your student account to access your upcoming meetings, live classroom links, and credit settlements.
+              </p>
+            </div>
+            <div className="pt-2 flex items-center justify-center gap-3">
+              <Link
+                href="/login"
+                className="px-6 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-400 text-dark-bg font-bold text-xs shadow-glow-brand"
+              >
+                Log In to SkillSwap
+              </Link>
+            </div>
           </div>
         ) : sessions.length === 0 ? (
           <div className="glass-panel p-12 rounded-3xl border border-slate-800 text-center space-y-4">

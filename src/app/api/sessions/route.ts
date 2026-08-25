@@ -134,7 +134,7 @@ export async function GET(req: NextRequest) {
       `;
     } else if (sort === 'NEWEST_FIRST') {
       orderBySql = 's.created_at DESC';
-      await client.query(`
+    } else if (sort === 'OLDEST_FIRST') {
       orderBySql = 's.created_at ASC';
     } else if (sort === 'RECENTLY_UPDATED') {
       orderBySql = 's.updated_at DESC';
@@ -161,7 +161,8 @@ export async function GET(req: NextRequest) {
       let parameterIndex = offset;
       return sql.replace(/\?/g, () => `$${++parameterIndex}`);
     };
-    const total = (await query(toPostgresPlaceholders(countQuery), queryParams)).rows[0].total;
+    const countRes = await query(toPostgresPlaceholders(countQuery), queryParams);
+    const total = Number(countRes.rows[0]?.total || 0);
 
     // 2. Fetch Sessions List
     const selectQuery = `
@@ -185,9 +186,10 @@ export async function GET(req: NextRequest) {
       LEFT JOIN ratings r ON s.id = r.session_id AND r.rater_id = ?
       ${whereSql}
       ORDER BY ${orderBySql}
-      LIMIT $${queryParams.length + 2} OFFSET $${queryParams.length + 3}
+      LIMIT ? OFFSET ?
     `;
-    const sessions = (await query(toPostgresPlaceholders(selectQuery, 1), [user.userId, ...queryParams, limit, offset])).rows;
+    const selectSql = toPostgresPlaceholders(selectQuery, 0);
+    const sessions = (await query(selectSql, [user.userId, ...queryParams, limit, offset])).rows;
 
     // 3. Compute Real Persisted Summary Counters for User
     const userSummary = (await query(`
@@ -317,7 +319,7 @@ export async function POST(req: NextRequest) {
       // 2b. Insert Session Participants (Explicit Session Roles)
       await client.query(`
         INSERT INTO session_participants (id, session_id, user_id, session_role, confirmed)
-        VALUES ($1, $2, $3, 'TRAINER', 0), ($4, $5, $6, 'LEARNER', 0)
+        VALUES ($1, $2, $3, 'TRAINER', false), ($4, $5, $6, 'LEARNER', false)
         ON CONFLICT (session_id, user_id) DO NOTHING
       `, [
         `sp-${sessionId}-trainer`,
@@ -328,13 +330,13 @@ export async function POST(req: NextRequest) {
         user.userId,
       ]);
 
-      // 3. Reserve Learner Escrow Credits (Now references existing sessionId)
-      const escrowRes = await reserveEscrowCredits(user.userId, creditsAmount, sessionId, idempotencyKey);
+      // 3. Reserve Learner Escrow Credits (passing client to keep within atomic transaction)
+      const escrowRes = await reserveEscrowCredits(user.userId, creditsAmount, sessionId, idempotencyKey, client);
       if (!escrowRes.success) {
         throw new Error(`INSUFFICIENT_CREDITS:${escrowRes.message}`);
       }
 
-      // 4. Record Initial Lifecycle Audit Event
+      // 4. Record Initial Lifecycle Audit Event (passing client to keep within atomic transaction)
       await recordSessionEvent(
         sessionId,
         user.userId,
@@ -342,7 +344,9 @@ export async function POST(req: NextRequest) {
         'Session Requested',
         `Learner requested a ${durationHours}h ${mode} session with 1 credit reserved in escrow.`,
         undefined,
-        'REQUESTED'
+        'REQUESTED',
+        undefined,
+        client
       );
 
       // 5. Notify Teacher

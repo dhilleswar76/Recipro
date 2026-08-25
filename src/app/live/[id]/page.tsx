@@ -530,28 +530,43 @@ function processLearningGoal() {
   const toggleScreenShare = async () => {
     try {
       if (!screenShare) {
+        // Request screen capture without blocking on audio permissions
         const screenStream = await navigator.mediaDevices.getDisplayMedia({
-          video: true,
-          audio: true,
+          video: {
+            displaySurface: 'monitor',
+          },
+          audio: false,
         });
+
         screenStreamRef.current = screenStream;
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = screenStream;
+          localVideoRef.current.play().catch(() => {});
         }
 
         const screenVideoTrack = screenStream.getVideoTracks()[0];
 
-        // Replace WebRTC peer connection video track with screen track
+        // Dynamically replace video track in WebRTC peer connection
         if (peerConnectionRef.current) {
           const senders = peerConnectionRef.current.getSenders();
-          const videoSender = senders.find(s => s.track && s.track.kind === 'video');
-          if (videoSender && screenVideoTrack) {
-            videoSender.replaceTrack(screenVideoTrack);
+          const videoSender = senders.find(s => s.track?.kind === 'video') || senders.find(s => s.track === null);
+          if (videoSender) {
+            await videoSender.replaceTrack(screenVideoTrack);
+          } else {
+            peerConnectionRef.current.addTrack(screenVideoTrack, screenStream);
+            initiateWebRTCCall();
           }
         }
 
         setScreenShare(true);
         logAttendance('SCREEN_SHARE_START');
+
+        // Update database presence
+        fetch(`/api/sessions/${sessionId}/presence`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ screenSharing: true }),
+        }).catch(() => {});
         
         screenVideoTrack.onended = () => {
           stopScreenShare();
@@ -564,26 +579,36 @@ function processLearningGoal() {
     }
   };
 
-  const stopScreenShare = () => {
+  const stopScreenShare = async () => {
     if (screenStreamRef.current) {
       screenStreamRef.current.getTracks().forEach(t => t.stop());
       screenStreamRef.current = null;
     }
+
     if (localStreamRef.current) {
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = localStreamRef.current;
+        localVideoRef.current.play().catch(() => {});
       }
       const localVideoTrack = localStreamRef.current.getVideoTracks()[0];
       if (peerConnectionRef.current) {
         const senders = peerConnectionRef.current.getSenders();
-        const videoSender = senders.find(s => s.track && s.track.kind === 'video');
+        const videoSender = senders.find(s => s.track?.kind === 'video') || senders.find(s => s.track === null);
         if (videoSender && localVideoTrack) {
-          videoSender.replaceTrack(localVideoTrack);
+          await videoSender.replaceTrack(localVideoTrack);
         }
       }
     }
+
     setScreenShare(false);
     logAttendance('SCREEN_SHARE_STOP');
+
+    // Update database presence
+    fetch(`/api/sessions/${sessionId}/presence`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ screenSharing: false }),
+    }).catch(() => {});
   };
 
   // Save Scratchpad Content to SQLite

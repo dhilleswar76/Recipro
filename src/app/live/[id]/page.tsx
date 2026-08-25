@@ -80,14 +80,7 @@ export default function LiveRoomPage() {
   const [meetingSeconds, setMeetingSeconds] = useState(0);
   const [hasRealWebcam, setHasRealWebcam] = useState(false);
   const [hasRemotePeerStream, setHasRemotePeerStream] = useState(false);
-  const [videoEngine, setVideoEngine] = useState<'SOCKET_WEBRTC' | 'STUDIO' | 'DAILY'>('SOCKET_WEBRTC');
-
-  // Daily.co State & Refs (10,000 Free Minutes)
-  const dailyCallFrameRef = useRef<any>(null);
-  const [dailyRoomUrlInput, setDailyRoomUrlInput] = useState<string>(process.env.NEXT_PUBLIC_DAILY_ROOM_URL || '');
-  const [dailyJoined, setDailyJoined] = useState<boolean>(false);
-  const [dailyLoading, setDailyLoading] = useState<boolean>(false);
-  const [dailyError, setDailyError] = useState<string | null>(null);
+  const [videoEngine, setVideoEngine] = useState<'SOCKET_WEBRTC' | 'STUDIO'>('SOCKET_WEBRTC');
 
   // Scratchpad
   const [codeContent, setCodeContent] = useState(`// SkillSwap Campus Live Collaborative Scratchpad
@@ -557,7 +550,6 @@ function processLearningGoal() {
     return () => {
       clearInterval(durationTimer);
       clearInterval(interval);
-      leaveDailyCall();
       if (socketRef.current) {
         socketRef.current.disconnect();
       }
@@ -580,13 +572,6 @@ function processLearningGoal() {
       initSocketSignaling();
     }
   }, [participantInfo]);
-
-  // Auto-start Daily.co call when selected
-  useEffect(() => {
-    if (participantInfo && videoEngine === 'DAILY' && !dailyJoined && !dailyLoading) {
-      initDailyCall();
-    }
-  }, [participantInfo, videoEngine]);
 
   const formatDuration = (totalSec: number) => {
     const mins = Math.floor(totalSec / 60);
@@ -728,91 +713,6 @@ function processLearningGoal() {
     }
   };
 
-  // Daily.co Video Call Engine Logic (10,000 Free Minutes)
-  const initDailyCall = async (customUrl?: string) => {
-    const defaultDomain = process.env.NEXT_PUBLIC_DAILY_DOMAIN || 'https://recipro.daily.co';
-    const roomName = `Recipro_${sessionId.replace(/[^a-zA-Z0-9]/g, '_')}`;
-    const url = (customUrl || dailyRoomUrlInput || process.env.NEXT_PUBLIC_DAILY_ROOM_URL || `${defaultDomain}/${roomName}`).trim();
-
-    setDailyLoading(true);
-    setDailyError(null);
-
-    try {
-      const DailyIframe = (await import('@daily-co/daily-js')).default;
-      
-      const mountFrame = () => {
-        const container = document.getElementById('daily-video-container');
-        if (!container) {
-          setTimeout(mountFrame, 100);
-          return;
-        }
-
-        // Destroy previous instance if any
-        if (dailyCallFrameRef.current) {
-          dailyCallFrameRef.current.destroy().catch(() => {});
-          dailyCallFrameRef.current = null;
-        }
-
-        const callFrame = DailyIframe.createFrame(container, {
-          iframeStyle: {
-            width: '100%',
-            height: '100%',
-            border: '0',
-            borderRadius: '1.5rem',
-            backgroundColor: '#0e1017',
-          },
-          showLeaveButton: false,
-          showFullscreenButton: true,
-        });
-
-        dailyCallFrameRef.current = callFrame;
-
-        callFrame.on('joined-meeting', () => {
-          setDailyJoined(true);
-          setConnectionState('CONNECTED');
-          setDailyLoading(false);
-        });
-
-        callFrame.on('left-meeting', () => {
-          setDailyJoined(false);
-        });
-
-        callFrame.on('error', (e: any) => {
-          console.error('Daily.co Call Error:', e);
-          setDailyError(e?.errorMsg || 'Daily.co room connection error.');
-          setDailyLoading(false);
-        });
-
-        callFrame.join({
-          url,
-          userName: user?.display_name || participantInfo?.displayName || 'Participant',
-        }).catch((err: any) => {
-          console.warn('Daily join rejected (likely room URL creation required):', err);
-          setDailyError(err.message || 'Room URL invalid or requires Daily dashboard activation.');
-          setDailyLoading(false);
-        });
-      };
-
-      mountFrame();
-    } catch (err: any) {
-      console.error('Daily.co Initialization Error:', err);
-      setDailyError(err.message || 'Failed to initialize Daily.co call.');
-      setDailyLoading(false);
-    }
-  };
-
-  const leaveDailyCall = async () => {
-    try {
-      if (dailyCallFrameRef.current) {
-        await dailyCallFrameRef.current.destroy().catch(() => {});
-        dailyCallFrameRef.current = null;
-      }
-    } catch (err) {
-      console.error('Error leaving Daily.co call:', err);
-    }
-    setDailyJoined(false);
-  };
-
   // Telemetry event logger
   const logAttendance = (eventType: string, metadata?: any) => {
     fetch(`/api/sessions/${sessionId}/attendance`, {
@@ -826,9 +726,6 @@ function processLearningGoal() {
   const toggleMic = async () => {
     const next = !micOn;
     setMicOn(next);
-    if (videoEngine === 'DAILY' && dailyCallFrameRef.current) {
-      dailyCallFrameRef.current.setLocalAudio(next);
-    }
     if (localStreamRef.current) {
       localStreamRef.current.getAudioTracks().forEach(t => (t.enabled = next));
     }
@@ -843,9 +740,6 @@ function processLearningGoal() {
   const toggleCamera = async () => {
     const next = !cameraOn;
     setCameraOn(next);
-    if (videoEngine === 'DAILY' && dailyCallFrameRef.current) {
-      dailyCallFrameRef.current.setLocalVideo(next);
-    }
     if (localStreamRef.current) {
       localStreamRef.current.getVideoTracks().forEach(t => (t.enabled = next));
     }
@@ -1095,10 +989,7 @@ function processLearningGoal() {
         {/* Center: Engine Mode Switcher */}
         <div className="flex items-center gap-1 bg-slate-950/80 border border-slate-800 p-0.5 rounded-xl">
           <button
-            onClick={() => {
-              if (videoEngine === 'DAILY') leaveDailyCall();
-              setVideoEngine('SOCKET_WEBRTC');
-            }}
+            onClick={() => setVideoEngine('SOCKET_WEBRTC')}
             className={`px-3 py-1 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1.5 ${
               videoEngine === 'SOCKET_WEBRTC'
                 ? 'bg-brand-500 text-dark-bg shadow-glow-brand'
@@ -1109,10 +1000,7 @@ function processLearningGoal() {
             <span>WebRTC + Socket.io</span>
           </button>
           <button
-            onClick={() => {
-              if (videoEngine === 'DAILY') leaveDailyCall();
-              setVideoEngine('STUDIO');
-            }}
+            onClick={() => setVideoEngine('STUDIO')}
             className={`px-3 py-1 rounded-lg text-[11px] font-bold transition-all ${
               videoEngine === 'STUDIO'
                 ? 'bg-brand-500 text-dark-bg shadow-glow-brand'
@@ -1120,19 +1008,6 @@ function processLearningGoal() {
             }`}
           >
             ⚡ Studio SFU
-          </button>
-          <button
-            onClick={() => {
-              setVideoEngine('DAILY');
-              initDailyCall();
-            }}
-            className={`px-3 py-1 rounded-lg text-[11px] font-bold transition-all ${
-              videoEngine === 'DAILY'
-                ? 'bg-brand-500 text-dark-bg shadow-glow-brand'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            🌟 Daily.co
           </button>
         </div>
 
@@ -1242,7 +1117,7 @@ function processLearningGoal() {
               </div>
 
             </div>
-          ) : videoEngine === 'STUDIO' ? (
+          ) : (
             /* Mode 2: Full-Stage Google Meet / Zoom Style Studio Room */
             <div className="w-full flex-1 min-h-[500px] h-[calc(100vh-210px)] rounded-3xl overflow-hidden border border-slate-800 bg-[#0e1017] shadow-2xl relative">
               <iframe
@@ -1250,44 +1125,6 @@ function processLearningGoal() {
                 allow="camera; microphone; fullscreen; display-capture; autoplay"
                 className="w-full h-full border-0 rounded-3xl"
               />
-            </div>
-          ) : (
-            /* Mode 3: Daily.co HD Classroom (10,000 Free Minutes) */
-            <div className="flex-1 flex flex-col space-y-2 h-[calc(100vh-210px)] min-h-[500px]">
-              <div className="p-2.5 bg-slate-900 border border-brand-500/30 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-brand-400" />
-                  <div>
-                    <span className="font-bold text-white">Daily.co Live HD Classroom (10,000 Free Minutes)</span>
-                    <p className="text-[11px] text-slate-400">Join room directly or paste your custom Daily.co room URL</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 w-full sm:w-auto">
-                  <input
-                    type="text"
-                    value={dailyRoomUrlInput}
-                    onChange={(e) => setDailyRoomUrlInput(e.target.value)}
-                    placeholder="https://your-team.daily.co/room-name"
-                    className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-brand-500 w-full sm:w-56"
-                  />
-                  <button
-                    onClick={() => initDailyCall(dailyRoomUrlInput)}
-                    disabled={dailyLoading}
-                    className="px-3 py-1.5 rounded-xl bg-brand-500 hover:bg-brand-400 text-dark-bg font-bold text-xs shadow-glow-brand transition-colors whitespace-nowrap disabled:opacity-40"
-                  >
-                    {dailyLoading ? 'Connecting...' : 'Connect Daily'}
-                  </button>
-                </div>
-              </div>
-
-              {dailyError && (
-                <div className="p-2.5 rounded-xl bg-rose-500/20 border border-rose-500/30 text-rose-300 text-xs flex items-center justify-between">
-                  <span>{dailyError}</span>
-                  <button onClick={() => setVideoEngine('STUDIO')} className="underline font-semibold ml-2">Switch to Studio SFU</button>
-                </div>
-              )}
-
-              <div id="daily-video-container" className="w-full flex-1 min-h-[460px] rounded-3xl overflow-hidden border border-slate-800 bg-[#0e1017] shadow-2xl relative" />
             </div>
           )}
 

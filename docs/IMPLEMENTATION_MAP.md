@@ -1,8 +1,8 @@
-# SKILLSWAP CAMPUS — Implementation Map & Architecture Blueprint
+﻿# SKILLSWAP CAMPUS â€” Implementation Map & Architecture Blueprint
 
 **Project Tagline**: *"Students exchange skills instead of money."*  
 **Date**: August 2026  
-**Status**: In Progress — Phase 0 Complete, Proceeding to Full Implementation
+**Status**: In Progress â€” Phase 0 Complete, Proceeding to Full Implementation
 
 ---
 
@@ -41,7 +41,7 @@ To guarantee a production-grade, zero-failure, judge-ready campus platform with 
                  v                                                           v
 +-------------------------------------------------+  +-----------------------------------------------+
 |         Relational Persistence Layer            |  |             Web3 & Smart Contracts            |
-|       (SQLite / Prisma / Better-SQLite3)        |  |          (Solidity ^0.8.20 / Hardhat)         |
+|       (PostgreSQL / pg / Render)        |  |          (Solidity ^0.8.20 / Hardhat)         |
 |  - Users, Profiles, Skills, Goals, Availability |  |  - SkillCreditEscrow.sol (Pausable, Lock)     |
 |  - Sessions, Ledger, Ratings, Credentials       |  |  - VerifiableCredentialNFT.sol (ERC721/1155)  |
 |  - Study Groups, Notes, Flashcards, Disputes    |  |  - SkillSwapAnchor.sol (Merkle Root Anchors)  |
@@ -54,14 +54,14 @@ To guarantee a production-grade, zero-failure, judge-ready campus platform with 
 ## 2. Core Subsystems & Technical Specifications
 
 ### 2.1 Three-Mode Discovery Engine
-1. **Mode A — Known Person (Deterministic Exact Identity Match)**:
+1. **Mode A â€” Known Person (Deterministic Exact Identity Match)**:
    - Queries matching username, display name, student ID, or exact handle bypass ML ranking and are pinned at the top.
    - Preserves instant exact lookup without algorithmic dilution.
-2. **Mode B — Known Skill, Unknown Person (Deterministic Constraint -> ML Candidate Ranking)**:
+2. **Mode B â€” Known Skill, Unknown Person (Deterministic Constraint -> ML Candidate Ranking)**:
    - **Stage 1 (Hard Filters)**: Teaching capability, availability slot intersection, campus verification, minimum trust threshold, session mode (online/in-person).
    - **Stage 2 (ML Feature Scoring)**: 30% Skill match + 20% Schedule overlap + 15% Proficiency compatibility + 10% Goal alignment + 10% Reliability + 10% Bayesian Reputation + 5% Teaching style.
    - **Stage 3 (Explainability)**: Generates human-verifiable match reasons and confidence breakdown.
-3. **Mode C — Multi-Person Network Exchange (Graph Cycle Discovery)**:
+3. **Mode C â€” Multi-Person Network Exchange (Graph Cycle Discovery)**:
    - Constructs directed graphs of unmet requests vs available teaching capabilities.
    - Finds cyclic barter paths of length 2, 3, or 4 (e.g., $A \xrightarrow{\text{teaches Python}} B \xrightarrow{\text{teaches UI/UX}} C \xrightarrow{\text{teaches Solidity}} A$).
    - Explicit user opt-in with scheduled feasibility verification.
@@ -147,3 +147,4 @@ Flashcards (id, deck_id, front, back, mastery_level)
 10. **Phase 10**: Security Hardening, Audit Logs, Rate Limiting & Error Boundaries.
 11. **Phase 11**: Automated Unit, Contract, ML, Chaos & Red Team Tests.
 12. **Phase 12**: Documentation, Verification Map & Final Polish.
+

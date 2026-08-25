@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
     // Generate cryptographically secure email verification token (valid for 24 hours)
     const verificationToken = crypto.randomBytes(32).toString('hex');
     const tokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-    const isAcademic = isAcademicEmail(cleanEmail) ? 1 : 0;
+    const isAcademic = isAcademicEmail(cleanEmail);
 
     await withTransaction(async (client) => {
       // 1. Insert User as active and verified
@@ -50,32 +50,32 @@ export async function POST(req: NextRequest) {
         INSERT INTO users (
           id, email, password_hash, role, status, campus_id, user_type,
           email_verified, verification_token, verification_token_expires, is_academic_email
-        ) VALUES (?, ?, ?, ?, 'ACTIVE', ?, ?, 1, ?, ?, ?)
+        ) VALUES ($1, $2, $3, $4, 'ACTIVE', $5, $6, true, $7, $8, $9)
       `, [userId, cleanEmail, passwordHash, userRole, campusId, userType, verificationToken, tokenExpires, isAcademic]);
 
       // 2. Insert Profile with default values
       await client.query(`
         INSERT INTO profiles (
           id, user_id, display_name, college, major, year, is_verified_student, trust_score, teaching_preference
-        ) VALUES (?, ?, ?, ?, ?, ?, 1, 75.0, 'Anyone')
+        ) VALUES ($1, $2, $3, $4, $5, $6, true, 75.0, 'Anyone')
       `, [`prof-${userId}`, userId, displayName, college || 'SkillSwap Campus', major || 'General Studies', year || 'Freshman']);
 
       // 3. Insert Skill Credit Account with 3 starter credits
       await client.query(`
         INSERT INTO skill_credit_accounts (id, user_id, balance, escrow_balance, lifetime_earned, lifetime_spent)
-        VALUES (?, ?, 3, 0, 0, 0)
+        VALUES ($1, $2, 3, 0, 0, 0)
       `, [`acc-${userId}`, userId]);
 
       // 4. Insert Initial Reputation
       await client.query(`
         INSERT INTO reputations (id, user_id, total_reviews, total_sessions_taught, total_sessions_learned, bayesian_rating, reliability_score)
-        VALUES (?, ?, 0, 0, 0, 4.5, 95.0)
+        VALUES ($1, $2, 0, 0, 0, 4.5, 95.0)
       `, [`rep-${userId}`, userId]);
 
       // 5. Welcome Notification
       await client.query(`
         INSERT INTO notifications (id, user_id, title, message, type, link)
-        VALUES (?, ?, 'Welcome to SkillSwap Campus!', 'Your account has been created! Complete your profile setup to start exchanging skills.', 'INFO', '/onboarding')
+        VALUES ($1, $2, 'Welcome to SkillSwap Campus!', 'Your account has been created! Complete your profile setup to start exchanging skills.', 'INFO', '/onboarding')
       `, [`notif-${Date.now()}`, userId]);
     });
 
@@ -121,7 +121,7 @@ export async function POST(req: NextRequest) {
         year: year || 'Freshman',
         balance: 3,
         emailVerified: true,
-        isAcademicEmail: Boolean(isAcademic),
+        isAcademicEmail: isAcademic,
       },
       token,
       verificationToken,

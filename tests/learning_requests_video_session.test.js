@@ -1,13 +1,10 @@
-const test = require('node:test');
+﻿const test = require('node:test');
 const assert = require('node:assert/strict');
-const Database = require('better-sqlite3');
-const path = require('path');
+const db = require('./test-db');
 
-const dbPath = path.join(__dirname, '..', 'data', 'skillswap.db');
 
-test('SkillSwap Campus — Learner Requests & Online Video Classroom End-to-End Suite', async (t) => {
-  const db = new Database(dbPath);
-  db.pragma('journal_mode = WAL');
+test('SkillSwap Campus â€” Learner Requests & Online Video Classroom End-to-End Suite', async (t) => {
+  const db = db  /* PostgreSQL via test-db.js */;
 
   const randSuffix = Math.random().toString(36).substring(2, 9);
   const testLearnerId = `usr-lr-learner-${randSuffix}`;
@@ -291,3 +288,4 @@ test('SkillSwap Campus — Learner Requests & Online Video Classroom End-to-End 
 
   db.close();
 });
+

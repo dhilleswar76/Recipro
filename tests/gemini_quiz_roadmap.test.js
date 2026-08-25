@@ -1,12 +1,10 @@
-const test = require('node:test');
+﻿const test = require('node:test');
 const assert = require('node:assert');
-const Database = require('better-sqlite3');
+const db = require('./test-db');
 const fs = require('fs');
-const path = require('path');
 const { z } = require('zod');
 const { execSync } = require('child_process');
 
-const dbPath = path.join(__dirname, '..', 'data', 'skillswap.db');
 
 test.before(() => {
   // Ensure database has up-to-date schema and seeds
@@ -311,7 +309,7 @@ test('3. Schema Contract: SubmitAssessmentSchema parses both numeric indices (0,
 
 // 4. SERVER-SIDE ASSESSMENT SCORING & ATOMIC TRANSACTION
 test('4. Server-Side Scoring: Passing score (>=70%) verifies skill; failing score (<70%) rejects', () => {
-  const db = new Database(dbPath);
+  const db = db  /* PostgreSQL via test-db.js */;
 
   function evaluateQuiz(answers, targetProficiency) {
     const questionBank = [
@@ -393,7 +391,7 @@ test('5. Study Roadmap: Generates structured multi-stage curriculum and links to
 
 // 6. ROLE SYSTEM & ROLE UPGRADE API
 test('6. Role System & Upgrade: Upgrades student to Mentor+Student while preserving records', () => {
-  const db = new Database(dbPath);
+  const db = db  /* PostgreSQL via test-db.js */;
 
   // Create isolated test user
   const testUserId = `usr-test-upgrade-${Date.now()}`;
@@ -446,3 +444,4 @@ test('7. Routing Separation: Navbar has separate /login and /register links, Log
   assert.ok(fs.existsSync(path.join(__dirname, '../src/app/register/mentor/page.tsx')));
   assert.ok(fs.existsSync(path.join(__dirname, '../src/app/register/mentor-student/page.tsx')));
 });
+

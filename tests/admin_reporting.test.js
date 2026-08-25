@@ -1,18 +1,11 @@
-const test = require('node:test');
+﻿const test = require('node:test');
 const assert = require('node:assert');
-const Database = require('better-sqlite3');
-const path = require('path');
+const db = require('./test-db');
 const jwt = require('jsonwebtoken');
 
-const dbPath = path.join(__dirname, '../data/skillswap.db');
 const JWT_SECRET = process.env.AUTH_SECRET || 'skillswap-super-secret-jwt-key-for-local-development-min32bytes';
 
-function getFreshDb() {
-  const db = new Database(dbPath);
-  db.pragma('journal_mode = WAL');
-  db.pragma('foreign_keys = ON');
-  return db;
-}
+function getFreshDb() { return db; }
 
 function makeToken(user) {
   return jwt.sign(user, JWT_SECRET, { expiresIn: '1h' });
@@ -274,14 +267,14 @@ test('Admin Reporting & Security Test Suite', async (t) => {
           from: s.learner_name,
           to: s.teacher_name,
           amount: s.credits_amount || 1,
-          directionFormatted: `${s.learner_name} → ${s.teacher_name} (${s.credits_amount || 1} Skill Credit)`
+          directionFormatted: `${s.learner_name} â†’ ${s.teacher_name} (${s.credits_amount || 1} Skill Credit)`
         };
       } else if (s.status === 'CANCELLED') {
         creditDirection = {
           from: 'Escrow Reserve',
           to: s.learner_name,
           amount: s.credits_amount || 1,
-          directionFormatted: `Escrow Reserve → ${s.learner_name}`
+          directionFormatted: `Escrow Reserve â†’ ${s.learner_name}`
         };
       }
 
@@ -304,7 +297,7 @@ test('Admin Reporting & Security Test Suite', async (t) => {
       const endH = (h+1) < 10 ? `0${h+1}:00` : `${h+1}:00`;
       const match = timeline.find(s => s.scheduledStart.startsWith(targetDate) && s.scheduledStart.includes(` ${startH}:`));
       slots.push({
-        timeRange: `${startH} – ${endH}`,
+        timeRange: `${startH} â€“ ${endH}`,
         status: match ? (match.status === 'CANCELLED' ? 'CANCELLED' : 'OCCUPIED') : 'FREE',
         userRole: match ? match.selectedUserRole : null,
       });
@@ -498,3 +491,4 @@ test('Admin Reporting & Security Test Suite', async (t) => {
     assert.ok(csvSession.includes('PARTICIPANTS'));
   });
 });
+

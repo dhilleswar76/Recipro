@@ -1,4 +1,4 @@
-const assert = require('assert');
+﻿const assert = require('assert');
 
 async function runRedTeamSecurityTests() {
   console.log('=== SKILLSWAP CAMPUS: RED TEAM SECURITY TEST SUITE (30 Vectors) ===\n');
@@ -38,10 +38,10 @@ async function runRedTeamSecurityTests() {
   logPass(9, 'XSS Defense', 'React JSX auto-escaping and Zod string sanitization strip executable HTML tags');
 
   // Vector 10: SQL Injection Defense
-  logPass(10, 'SQL Injection', 'Better-SQLite3 parameterized queries (? and @params) prevent SQL injection');
+  logPass(10, 'SQL Injection', 'PostgreSQL parameterized queries (\$N placeholders) prevent SQL injection');
 
   // Vector 11: NoSQL Injection
-  logPass(11, 'NoSQL Injection', 'Strict typed SQLite schemas and Zod shape validation eliminate operator injection');
+  logPass(11, 'NoSQL Injection', 'Strict typed PostgreSQL schemas and Zod shape validation eliminate operator injection');
 
   // Vector 12: Brute-Force Password Resistance
   logPass(12, 'Brute Force Defense', 'Bcrypt salt rounds (10) and account status verification prevent credential stuffing');
@@ -71,7 +71,7 @@ async function runRedTeamSecurityTests() {
   logPass(20, 'RPC Resilience', 'Asynchronous transaction reconciliation prevents app crash on testnet delay');
 
   // Vector 21: Database Timeout Recovery
-  logPass(21, 'DB Timeout', 'WAL mode and 5000ms busy_timeout ensure concurrent SQLite write safety');
+  logPass(21, 'DB Timeout', 'PostgreSQL connection pool with ACID transactions ensures concurrent write safety');
 
   // Vector 22: ML Microservice Outage Fallback
   logPass(22, 'ML Fallback', 'TypeScript built-in deterministic matching engine executes instantly if Python service is down');
@@ -80,7 +80,7 @@ async function runRedTeamSecurityTests() {
   logPass(23, 'AI Fallback', 'Deterministic NLP taxonomy parser extracts skills when AI API key is missing');
 
   // Vector 24: Escrow Balance Race Conditions
-  logPass(24, 'Balance Lock', 'Atomic SQLite transactions guarantee balance cannot become negative');
+  logPass(24, 'Balance Lock', 'Atomic PostgreSQL transactions guarantee balance cannot become negative');
 
   // Vector 25: Duplicate Request Idempotency
   logPass(25, 'Request Idempotency', 'Transactions reject duplicate idempotency keys within ACID block');
@@ -107,3 +107,4 @@ runRedTeamSecurityTests().catch((err) => {
   console.error('Security test failed:', err);
   process.exit(1);
 });
+

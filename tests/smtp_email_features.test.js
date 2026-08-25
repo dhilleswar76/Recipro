@@ -1,15 +1,11 @@
-const test = require('node:test');
+﻿const test = require('node:test');
 const assert = require('node:assert/strict');
-const Database = require('better-sqlite3');
-const path = require('path');
+const db = require('./test-db');
 const nodemailer = require('nodemailer');
 
-const dbPath = path.join(__dirname, '../data/skillswap.db');
 
-test('SkillSwap Campus — SMTP & Email Features Test Suite', async (t) => {
-  const db = new Database(dbPath);
-  db.pragma('journal_mode = WAL');
-  db.pragma('foreign_keys = ON');
+test('SkillSwap Campus â€” SMTP & Email Features Test Suite', async (t) => {
+  const db = db  /* PostgreSQL via test-db.js */;
 
   // Insert a test user if not exists
   db.prepare(`
@@ -93,3 +89,4 @@ test('SkillSwap Campus — SMTP & Email Features Test Suite', async (t) => {
 
   db.close();
 });
+

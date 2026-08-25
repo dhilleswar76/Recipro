@@ -1,9 +1,9 @@
-const test = require('node:test');
+﻿const test = require('node:test');
 const assert = require('node:assert');
-const Database = require('better-sqlite3');
+const db = require('./test-db');
 
 function setupTestDb() {
-  const db = new Database(':memory:');
+  const db = db  /* PostgreSQL via test-db.js */;
   db.exec(`
     CREATE TABLE users (
       id TEXT PRIMARY KEY,
@@ -361,3 +361,4 @@ test('Concurrent Booking Race Condition Guard Invariant', () => {
   const totalBookings = (db.prepare("SELECT COUNT(*) as c FROM sessions WHERE teacher_id = 'u-rahul'").get()).c;
   assert.strictEqual(totalBookings, 1, 'Exactly one session must be recorded without double-booking');
 });
+

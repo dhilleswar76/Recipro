@@ -1,9 +1,9 @@
-const test = require('node:test');
+﻿const test = require('node:test');
 const assert = require('node:assert');
-const Database = require('better-sqlite3');
+const db = require('./test-db');
 
 function setupTestDb() {
-  const db = new Database(':memory:');
+  const db = db  /* PostgreSQL via test-db.js */;
   db.exec(`
     CREATE TABLE users (
       id TEXT PRIMARY KEY,
@@ -414,3 +414,4 @@ test('7. Atomic Double-Booking Protection / Concurrency Revalidation', () => {
   const res2 = tx2();
   assert.equal(res2, false, 'Second concurrent booking must fail due to overlap conflict');
 });
+

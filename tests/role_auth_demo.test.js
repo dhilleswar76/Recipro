@@ -1,12 +1,10 @@
-const test = require('node:test');
+﻿const test = require('node:test');
 const assert = require('node:assert');
-const Database = require('better-sqlite3');
+const db = require('./test-db');
 const bcrypt = require('bcryptjs');
 const fs = require('fs');
-const path = require('path');
 const { execSync } = require('child_process');
 
-const dbPath = path.join(__dirname, '..', 'data', 'skillswap.db');
 
 test.before(() => {
   // Run real project seed script
@@ -159,3 +157,4 @@ test('6. Idempotency: Re-running seed produces zero duplicate users or skills', 
   assert.strictEqual(initialUsers, afterUsers, 'User count must remain identical');
   assert.strictEqual(initialSkills, afterSkills, 'Skill count must remain identical');
 });
+

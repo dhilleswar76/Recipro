@@ -225,7 +225,7 @@ export class NotificationService {
     let queryParams: any[] = [userId];
 
     if (params.unreadOnly) {
-      whereClauses.push('is_read = 0');
+      whereClauses.push('is_read = FALSE');
     }
 
     if (params.category && params.category !== 'ALL') {
@@ -253,7 +253,7 @@ export class NotificationService {
     const totalCount = Number((totalResult.rows[0] as any).count);
 
     const unreadResult = await query(`
-      SELECT COUNT(*) as count FROM notifications WHERE user_id = $1 AND is_read = 0
+      SELECT COUNT(*) as count FROM notifications WHERE user_id = $1 AND is_read = FALSE
     `, [userId]);
     const unreadCount = Number((unreadResult.rows[0] as any).count);
 
@@ -281,7 +281,7 @@ export class NotificationService {
    */
   static async getUnreadCount(userId: string): Promise<number> {
     const result = await query(`
-      SELECT COUNT(*) as count FROM notifications WHERE user_id = $1 AND is_read = 0
+      SELECT COUNT(*) as count FROM notifications WHERE user_id = $1 AND is_read = FALSE
     `, [userId]);
     return Number((result.rows[0] as any)?.count || 0);
   }
@@ -292,7 +292,7 @@ export class NotificationService {
   static async markAsRead(notificationId: string, userId: string): Promise<boolean> {
     const res = await query(`
       UPDATE notifications 
-      SET is_read = 1, read_at = CURRENT_TIMESTAMP 
+      SET is_read = TRUE, read_at = CURRENT_TIMESTAMP 
       WHERE id = $1 AND user_id = $2
     `, [notificationId, userId]);
     return (res.rowCount || 0) > 0;
@@ -304,8 +304,8 @@ export class NotificationService {
   static async markAllAsRead(userId: string): Promise<number> {
     const res = await query(`
       UPDATE notifications 
-      SET is_read = 1, read_at = CURRENT_TIMESTAMP 
-      WHERE user_id = $1 AND is_read = 0
+      SET is_read = TRUE, read_at = CURRENT_TIMESTAMP 
+      WHERE user_id = $1 AND is_read = FALSE
     `, [userId]);
     return res.rowCount || 0;
   }

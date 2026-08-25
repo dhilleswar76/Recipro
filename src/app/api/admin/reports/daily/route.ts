@@ -17,16 +17,6 @@ export async function GET(req: NextRequest) {
 
   try {
     const report = await getDailyReport(dateStr);
-
-    await logAdminAction({
-      adminUserId: user.userId,
-      action: 'ADMIN_VIEWED_DAILY_REPORT',
-      targetType: 'DAILY_REPORT',
-      targetId: dateStr,
-      ipAddress: req.headers.get('x-forwarded-for') || '127.0.0.1',
-      userAgent: req.headers.get('user-agent') || 'SkillSwap Admin',
-    });
-
     return NextResponse.json(report);
   } catch (err: any) {
     console.error('Daily report generation error:', err);

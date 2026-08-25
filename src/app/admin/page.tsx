@@ -160,7 +160,7 @@ export default function AdminDashboardPage() {
           .then(r => r.ok ? r.json() : null)
           .then(d => { if (d) setSessionsData(d); })
           .catch(() => {});
-      }, 4000);
+      }, 20000);
 
       return () => clearInterval(interval);
     }

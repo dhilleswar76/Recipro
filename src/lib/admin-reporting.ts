@@ -94,9 +94,7 @@ export async function getDailyReport(dateStr: string) {
     ${isAll ? '' : 'WHERE s.scheduled_start::date = $1::date OR s.created_at::date = $2::date OR s.updated_at::date = $3::date'}
     ORDER BY s.scheduled_start DESC, s.created_at DESC
   `;
-  const sessions = (await query(sessionsQuery, isAll ? [] : [dateStr, dateStr, dateStr])).rows as any[];
 
-  // 2. Fetch all credit transactions on this date (or all dates)
   const creditTxsQuery = `
     SELECT 
       ctx.*,
@@ -108,7 +106,100 @@ export async function getDailyReport(dateStr: string) {
     ${isAll ? '' : 'WHERE ctx.created_at::date = $1::date'}
     ORDER BY ctx.created_at DESC
   `;
-  const creditTxs = (await query(creditTxsQuery, isAll ? [] : [dateStr])).rows as any[];
+
+  const dayTimelineEventsQuery = `
+    SELECT 
+      se.*,
+      ap.display_name as actor_name,
+      s.title as session_title,
+      s.credits_amount,
+      sk.name as skill_name,
+      tp.display_name as teacher_name, tp.college as teacher_college,
+      lp.display_name as learner_name, lp.college as learner_college,
+      us.verification_status as mentor_verification_status,
+      sea.return_type as agreement_return_type,
+      sea.requested_return_skill_name,
+      sea.status as agreement_status
+    FROM session_events se
+    JOIN sessions s ON se.session_id = s.id
+    LEFT JOIN skills sk ON s.skill_id = sk.id
+    LEFT JOIN profiles ap ON se.actor_id = ap.user_id
+    LEFT JOIN profiles tp ON s.teacher_id = tp.user_id
+    LEFT JOIN profiles lp ON s.learner_id = lp.user_id
+    LEFT JOIN user_skills us ON (s.teacher_id = us.user_id AND s.skill_id = us.skill_id)
+    LEFT JOIN session_exchange_agreements sea ON s.id = sea.session_id
+    ${isAll ? '' : 'WHERE se.created_at::date = $1::date'}
+    ORDER BY se.created_at ASC
+  `;
+
+  const [
+    sessionsRes,
+    creditTxsRes,
+    learningRequestsRes,
+    notificationDeliveriesRes,
+    allTimeStatsRawRes,
+    totalEscrowLockedRes,
+    totalUsersCountRes,
+    dayTimelineEventsRes,
+    lifetimeDayWiseMetricsRes
+  ] = await Promise.all([
+    query(sessionsQuery, isAll ? [] : [dateStr, dateStr, dateStr]),
+    query(creditTxsQuery, isAll ? [] : [dateStr]),
+    query(`
+      SELECT 
+        lr.*,
+        lp.display_name as learner_name, lp.college as learner_college,
+        mp.display_name as mentor_name, mp.college as mentor_college
+      FROM learning_requests lr
+      LEFT JOIN profiles lp ON lr.learner_id = lp.user_id
+      LEFT JOIN profiles mp ON lr.matched_mentor_id = mp.user_id
+      ORDER BY lr.created_at DESC
+      LIMIT 50
+    `),
+    query(`
+      SELECT nd.*, p.display_name
+      FROM notification_deliveries nd
+      LEFT JOIN profiles p ON nd.user_id = p.user_id
+      ORDER BY nd.created_at DESC
+      LIMIT 50
+    `),
+    query(`
+      SELECT 
+        COUNT(*) as total_lifetime_sessions,
+        SUM(CASE WHEN status IN ('ACCEPTED', 'SCHEDULED', 'IN_PROGRESS', 'PENDING_CONFIRMATION') THEN 1 ELSE 0 END) as active_sessions,
+        SUM(CASE WHEN status IN ('COMPLETED', 'CREDIT_SETTLED') THEN 1 ELSE 0 END) as completed_sessions,
+        SUM(CASE WHEN status = 'CANCELLED' THEN 1 ELSE 0 END) as cancelled_sessions,
+        SUM(CASE WHEN status = 'DISPUTED' THEN 1 ELSE 0 END) as disputed_sessions
+      FROM sessions
+    `),
+    query(`SELECT COALESCE(SUM(escrow_balance), 0) as total FROM skill_credit_accounts`),
+    query(`SELECT COUNT(*) as count FROM users`),
+    query(dayTimelineEventsQuery, isAll ? [] : [dateStr]),
+    query(`
+      SELECT 
+        created_at::date as session_date,
+        COUNT(*) as total_sessions,
+        SUM(CASE WHEN status IN ('COMPLETED', 'CREDIT_SETTLED') THEN 1 ELSE 0 END) as completed_sessions,
+        SUM(CASE WHEN status = 'CANCELLED' THEN 1 ELSE 0 END) as cancelled_sessions,
+        SUM(CASE WHEN status = 'DISPUTED' THEN 1 ELSE 0 END) as disputed_sessions,
+        SUM(CASE WHEN status = 'IN_PROGRESS' THEN 1 ELSE 0 END) as in_progress_sessions,
+        SUM(credits_amount) as total_credits_volume
+      FROM sessions
+      GROUP BY created_at::date
+      ORDER BY session_date DESC
+      LIMIT 30
+    `)
+  ]);
+
+  const sessions = sessionsRes.rows as any[];
+  const creditTxs = creditTxsRes.rows as any[];
+  const learningRequests = learningRequestsRes.rows as any[];
+  const notificationDeliveries = notificationDeliveriesRes.rows as any[];
+  const allTimeStatsRaw = allTimeStatsRawRes.rows[0] as any;
+  const totalEscrowLocked = (totalEscrowLockedRes.rows[0] as any).total;
+  const totalUsersCount = (totalUsersCountRes.rows[0] as any).count;
+  const dayTimelineEvents = dayTimelineEventsRes.rows as any[];
+  const lifetimeDayWiseMetrics = lifetimeDayWiseMetricsRes.rows as any[];
 
   // 3. Compute Session Metrics
   let totalScheduled = 0;
@@ -181,90 +272,6 @@ export async function getDailyReport(dateStr: string) {
     .filter(s => s.status === 'DISPUTED')
     .reduce((acc, s) => acc + (s.credits_amount || 1), 0);
   creditsDisputed = disputedSessionCredits;
-
-  // 5. Fetch Learning Requests
-  const learningRequests = (await query(`
-    SELECT 
-      lr.*,
-      lp.display_name as learner_name, lp.college as learner_college,
-      mp.display_name as mentor_name, mp.college as mentor_college
-    FROM learning_requests lr
-    LEFT JOIN profiles lp ON lr.learner_id = lp.user_id
-    LEFT JOIN profiles mp ON lr.matched_mentor_id = mp.user_id
-    ORDER BY lr.created_at DESC
-    LIMIT 50
-  `)).rows as any[];
-
-  // 6. Fetch Notification Deliveries
-  const notificationDeliveries = (await query(`
-    SELECT nd.*, p.display_name
-    FROM notification_deliveries nd
-    LEFT JOIN profiles p ON nd.user_id = p.user_id
-    ORDER BY nd.created_at DESC
-    LIMIT 50
-  `)).rows as any[];
-
-  // 7. Compute Platform-Wide Lifetime Totals across All Time
-  const allTimeStatsRaw = (await query(`
-    SELECT 
-      COUNT(*) as total_lifetime_sessions,
-      SUM(CASE WHEN status IN ('ACCEPTED', 'SCHEDULED', 'IN_PROGRESS', 'PENDING_CONFIRMATION') THEN 1 ELSE 0 END) as active_sessions,
-      SUM(CASE WHEN status IN ('COMPLETED', 'CREDIT_SETTLED') THEN 1 ELSE 0 END) as completed_sessions,
-      SUM(CASE WHEN status = 'CANCELLED' THEN 1 ELSE 0 END) as cancelled_sessions,
-      SUM(CASE WHEN status = 'DISPUTED' THEN 1 ELSE 0 END) as disputed_sessions
-    FROM sessions
-  `)).rows[0] as any;
-
-  const totalEscrowLocked = ((await query(`
-    SELECT COALESCE(SUM(escrow_balance), 0) as total FROM skill_credit_accounts
-  `)).rows[0] as any).total;
-
-  const totalUsersCount = ((await query(`
-    SELECT COUNT(*) as count FROM users
-  `)).rows[0] as any).count;
-
-  // 8. Fetch Chronological Day Timeline Events ("What happened first, then what happened next")
-  const dayTimelineEventsQuery = `
-    SELECT 
-      se.*,
-      ap.display_name as actor_name,
-      s.title as session_title,
-      s.credits_amount,
-      sk.name as skill_name,
-      tp.display_name as teacher_name, tp.college as teacher_college,
-      lp.display_name as learner_name, lp.college as learner_college,
-      us.verification_status as mentor_verification_status,
-      sea.return_type as agreement_return_type,
-      sea.requested_return_skill_name,
-      sea.status as agreement_status
-    FROM session_events se
-    JOIN sessions s ON se.session_id = s.id
-    LEFT JOIN skills sk ON s.skill_id = sk.id
-    LEFT JOIN profiles ap ON se.actor_id = ap.user_id
-    LEFT JOIN profiles tp ON s.teacher_id = tp.user_id
-    LEFT JOIN profiles lp ON s.learner_id = lp.user_id
-    LEFT JOIN user_skills us ON (s.teacher_id = us.user_id AND s.skill_id = us.skill_id)
-    LEFT JOIN session_exchange_agreements sea ON s.id = sea.session_id
-    ${isAll ? '' : 'WHERE se.created_at::date = $1::date'}
-    ORDER BY se.created_at ASC
-  `;
-  const dayTimelineEvents = (await query(dayTimelineEventsQuery, isAll ? [] : [dateStr])).rows as any[];
-
-  // 9. Group Day-Wise Metrics for Lifetime View
-  const lifetimeDayWiseMetrics = (await query(`
-    SELECT 
-      created_at::date as session_date,
-      COUNT(*) as total_sessions,
-      SUM(CASE WHEN status IN ('COMPLETED', 'CREDIT_SETTLED') THEN 1 ELSE 0 END) as completed_sessions,
-      SUM(CASE WHEN status = 'CANCELLED' THEN 1 ELSE 0 END) as cancelled_sessions,
-      SUM(CASE WHEN status = 'DISPUTED' THEN 1 ELSE 0 END) as disputed_sessions,
-      SUM(CASE WHEN status = 'IN_PROGRESS' THEN 1 ELSE 0 END) as in_progress_sessions,
-      SUM(credits_amount) as total_credits_volume
-    FROM sessions
-    GROUP BY created_at::date
-    ORDER BY session_date DESC
-    LIMIT 30
-  `)).rows as any[];
 
   return {
     reportDate: dateStr,

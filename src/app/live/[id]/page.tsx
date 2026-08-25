@@ -3,7 +3,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
-import io, { Socket } from 'socket.io-client';
 import { 
   Video, 
   Mic, 
@@ -34,7 +33,8 @@ import {
   Users,
   Layers,
   FileText,
-  Radio
+  Radio,
+  Zap
 } from 'lucide-react';
 import RatingModal from '@/components/RatingModal';
 
@@ -66,11 +66,6 @@ export default function LiveRoomPage() {
   const makingOfferRef = useRef<boolean>(false);
   const lastOfferAttemptRef = useRef<number>(0);
 
-  // Socket.io Real-Time Signaling Refs
-  const socketRef = useRef<Socket | null>(null);
-  const targetSocketIdRef = useRef<string | null>(null);
-  const [socketConnected, setSocketConnected] = useState<boolean>(false);
-
   // Google Meet / Zoom Classroom Controls & Panels
   const [micOn, setMicOn] = useState(true);
   const [cameraOn, setCameraOn] = useState(true);
@@ -80,7 +75,7 @@ export default function LiveRoomPage() {
   const [meetingSeconds, setMeetingSeconds] = useState(0);
   const [hasRealWebcam, setHasRealWebcam] = useState(false);
   const [hasRemotePeerStream, setHasRemotePeerStream] = useState(false);
-  const [videoEngine, setVideoEngine] = useState<'SOCKET_WEBRTC' | 'STUDIO'>('SOCKET_WEBRTC');
+  const [videoEngine, setVideoEngine] = useState<'WEBRTC' | 'STUDIO'>('WEBRTC');
 
   // Scratchpad
   const [codeContent, setCodeContent] = useState(`// SkillSwap Campus Live Collaborative Scratchpad
@@ -275,15 +270,9 @@ function processLearningGoal() {
       setConnectionState('CONNECTED');
     };
 
-    // Forward ICE Candidates to Opponent via Socket.io & HTTP Signaling
+    // Forward ICE Candidates to Opponent via Signaling
     pc.onicecandidate = (event) => {
       if (event.candidate) {
-        if (socketRef.current && targetSocketIdRef.current) {
-          socketRef.current.emit('signal', {
-            to: targetSocketIdRef.current,
-            signalData: { type: 'candidate', candidate: event.candidate.toJSON() },
-          });
-        }
         sendSignal('ICE_CANDIDATE', event.candidate.toJSON());
       }
     };
@@ -542,17 +531,16 @@ function processLearningGoal() {
       setMeetingSeconds(s => s + 1);
     }, 1000);
 
-    // Fast 1000ms polling for real-time presence & fallback signaling
+    // Fast 1000ms polling for real-time presence, chat, scratchpad, and WebRTC signals
     const interval = setInterval(() => {
       pollSignaling();
+      fetchChat();
+      fetchScratchpad();
     }, 1000);
 
     return () => {
       clearInterval(durationTimer);
       clearInterval(interval);
-      if (socketRef.current) {
-        socketRef.current.disconnect();
-      }
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
       if (peerConnectionRef.current) {
         peerConnectionRef.current.close();
@@ -566,151 +554,10 @@ function processLearningGoal() {
     };
   }, [sessionId]);
 
-  // Connect Socket.io signaling once participant is verified
-  useEffect(() => {
-    if (participantInfo) {
-      initSocketSignaling();
-    }
-  }, [participantInfo]);
-
   const formatDuration = (totalSec: number) => {
     const mins = Math.floor(totalSec / 60);
     const secs = totalSec % 60;
     return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-  };
-
-  // Initialize Socket.io Real-Time Signaling Server Connection
-  const initSocketSignaling = async () => {
-    try {
-      // Ensure Socket.io API route is warm
-      await fetch('/api/socket').catch(() => {});
-
-      if (socketRef.current) {
-        socketRef.current.disconnect();
-      }
-
-      const socket = io({
-        path: '/api/socketio',
-        transports: ['websocket', 'polling'],
-        reconnectionAttempts: 15,
-        reconnectionDelay: 1000,
-      });
-
-      socketRef.current = socket;
-
-      socket.on('connect', () => {
-        setSocketConnected(true);
-        console.log('[Socket.io] Connected to signaling channel:', socket.id);
-        socket.emit('join-room', {
-          roomId: sessionId,
-          userId: user?.id,
-          userName: user?.display_name || participantInfo?.displayName || 'Participant',
-          role: participantInfo?.role,
-        });
-      });
-
-      socket.on('disconnect', () => {
-        setSocketConnected(false);
-      });
-
-      socket.on('room-users', async ({ users }: { users: any[] }) => {
-        console.log('[Socket.io] Existing room users:', users);
-        if (users.length > 0) {
-          const peer = users[0];
-          targetSocketIdRef.current = peer.socketId;
-          const pc = peerConnectionRef.current || createPeerConnection();
-          if (isInitiatorRef.current || participantInfo?.role === 'TRAINER') {
-            try {
-              const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true });
-              await pc.setLocalDescription(offer);
-              socket.emit('signal', {
-                to: peer.socketId,
-                signalData: { type: 'offer', sdp: offer.sdp },
-              });
-            } catch (e) {
-              console.error('Socket.io offer failed:', e);
-            }
-          }
-        }
-      });
-
-      socket.on('user-joined', async ({ socketId, userName }: any) => {
-        console.log('[Socket.io] User joined:', userName, socketId);
-        targetSocketIdRef.current = socketId;
-        const pc = peerConnectionRef.current || createPeerConnection();
-        try {
-          const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true });
-          await pc.setLocalDescription(offer);
-          socket.emit('signal', {
-            to: socketId,
-            signalData: { type: 'offer', sdp: offer.sdp },
-          });
-        } catch (e) {
-          console.error('Socket.io offer on user-joined failed:', e);
-        }
-      });
-
-      socket.on('signal', async ({ from, signalData }: any) => {
-        targetSocketIdRef.current = from;
-        const pc = peerConnectionRef.current || createPeerConnection();
-
-        if (signalData.type === 'offer') {
-          try {
-            console.log('[Socket.io] Received OFFER from peer');
-            await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: signalData.sdp }));
-            await flushIceCandidates(pc);
-            const answer = await pc.createAnswer();
-            await pc.setLocalDescription(answer);
-            socket.emit('signal', {
-              to: from,
-              signalData: { type: 'answer', sdp: answer.sdp },
-            });
-          } catch (e) {
-            console.error('Socket.io answer generation error:', e);
-          }
-        } else if (signalData.type === 'answer') {
-          try {
-            console.log('[Socket.io] Received ANSWER from peer');
-            await pc.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: signalData.sdp }));
-            await flushIceCandidates(pc);
-            setConnectionState('CONNECTED');
-            setHasRemotePeerStream(true);
-          } catch (e) {
-            console.error('Socket.io answer setting error:', e);
-          }
-        } else if (signalData.type === 'candidate' && signalData.candidate) {
-          try {
-            if (pc.remoteDescription && pc.remoteDescription.type) {
-              await pc.addIceCandidate(new RTCIceCandidate(signalData.candidate));
-            } else {
-              iceCandidateQueueRef.current.push(signalData.candidate);
-            }
-          } catch (e) {
-            console.warn('Socket.io ICE addition error:', e);
-          }
-        }
-      });
-
-      socket.on('new-message', (msg: any) => {
-        setChatMessages(prev => {
-          if (prev.some(m => m.id === msg.id)) return prev;
-          return [...prev, msg];
-        });
-      });
-
-      socket.on('scratchpad-update', ({ content }: { content: string }) => {
-        setCodeContent(content);
-        setScratchpadSaved(true);
-      });
-
-      socket.on('user-left', () => {
-        setHasRemotePeerStream(false);
-        setConnectionState('CONNECTING');
-      });
-
-    } catch (err) {
-      console.error('Failed to initialize Socket.io client:', err);
-    }
   };
 
   // Telemetry event logger
@@ -989,25 +836,26 @@ function processLearningGoal() {
         {/* Center: Engine Mode Switcher */}
         <div className="flex items-center gap-1 bg-slate-950/80 border border-slate-800 p-0.5 rounded-xl">
           <button
-            onClick={() => setVideoEngine('SOCKET_WEBRTC')}
+            onClick={() => setVideoEngine('WEBRTC')}
             className={`px-3 py-1 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1.5 ${
-              videoEngine === 'SOCKET_WEBRTC'
+              videoEngine === 'WEBRTC'
                 ? 'bg-brand-500 text-dark-bg shadow-glow-brand'
                 : 'text-slate-400 hover:text-white'
             }`}
           >
             <Radio className="w-3 h-3 text-emerald-400 animate-pulse" />
-            <span>WebRTC + Socket.io</span>
+            <span>📡 WebRTC Direct</span>
           </button>
           <button
             onClick={() => setVideoEngine('STUDIO')}
-            className={`px-3 py-1 rounded-lg text-[11px] font-bold transition-all ${
+            className={`px-3 py-1 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1.5 ${
               videoEngine === 'STUDIO'
                 ? 'bg-brand-500 text-dark-bg shadow-glow-brand'
                 : 'text-slate-400 hover:text-white'
             }`}
           >
-            ⚡ Studio SFU
+            <Sparkles className="w-3 h-3 text-amber-400" />
+            <span>⚡ Studio SFU (Meet Mode)</span>
           </button>
         </div>
 
@@ -1039,8 +887,8 @@ function processLearningGoal() {
         {/* Video Stage (Expands to 12 cols when drawer is closed, 8-9 cols when open) */}
         <div className={`${sidePanelOpen ? 'lg:col-span-8 xl:col-span-9' : 'lg:col-span-12'} flex flex-col transition-all duration-300`}>
           
-          {videoEngine === 'SOCKET_WEBRTC' ? (
-            /* Mode 1: Real-Time WebRTC + Socket.io Video Grid */
+          {videoEngine === 'WEBRTC' ? (
+            /* Mode 1: Direct P2P WebRTC Video Grid */
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 flex-1 h-[calc(100vh-210px)] min-h-[500px]">
               
               {/* Tile 1: Local Video */}
@@ -1095,7 +943,7 @@ function processLearningGoal() {
                         Waiting for {participantInfo?.role === 'TRAINER' ? (exchangeData?.session?.learner_name || 'Learner') : (exchangeData?.session?.teacher_name || 'Mentor')}...
                       </p>
                       <p className="text-[10px] text-slate-400">
-                        {socketConnected ? '🟢 Socket.io connected • Streaming will start automatically' : 'Connecting to Socket.io signaling...'}
+                        📡 Real-time signaling active • Video will stream automatically when peer joins
                       </p>
                     </div>
                     <div className="flex flex-wrap items-center justify-center gap-2 pt-1">

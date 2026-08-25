@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
     const { rows } = await query(`
       SELECT 
         u.id, u.email, u.password_hash, u.role, u.status, u.campus_id, u.user_type,
-        COALESCE(u.email_verified, 0) as email_verified, COALESCE(u.is_academic_email, 0) as is_academic_email,
+        COALESCE(u.email_verified, false) as email_verified, COALESCE(u.is_academic_email, false) as is_academic_email,
         p.display_name, p.avatar, p.college, p.major, p.year, p.is_verified_student,
         acc.balance, acc.escrow_balance
       FROM users u

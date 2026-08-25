@@ -101,7 +101,15 @@ export default function RatingModal({
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || 'Failed to submit rating. Please try again.');
+        if (res.status === 409) {
+          setError(data.error || 'You have already submitted a review for this session.');
+          setTimeout(() => {
+            if (onRatingSubmitted) onRatingSubmitted({ score, review: review.trim(), clarityScore, punctualityScore, skillsDemonstrated: selectedTags.join(', ') });
+            onClose();
+          }, 1500);
+        } else {
+          setError(data.error || 'Failed to submit rating. Please try again.');
+        }
         setSubmitting(false);
         return;
       }

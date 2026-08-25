@@ -23,21 +23,21 @@ export async function POST(req: NextRequest) {
     // Upgrade user_type to TEACHER_LEARNER
     await withTransaction(async (client) => {
       await client.query(`
-      UPDATE users
-      SET user_type = 'TEACHER_LEARNER', updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?
+        UPDATE users
+        SET user_type = 'TEACHER_LEARNER', updated_at = CURRENT_TIMESTAMP
+        WHERE id = $1
       `, [user.userId]);
 
-    // Record audit log
+      // Record audit log
       await client.query(`
-      INSERT INTO audit_logs (id, actor_id, action, target_type, target_id, previous_state, new_state)
-      VALUES (?, ?, 'ROLE_UPGRADE', 'USER', ?, ?, 'TEACHER_LEARNER')
+        INSERT INTO audit_logs (id, actor_id, action, target_type, target_id, previous_state, new_state)
+        VALUES ($1, $2, 'ROLE_UPGRADE', 'USER', $3, $4, 'TEACHER_LEARNER')
       `, [`audit-${Date.now()}`, user.userId, user.userId, previousType]);
 
-    // Insert user notification
+      // Insert user notification
       await client.query(`
-      INSERT INTO notifications (id, user_id, title, message, type, link)
-      VALUES (?, ?, 'Profile Upgraded to Mentor + Student', 'You can now both teach skills to earn credits and book peer learning sessions!', 'INFO', '/profile')
+        INSERT INTO notifications (id, user_id, title, message, type, link)
+        VALUES ($1, $2, 'Profile Upgraded to Mentor + Student', 'You can now both teach skills to earn credits and book peer learning sessions!', 'INFO', '/profile')
       `, [`notif-${Date.now()}`, user.userId]);
     });
 

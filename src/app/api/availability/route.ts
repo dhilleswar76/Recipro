@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
           slot.dayOfWeek,
           slot.startTime,
           slot.endTime,
-          slot.isPreferred ? 1 : 0,
+          Boolean(slot.isPreferred),
           slot.windowLabel || 'General',
           slot.skillId || null
         ]);

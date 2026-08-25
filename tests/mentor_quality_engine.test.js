@@ -1,15 +1,13 @@
-const test = require('node:test');
+﻿const test = require('node:test');
 const assert = require('node:assert/strict');
-const Database = require('better-sqlite3');
-const path = require('path');
+const db = require('./test-db');
 
-const dbPath = path.join(__dirname, '..', 'data', 'skillswap.db');
 
 const PROFICIENCY_QUALITY_MAP = {
-  Expert: { score: 5.0, percentage: 100, label: 'Expert (5.0 ★)' },
-  Advanced: { score: 4.5, percentage: 90, label: 'Advanced (4.5 ★)' },
-  Intermediate: { score: 4.0, percentage: 80, label: 'Intermediate (4.0 ★)' },
-  Beginner: { score: 3.0, percentage: 60, label: 'Beginner (3.0 ★)' },
+  Expert: { score: 5.0, percentage: 100, label: 'Expert (5.0 â˜…)' },
+  Advanced: { score: 4.5, percentage: 90, label: 'Advanced (4.5 â˜…)' },
+  Intermediate: { score: 4.0, percentage: 80, label: 'Intermediate (4.0 â˜…)' },
+  Beginner: { score: 3.0, percentage: 60, label: 'Beginner (3.0 â˜…)' },
 };
 
 function calculateMentorQuality(params) {
@@ -25,7 +23,7 @@ function calculateMentorQuality(params) {
       qualityScore: profInfo.score,
       qualityPercentage: profInfo.percentage,
       qualitySource: 'PROFICIENCY_FIRST_LECTURE',
-      qualityLabel: `Initial Quality: ${profInfo.score.toFixed(1)} ★ (Proficiency: ${prof} • 1st Lecture)`,
+      qualityLabel: `Initial Quality: ${profInfo.score.toFixed(1)} â˜… (Proficiency: ${prof} â€¢ 1st Lecture)`,
       lecturesTaught: 0,
       totalReviews: 0,
       proficiency: prof,
@@ -51,7 +49,7 @@ function calculateMentorQuality(params) {
     qualityScore,
     qualityPercentage,
     qualitySource: 'LEARNER_RATINGS',
-    qualityLabel: `Learner Verified: ${qualityScore.toFixed(1)} ★ (${reviewsCount} review${reviewsCount > 1 ? 's' : ''})`,
+    qualityLabel: `Learner Verified: ${qualityScore.toFixed(1)} â˜… (${reviewsCount} review${reviewsCount > 1 ? 's' : ''})`,
     lecturesTaught,
     totalReviews: reviewsCount,
     proficiency: prof,
@@ -99,10 +97,8 @@ function getMentorQualityForSkillFromDb(db, mentorId, skillId) {
   });
 }
 
-test('SkillSwap Campus — Mentor Quality Engine (1st Lecture Proficiency vs 2nd+ Lecture Learner Ratings)', async (t) => {
-  const db = new Database(dbPath);
-  db.pragma('journal_mode = WAL');
-  db.pragma('foreign_keys = ON');
+test('SkillSwap Campus â€” Mentor Quality Engine (1st Lecture Proficiency vs 2nd+ Lecture Learner Ratings)', async (t) => {
+  const db = db  /* PostgreSQL via test-db.js */;
 
   await t.test('1. First Lecture (0 Reviews): Quality calculated purely from skill proficiency', () => {
     // 1A. Expert Proficiency
@@ -255,3 +251,4 @@ test('SkillSwap Campus — Mentor Quality Engine (1st Lecture Proficiency vs 2nd
 
   db.close();
 });
+

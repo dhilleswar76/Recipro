@@ -1,10 +1,7 @@
-import bcrypt from 'bcryptjs';
-import { getDb } from './db';
-import Database from 'better-sqlite3';
+﻿import bcrypt from 'bcryptjs';
+import { query } from './db';
 
-export async function seedDatabase(customDb?: Database.Database) {
-  const db = customDb || getDb();
-
+export async function seedDatabase() {
   console.log('Seeding SkillSwap Campus database with authentic Indian / Telugu campus personas & Python demo scenarios...');
 
   const passwordHash = await bcrypt.hash('Password123!', 10);
@@ -23,18 +20,16 @@ export async function seedDatabase(customDb?: Database.Database) {
     { id: 'skill-node', name: 'Node.js & Express Backend', category: 'Computer Science', icon: 'Server', description: 'REST APIs, middleware, authentication, and database integration' },
   ];
 
-  const insertSkill = db.prepare(`
-    INSERT INTO skills (id, name, category, icon, description)
-    VALUES (@id, @name, @category, @icon, @description)
-    ON CONFLICT(id) DO UPDATE SET
-      name = excluded.name,
-      category = excluded.category,
-      icon = excluded.icon,
-      description = excluded.description
-  `);
-
   for (const s of skillsData) {
-    insertSkill.run(s);
+    await query(`
+      INSERT INTO skills (id, name, category, icon, description)
+      VALUES ($1, $2, $3, $4, $5)
+      ON CONFLICT(id) DO UPDATE SET
+        name = EXCLUDED.name,
+        category = EXCLUDED.category,
+        icon = EXCLUDED.icon,
+        description = EXCLUDED.description
+    `, [s.id, s.name, s.category, s.icon, s.description]);
   }
 
   // 2. Synthetic Student Personas (Indian / Telugu Campus Personas)
@@ -366,32 +361,32 @@ export async function seedDatabase(customDb?: Database.Database) {
   ];
 
   for (const stu of students) {
-    db.prepare(`
+    await query(`
       INSERT INTO users (id, email, password_hash, role, status, campus_id, user_type, email_verified, is_academic_email)
-      VALUES (?, ?, ?, ?, 'ACTIVE', ?, ?, 1, 1)
+      VALUES ($1, $2, $3, $4, 'ACTIVE', $5, $6, true, true)
       ON CONFLICT(id) DO UPDATE SET
-        email = excluded.email,
-        password_hash = excluded.password_hash,
-        role = excluded.role,
-        user_type = excluded.user_type,
-        email_verified = 1,
-        is_academic_email = 1
-    `).run(stu.id, stu.email, passwordHash, stu.role, `STU-${stu.id.replace('usr-', '').toUpperCase()}`, stu.userType || 'TEACHER_LEARNER');
+        email = EXCLUDED.email,
+        password_hash = EXCLUDED.password_hash,
+        role = EXCLUDED.role,
+        user_type = EXCLUDED.user_type,
+        email_verified = true,
+        is_academic_email = true
+    `, [stu.id, stu.email, passwordHash, stu.role, `STU-${stu.id.replace('usr-', '').toUpperCase()}`, stu.userType || 'TEACHER_LEARNER']);
 
-    db.prepare(`
+    await query(`
       INSERT INTO profiles (
         id, user_id, display_name, bio, college, major, year, is_verified_student, trust_score, teaching_preference
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       ON CONFLICT(id) DO UPDATE SET
-        display_name = excluded.display_name,
-        bio = excluded.bio,
-        college = excluded.college,
-        major = excluded.major,
-        year = excluded.year,
-        is_verified_student = excluded.is_verified_student,
-        trust_score = excluded.trust_score,
-        teaching_preference = excluded.teaching_preference
-    `).run(
+        display_name = EXCLUDED.display_name,
+        bio = EXCLUDED.bio,
+        college = EXCLUDED.college,
+        major = EXCLUDED.major,
+        year = EXCLUDED.year,
+        is_verified_student = EXCLUDED.is_verified_student,
+        trust_score = EXCLUDED.trust_score,
+        teaching_preference = EXCLUDED.teaching_preference
+    `, [
       `prof-${stu.id}`,
       stu.id,
       stu.displayName,
@@ -399,59 +394,59 @@ export async function seedDatabase(customDb?: Database.Database) {
       stu.college,
       stu.major,
       stu.year,
-      stu.isVerified,
+      Boolean(stu.isVerified),
       stu.trustScore,
-      stu.teachingPreference
-    );
+      stu.teachingPreference,
+    ]);
 
-    db.prepare(`
+    await query(`
       INSERT INTO skill_credit_accounts (id, user_id, balance, escrow_balance, lifetime_earned, lifetime_spent)
-      VALUES (?, ?, ?, 0, ?, ?)
+      VALUES ($1, $2, $3, 0, $4, $5)
       ON CONFLICT(user_id) DO UPDATE SET
-        balance = excluded.balance,
-        lifetime_earned = excluded.lifetime_earned,
-        lifetime_spent = excluded.lifetime_spent
-    `).run(`acc-${stu.id}`, stu.id, stu.balance, stu.reputation.taught, stu.reputation.learned);
+        balance = EXCLUDED.balance,
+        lifetime_earned = EXCLUDED.lifetime_earned,
+        lifetime_spent = EXCLUDED.lifetime_spent
+    `, [`acc-${stu.id}`, stu.id, stu.balance, stu.reputation.taught, stu.reputation.learned]);
 
-    db.prepare(`
+    await query(`
       INSERT INTO reputations (
         id, user_id, total_reviews, total_sessions_taught, total_sessions_learned, bayesian_rating, reliability_score
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7)
       ON CONFLICT(id) DO UPDATE SET
-        total_reviews = excluded.total_reviews,
-        total_sessions_taught = excluded.total_sessions_taught,
-        total_sessions_learned = excluded.total_sessions_learned,
-        bayesian_rating = excluded.bayesian_rating,
-        reliability_score = excluded.reliability_score
-    `).run(
+        total_reviews = EXCLUDED.total_reviews,
+        total_sessions_taught = EXCLUDED.total_sessions_taught,
+        total_sessions_learned = EXCLUDED.total_sessions_learned,
+        bayesian_rating = EXCLUDED.bayesian_rating,
+        reliability_score = EXCLUDED.reliability_score
+    `, [
       `rep-${stu.id}`,
       stu.id,
       stu.reputation.reviews,
       stu.reputation.taught,
       stu.reputation.learned,
       stu.reputation.rating,
-      stu.reputation.reliability
-    );
+      stu.reputation.reliability,
+    ]);
 
     // Teaching Skills
     for (const t of (stu.teaching as any[])) {
-      db.prepare(`
+      await query(`
         INSERT INTO user_skills (
           id, user_id, skill_id, proficiency, experience_years, teaching_style, verification_status,
           assessment_score, teaching_days, available_start_time, available_end_time, preferred_start_time, preferred_end_time
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
         ON CONFLICT(user_id, skill_id) DO UPDATE SET
-          proficiency = excluded.proficiency,
-          experience_years = excluded.experience_years,
-          teaching_style = excluded.teaching_style,
-          verification_status = excluded.verification_status,
-          assessment_score = excluded.assessment_score,
-          teaching_days = excluded.teaching_days,
-          available_start_time = excluded.available_start_time,
-          available_end_time = excluded.available_end_time,
-          preferred_start_time = excluded.preferred_start_time,
-          preferred_end_time = excluded.preferred_end_time
-      `).run(
+          proficiency = EXCLUDED.proficiency,
+          experience_years = EXCLUDED.experience_years,
+          teaching_style = EXCLUDED.teaching_style,
+          verification_status = EXCLUDED.verification_status,
+          assessment_score = EXCLUDED.assessment_score,
+          teaching_days = EXCLUDED.teaching_days,
+          available_start_time = EXCLUDED.available_start_time,
+          available_end_time = EXCLUDED.available_end_time,
+          preferred_start_time = EXCLUDED.preferred_start_time,
+          preferred_end_time = EXCLUDED.preferred_end_time
+      `, [
         `usk-${stu.id}-${t.skillId}`,
         stu.id,
         t.skillId,
@@ -459,63 +454,63 @@ export async function seedDatabase(customDb?: Database.Database) {
         t.exp,
         t.style,
         t.status,
-        t.score || null,
+        t.score ?? null,
         t.teachingDays || '["Monday","Wednesday","Friday"]',
         t.availStart || '17:00',
         t.availEnd || '20:00',
         t.prefStart || '17:00',
-        t.prefEnd || '20:00'
-      );
+        t.prefEnd || '20:00',
+      ]);
     }
 
     // Learning Goals
     for (const g of stu.goals) {
-      db.prepare(`
+      await query(`
         INSERT INTO learning_goals (id, user_id, skill_id, target_proficiency, priority, notes)
-        VALUES (?, ?, ?, ?, ?, ?)
+        VALUES ($1, $2, $3, $4, $5, $6)
         ON CONFLICT(user_id, skill_id) DO UPDATE SET
-          target_proficiency = excluded.target_proficiency,
-          priority = excluded.priority,
-          notes = excluded.notes
-      `).run(
+          target_proficiency = EXCLUDED.target_proficiency,
+          priority = EXCLUDED.priority,
+          notes = EXCLUDED.notes
+      `, [
         `goal-${stu.id}-${g.skillId}`,
         stu.id,
         g.skillId,
         g.target,
         g.priority,
-        g.notes
-      );
+        g.notes,
+      ]);
     }
 
     // Availability Slots
     for (const a of stu.availability) {
-      db.prepare(`
+      await query(`
         INSERT INTO availability_slots (id, user_id, day_of_week, start_time, end_time)
-        VALUES (?, ?, ?, ?, ?)
+        VALUES ($1, $2, $3, $4, $5)
         ON CONFLICT(id) DO UPDATE SET
-          day_of_week = excluded.day_of_week,
-          start_time = excluded.start_time,
-          end_time = excluded.end_time
-      `).run(
+          day_of_week = EXCLUDED.day_of_week,
+          start_time = EXCLUDED.start_time,
+          end_time = EXCLUDED.end_time
+      `, [
         `avail-${stu.id}-${a.day}`,
         stu.id,
         a.day,
         a.start,
-        a.end
-      );
+        a.end,
+      ]);
     }
   }
 
   // 3. Seed Realistic Python Learner Requests (Scenario: Ananya Reddy & Pavan Kumar seeking Python)
-  db.prepare(`
+  await query(`
     INSERT INTO skill_requests (
       id, learner_id, skill_id, requested_proficiency, current_proficiency,
       learning_goal, preferred_schedule, preferred_session_mode, urgency, status
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
     ON CONFLICT(id) DO UPDATE SET
-      status = excluded.status,
-      learning_goal = excluded.learning_goal
-  `).run(
+      status = EXCLUDED.status,
+      learning_goal = EXCLUDED.learning_goal
+  `, [
     'req-ananya-python',
     'usr-ananya',
     'skill-python',
@@ -525,18 +520,18 @@ export async function seedDatabase(customDb?: Database.Database) {
     'Tuesday or Thursday evenings (6 PM - 9 PM)',
     'ONLINE',
     'HIGH',
-    'OPEN'
-  );
+    'OPEN',
+  ]);
 
-  db.prepare(`
+  await query(`
     INSERT INTO skill_requests (
       id, learner_id, skill_id, requested_proficiency, current_proficiency,
       learning_goal, preferred_schedule, preferred_session_mode, urgency, status
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
     ON CONFLICT(id) DO UPDATE SET
-      status = excluded.status,
-      learning_goal = excluded.learning_goal
-  `).run(
+      status = EXCLUDED.status,
+      learning_goal = EXCLUDED.learning_goal
+  `, [
     'req-pavan-python',
     'usr-pavan',
     'skill-python',
@@ -546,8 +541,8 @@ export async function seedDatabase(customDb?: Database.Database) {
     'Friday evenings (5 PM - 8 PM)',
     'ONLINE',
     'MEDIUM',
-    'OPEN'
-  );
+    'OPEN',
+  ]);
 
   // 4. Seed Verified Python Completed Session + Existing Blocking Session
   const nextMonday = new Date();
@@ -556,14 +551,14 @@ export async function seedDatabase(customDb?: Database.Database) {
   nextMonday.setDate(diff);
   const sessionDateStr = nextMonday.toISOString().substring(0, 10);
 
-  db.prepare(`
+  await query(`
     INSERT INTO sessions (
       id, title, skill_id, teacher_id, learner_id, status, scheduled_start, scheduled_end,
       duration_hours, credits_amount, mode, location_or_url, idempotency_key, notes
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
     ON CONFLICT(id) DO UPDATE SET
-      status = excluded.status
-  `).run(
+      status = EXCLUDED.status
+  `, [
     'sess-rahul-blocked-1',
     'Python Async Architectures & FastAPIs',
     'skill-python',
@@ -577,35 +572,36 @@ export async function seedDatabase(customDb?: Database.Database) {
     'ONLINE',
     'https://meet.skillswap.internal/room-rahul-ananya',
     `idemp-rahul-session-${sessionDateStr}`,
-    'Core Python backend architectures. Blocks 17:00-18:00 window.'
-  );
+    'Core Python backend architectures. Blocks 17:00-18:00 window.',
+  ]);
 
   // 5. Seed Notifications
-  db.prepare(`
+  await query(`
     INSERT INTO notifications (id, user_id, title, message, type, link)
-    VALUES (?, ?, ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET message = excluded.message
-  `).run(
+    VALUES ($1, $2, $3, $4, $5, $6)
+    ON CONFLICT(id) DO UPDATE SET message = EXCLUDED.message
+  `, [
     'notif-rahul-1',
     'usr-rahul',
     'Python Assessment Platform Verified',
     'Your Python skill assessment scored 95.0% and has been verified on-chain.',
     'CREDENTIAL_ISSUED',
-    '/profile'
-  );
+    '/profile',
+  ]);
 
-  db.prepare(`
+  await query(`
     INSERT INTO notifications (id, user_id, title, message, type, link)
-    VALUES (?, ?, ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET message = excluded.message
-  `).run(
+    VALUES ($1, $2, $3, $4, $5, $6)
+    ON CONFLICT(id) DO UPDATE SET message = EXCLUDED.message
+  `, [
     'notif-ananya-1',
     'usr-ananya',
     'Python Learner Request Active',
     'Your request for Python Programming is broadcast to campus mentors.',
     'INFO',
-    '/explore'
-  );
+    '/explore',
+  ]);
 
   console.log('Seeding completed successfully with authentic Indian / Telugu campus demo data & role restrictions.');
 }
+

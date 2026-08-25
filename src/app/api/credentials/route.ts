@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
     SELECT c.*, s.name as skill_name, s.category as skill_category, s.icon as skill_icon
     FROM credentials c
     LEFT JOIN skills s ON c.skill_id = s.id
-    WHERE c.user_id = $1 AND c.is_revoked = 0
+    WHERE c.user_id = $1 AND c.is_revoked = FALSE
     ORDER BY c.issued_at DESC
   `, [targetUserId]);
 

@@ -38,9 +38,11 @@ export async function POST(req: NextRequest) {
 
     if (existingOpen) {
       return NextResponse.json({
-        error: `You already have an active learning request for ${skillName}.`,
-        existingRequestId: (existingOpen as any).id,
-      }, { status: 409 });
+        success: true,
+        alreadyActive: true,
+        message: `You already have an active request for "${skillName}". We'll notify you as soon as a mentor becomes available!`,
+        request: existingOpen,
+      }, { status: 200 });
     }
 
     const request = await createLearningRequest({

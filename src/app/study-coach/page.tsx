@@ -177,7 +177,7 @@ export default function StudyCoachPage() {
           </div>
 
           {/* Submit Action */}
-          <div className="pt-2 flex items-center justify-between gap-4">
+          <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
             <div className="flex flex-wrap gap-1.5 text-xs text-slate-400">
               <span className="text-slate-500">Suggested:</span>
               {sampleGoals.map(sg => (
@@ -195,16 +195,17 @@ export default function StudyCoachPage() {
             <button
               type="submit"
               disabled={loading}
-              className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-accent-600 hover:from-indigo-500 hover:to-accent-500 text-white font-bold text-xs shadow-glow-accent transition-all flex items-center gap-1.5 disabled:opacity-50 shrink-0"
+              className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-accent-600 hover:from-indigo-500 hover:to-accent-500 text-white font-bold text-xs shadow-glow-accent transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 shrink-0"
             >
               {loading ? (
-                <span className="inline-flex items-center gap-2">
-                  <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  Generating Roadmap...
-                </span>
+                <>
+                  <Sparkles className="w-3.5 h-3.5 animate-spin" />
+                  <span>Synthesizing Curriculum...</span>
+                </>
               ) : (
                 <>
-                  <span>Generate Roadmap</span>
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Generate AI Roadmap</span>
                   <ArrowRight className="w-3.5 h-3.5" />
                 </>
               )}
@@ -410,8 +411,8 @@ export default function StudyCoachPage() {
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {result.recommendedMentors.map((mentor: any) => (
-                  <div key={mentor.userId} className="glass-panel p-5 rounded-2xl border border-slate-800 flex flex-col justify-between space-y-4 hover:border-brand-500/40 transition-colors">
+                {result.recommendedMentors.map((mentor: any, index: number) => (
+                  <div key={`${mentor.userId}-${mentor.skillId || mentor.skillName || index}`} className="glass-panel p-5 rounded-2xl border border-slate-800 flex flex-col justify-between space-y-4 hover:border-brand-500/40 transition-colors">
                     <div>
                       <div className="flex items-start justify-between gap-3 mb-3">
                         <div className="flex items-center gap-2.5">

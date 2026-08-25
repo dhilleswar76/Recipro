@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { transitionSessionState, SessionState, canTransition } from '@/lib/state-machine';
-import { getDb } from '@/lib/db';
 
 export async function POST(
   req: NextRequest,

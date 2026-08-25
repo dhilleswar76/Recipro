@@ -1,18 +1,11 @@
-const test = require('node:test');
+﻿const test = require('node:test');
 const assert = require('node:assert');
-const Database = require('better-sqlite3');
-const path = require('path');
+const db = require('./test-db');
 
-const dbPath = path.join(__dirname, '../data/skillswap.db');
 
-function getFreshDb() {
-  const db = new Database(dbPath);
-  db.pragma('journal_mode = WAL');
-  db.pragma('foreign_keys = ON');
-  return db;
-}
+function getFreshDb() { return db; }
 
-test('SkillSwap Campus — Video Classroom, WebRTC Signaling & Database Persistence Suite', async (t) => {
+test('SkillSwap Campus â€” Video Classroom, WebRTC Signaling & Database Persistence Suite', async (t) => {
   const db = getFreshDb();
 
   const sessionId = `test-video-sess-${Date.now()}`;
@@ -115,3 +108,4 @@ test('SkillSwap Campus — Video Classroom, WebRTC Signaling & Database Persiste
   db.prepare(`DELETE FROM session_scratchpads WHERE session_id = ?`).run(sessionId);
   db.prepare(`DELETE FROM chat_messages WHERE session_id = ?`).run(sessionId);
 });
+

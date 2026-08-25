@@ -1,4 +1,4 @@
-# SECURITY — SkillSwap Campus Security & Trust Model
+﻿# SECURITY â€” SkillSwap Campus Security & Trust Model
 
 ## Security Architecture Overview
 
@@ -15,7 +15,7 @@ SkillSwap Campus enforces defense-in-depth across the application, API, ML, and 
 - **Server-Side Enforcement**: Client role claims are never trusted; every privileged endpoint calls `requireRole` and verifies against the live database user record.
 
 ### 2. Invariant & Ledger Security
-- **Atomic Credit Operations**: Credit transfers run inside SQLite transactions to eliminate race conditions and negative balances.
+- **Atomic Credit Operations: Credit transfers run inside PostgreSQL transactions to eliminate race conditions and negative balances.
 - **Idempotency Keys**: All state transitions require unique idempotency keys to prevent double-booking or duplicate credit releases.
 - **Double Settlement Guard**: Settlement checks `settledSessions` and database state locks.
 
@@ -31,3 +31,4 @@ SkillSwap Campus enforces defense-in-depth across the application, API, ML, and 
 - Checks-Effects-Interactions pattern on all state transitions.
 - Rejection of `tx.origin` for authorization.
 - Zero private user data stored on-chain.
+

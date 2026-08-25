@@ -1,6 +1,6 @@
-# DATABASE SCHEMA — SkillSwap Campus
+﻿# DATABASE SCHEMA â€” SkillSwap Campus
 
-## Relational Entity Model (SQLite WAL Mode)
+## Relational Entity Model (PostgreSQL)
 
 ```sql
 -- 1. Users & Authentication
@@ -42,3 +42,4 @@ flashcard_decks (id, user_id, title, subject, cards_count, is_public)
 flashcards (id, deck_id, front, back, mastery_level)
 exchange_proposals (id, cycle_hash, participants_json, skills_flow_json, status, accepted_users_json, expires_at)
 ```
+

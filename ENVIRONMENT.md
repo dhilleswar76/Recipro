@@ -1,4 +1,4 @@
-# ENVIRONMENT VARIABLES — SkillSwap Campus Configuration
+﻿# ENVIRONMENT VARIABLES â€” SkillSwap Campus Configuration
 
 | Variable | Description | Default / Example Value |
 | :--- | :--- | :--- |
@@ -6,7 +6,7 @@
 | `NEXT_PUBLIC_APP_URL` | Base Application URL | `http://localhost:3000` |
 | `NODE_ENV` | Runtime Environment | `development` / `production` |
 | `AUTH_SECRET` | Secret key for HS256 JWT tokens | `skillswap-super-secret-jwt-key-...` |
-| `DATABASE_URL` | SQLite database file path | `./data/skillswap.db` |
+| `DATABASE_URL` | PostgreSQL connection string | `postgresql://user:pass@host/db?sslmode=require` |
 | `ML_SERVICE_URL` | Python FastAPI ML service endpoint | `http://localhost:8000` |
 | `ENABLE_ML_FALLBACK` | Fallback to built-in TypeScript engine | `true` |
 | `AI_API_KEY` | Optional Google Gemini / AI API key | `AIzaSy...` (Falls back to NLP if empty) |
@@ -20,7 +20,7 @@ For a minimal Vercel deployment, configure only the required variables below. Ve
 | :--- | :--- | :--- |
 | `NEXT_PUBLIC_APP_URL` | Public application URL used in verification links | `https://your-project.vercel.app` |
 | `AUTH_SECRET` | Secret key for HS256 JWT tokens | A new random secret, at least 32 characters |
-| `DATABASE_URL` | PostgreSQL connection string | `postgresql://...?sslmode=require` |
+| `DATABASE_URL` | PostgreSQL connection string | `postgresql://user:pass@host/db?sslmode=require` |
 
 Optional integrations:
 
@@ -31,3 +31,5 @@ Optional integrations:
 | `RESEND_API_KEY` | Resend email delivery |
 | `BLOCKCHAIN_RPC_URL`, `CHAIN_ID`, `ESCROW_CONTRACT_ADDRESS`, `CREDENTIAL_CONTRACT_ADDRESS` | Blockchain features |
 | `ADMIN_WALLET_ADDRESS` | Admin / Oracle Wallet Public Key | `0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266` |
+
+

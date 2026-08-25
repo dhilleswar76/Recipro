@@ -7,17 +7,21 @@ const globalForPostgres = globalThis as typeof globalThis & {
 };
 
 function getPool(): Pool {
+  const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl || !databaseUrl.startsWith('postgres')) {
-    throw new Error('DATABASE_URL must be a PostgreSQL connection string');
+    throw new Error(`DATABASE_URL must be a PostgreSQL connection string. Found: ${databaseUrl ? 'non-postgres string' : 'undefined'}`);
   }
 
   if (!globalForPostgres.postgresPool) {
+    const isLocalhost = databaseUrl.includes('localhost') || databaseUrl.includes('127.0.0.1');
+    const useSsl = !isLocalhost || databaseUrl.includes('sslmode=require') || databaseUrl.includes('ssl=true');
+
     globalForPostgres.postgresPool = new Pool({
       connectionString: databaseUrl,
-      max: 5,
+      max: 10,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 10000,
-      ssl: databaseUrl.includes('sslmode=require') ? { rejectUnauthorized: false } : undefined,
+      ssl: useSsl ? { rejectUnauthorized: false } : undefined,
     });
   }
 

@@ -1,5 +1,5 @@
 import { query } from './postgres';
-import { getMentorQualityForSkill, MentorQualityResult } from './reputation';
+import { calculateMentorQuality, getMentorQualityForSkill, MentorQualityResult } from './reputation';
 
 export interface MatchingWeights {
   skillCompatibility: number;     // default 0.30
@@ -253,16 +253,14 @@ export async function searchAndMatchCandidates(params: SearchParams, weights: Ma
   ];
   let filterParams: any[] = [requesterId];
 
-  // Skill keyword or category search
+  // Skill keyword or category search (strict skill match)
   if (q.length > 0) {
     const searchParam = filterParams.length + 1;
     filterConditions.push(`(
       LOWER(s.name) LIKE $${searchParam}
       OR LOWER(s.category) LIKE $${searchParam + 1}
-      OR LOWER(us.teaching_style) LIKE $${searchParam + 2}
-      OR LOWER(p.bio) LIKE $${searchParam + 3}
     )`);
-    filterParams.push(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`);
+    filterParams.push(`%${q}%`, `%${q}%`);
   }
 
   if (params.skillCategory) {
@@ -300,17 +298,28 @@ export async function searchAndMatchCandidates(params: SearchParams, weights: Ma
   const candidateRows = (await query(querySql, filterParams)).rows as any[];
 
   // ============================================================
-  // STAGE 3: ML FEATURE CALCULATION & EXPLAINABILITY ENGINE
+  // STAGE 3: ML FEATURE CALCULATION & EXPLAINABILITY ENGINE (Batched)
   // ============================================================
   const skillMatches: CandidateResult[] = [];
 
-  for (const row of candidateRows) {
-    // 1. Availability overlap score
-    const userAvail = (await query(`
-      SELECT day_of_week, start_time, end_time
+  // Batch fetch availability slots for all candidates in 1 single query
+  const userIds = Array.from(new Set(candidateRows.map(r => r.user_id)));
+  const availMap = new Map<string, any[]>();
+  if (userIds.length > 0) {
+    const availRows = (await query(`
+      SELECT user_id, day_of_week, start_time, end_time
       FROM availability_slots
-      WHERE user_id = $1
-    `, [row.user_id])).rows as any[];
+      WHERE user_id = ANY($1::text[])
+    `, [userIds])).rows as any[];
+    for (const a of availRows) {
+      if (!availMap.has(a.user_id)) availMap.set(a.user_id, []);
+      availMap.get(a.user_id)!.push(a);
+    }
+  }
+
+  for (const row of candidateRows) {
+    // 1. Availability overlap score from pre-fetched map
+    const userAvail = availMap.get(row.user_id) || [];
 
     // If dayOfWeek filter applied, enforce hard availability filter
     if (params.dayOfWeek) {
@@ -412,7 +421,13 @@ export async function searchAndMatchCandidates(params: SearchParams, weights: Ma
       explanationPoints.push(`✓ Classmate at your college (${row.college})`);
     }
 
-    const mentorQuality = await getMentorQualityForSkill(row.user_id, row.skill_id);
+    const totalReviews = Number(row.total_reviews) || 0;
+    const totalSessionsTaught = Number(row.total_sessions_taught) || 0;
+    const mentorQuality: MentorQualityResult = calculateMentorQuality({
+      proficiency: row.proficiency,
+      lecturesTaught: totalSessionsTaught,
+      learnerRatings: totalReviews > 0 ? [{ score: row.bayesian_rating || 4.5, punctuality_score: 5, clarity_score: 5 }] : [],
+    });
 
     skillMatches.push({
       userId: row.user_id,

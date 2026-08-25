@@ -15,13 +15,22 @@ import {
   Activity,
   Layers,
   HelpCircle,
-  Bell
+  Bell,
+  Menu,
+  X,
+  User
 } from 'lucide-react';
 
 export function Navbar() {
   const pathname = usePathname();
   const { user, logout } = useAuth();
   const [unreadCount, setUnreadCount] = useState<number>(0);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
+
+  // Close mobile menu on route change
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [pathname]);
 
   useEffect(() => {
     if (!user) return;
@@ -41,25 +50,25 @@ export function Navbar() {
   }, [user]);
 
   return (
-    <header className="sticky top-0 z-50 glass-panel border-b border-slate-800/80 px-4 lg:px-8 py-3">
-      <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
+    <header className="sticky top-0 z-50 glass-panel border-b border-slate-800/80 px-3 sm:px-6 lg:px-8 py-2.5 sm:py-3 backdrop-blur-md">
+      <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
         
         {/* Brand Logo */}
-        <Link href="/" className="flex items-center gap-2.5 group">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-500 to-accent-500 flex items-center justify-center shadow-glow-brand group-hover:scale-105 transition-transform">
-            <Sparkles className="w-5 h-5 text-dark-bg" />
+        <Link href="/" className="flex items-center gap-2 group shrink-0">
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-brand-500 to-accent-500 flex items-center justify-center shadow-glow-brand group-hover:scale-105 transition-transform">
+            <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-dark-bg" />
           </div>
           <div>
             <div className="flex items-center gap-1.5">
-              <span className="font-display font-bold text-xl tracking-tight text-white">SKILLSWAP</span>
-              <span className="text-xs px-2 py-0.5 rounded-full bg-brand-500/20 text-brand-400 font-semibold border border-brand-500/30">CAMPUS</span>
+              <span className="font-display font-bold text-lg sm:text-xl tracking-tight text-white">SKILLSWAP</span>
+              <span className="text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded-full bg-brand-500/20 text-brand-400 font-semibold border border-brand-500/30">CAMPUS</span>
             </div>
-            <p className="text-[10px] text-slate-400 font-medium tracking-wide">Peer skill exchange for students</p>
+            <p className="hidden xs:block text-[9px] sm:text-[10px] text-slate-400 font-medium tracking-wide">Peer skill exchange for students</p>
           </div>
         </Link>
 
-        {/* Clean Public & App Navigation */}
-        <nav className="hidden md:flex items-center gap-1 bg-slate-900/60 p-1 rounded-xl border border-slate-800">
+        {/* Desktop Navigation */}
+        <nav className="hidden lg:flex items-center gap-1 bg-slate-900/60 p-1 rounded-xl border border-slate-800">
           <Link 
             href="/" 
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
@@ -136,7 +145,7 @@ export function Navbar() {
             </Link>
           )}
 
-          {/* Admin Access (Visible only to authenticated ADMIN role) */}
+          {/* Admin Access */}
           {user?.role === 'ADMIN' && (
             <Link 
               href="/admin" 
@@ -150,8 +159,8 @@ export function Navbar() {
           )}
         </nav>
 
-        {/* Right Section: Balance & Auth */}
-        <div className="flex items-center gap-3">
+        {/* Right Section: Balance, Notifications, Auth & Mobile Toggle */}
+        <div className="flex items-center gap-2 sm:gap-3">
           {/* Notification Inbox Bell */}
           {user && (
             <Link
@@ -170,27 +179,22 @@ export function Navbar() {
 
           {/* Skill Credit Balance Capsule */}
           {user && (
-            <Link href="/wallet" className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-brand-950/60 border border-brand-500/30 hover:border-brand-500/60 transition-colors">
-              <Coins className="w-4 h-4 text-brand-400 animate-pulse-subtle" />
+            <Link href="/wallet" className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-xl bg-brand-950/60 border border-brand-500/30 hover:border-brand-500/60 transition-colors">
+              <Coins className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-brand-400 animate-pulse-subtle" />
               <div className="text-left">
                 <div className="text-xs font-bold text-brand-300 leading-none">
-                  {user.balance} <span className="text-[10px] font-normal text-slate-300">Credits</span>
+                  {user.balance} <span className="hidden xs:inline text-[10px] font-normal text-slate-300">Credits</span>
                 </div>
-                {user.escrow_balance > 0 && (
-                  <div className="text-[9px] text-amber-400 leading-none mt-0.5">
-                    ({user.escrow_balance} in escrow)
-                  </div>
-                )}
               </div>
             </Link>
           )}
 
-          {/* User Profile / Logout vs Login / Sign Up */}
+          {/* Desktop User Profile / Logout vs Login / Sign Up */}
           {user ? (
-            <div className="flex items-center gap-2">
+            <div className="hidden sm:flex items-center gap-2">
               <Link 
                 href="/profile" 
-                className="w-9 h-9 rounded-xl bg-gradient-to-br from-brand-500 to-accent-600 flex items-center justify-center text-dark-bg font-extrabold text-xs shadow-md hover:scale-105 transition-transform"
+                className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-br from-brand-500 to-accent-600 flex items-center justify-center text-dark-bg font-extrabold text-xs shadow-md hover:scale-105 transition-transform"
                 title={`${user.display_name} • View Profile`}
               >
                 {user.display_name?.substring(0, 2).toUpperCase() || 'U'}
@@ -204,7 +208,7 @@ export function Navbar() {
               </button>
             </div>
           ) : (
-            <div className="flex items-center gap-2">
+            <div className="hidden sm:flex items-center gap-2">
               <Link 
                 href="/login" 
                 className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold text-xs transition-colors border border-slate-700"
@@ -220,8 +224,144 @@ export function Navbar() {
             </div>
           )}
 
+          {/* Mobile Hamburger Toggle Button */}
+          <button
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="lg:hidden p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800 transition-colors"
+            aria-label="Toggle navigation menu"
+          >
+            {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </button>
         </div>
       </div>
+
+      {/* Mobile Drawer Menu */}
+      {mobileMenuOpen && (
+        <div className="lg:hidden mt-3 pt-3 border-t border-slate-800/80 space-y-1.5 animate-fadeIn">
+          <Link 
+            href="/" 
+            className={`block px-3.5 py-2 rounded-xl text-sm font-semibold transition-colors ${
+              pathname === '/' ? 'bg-brand-500/10 text-brand-400 border border-brand-500/30' : 'text-slate-300 hover:bg-slate-800/60'
+            }`}
+          >
+            Home
+          </Link>
+
+          <Link 
+            href="/explore" 
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-semibold transition-colors ${
+              pathname === '/explore' ? 'bg-brand-500/10 text-brand-400 border border-brand-500/30' : 'text-slate-300 hover:bg-slate-800/60'
+            }`}
+          >
+            <Search className="w-4 h-4 text-brand-400" />
+            <span>Find Skills</span>
+          </Link>
+
+          <Link 
+            href="/study-coach" 
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-semibold transition-colors ${
+              pathname === '/study-coach' ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/30' : 'text-slate-300 hover:bg-slate-800/60'
+            }`}
+          >
+            <Brain className="w-4 h-4 text-indigo-400" />
+            <span>Study Coach</span>
+          </Link>
+
+          {user && (
+            <>
+              <Link 
+                href="/studysphere" 
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-semibold transition-colors ${
+                  pathname === '/studysphere' ? 'bg-accent-500/10 text-accent-400 border border-accent-500/30' : 'text-slate-300 hover:bg-slate-800/60'
+                }`}
+              >
+                <Layers className="w-4 h-4 text-accent-400" />
+                <span>Circles</span>
+              </Link>
+
+              <Link 
+                href="/sessions" 
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-semibold transition-colors ${
+                  pathname === '/sessions' ? 'bg-slate-800 text-white' : 'text-slate-300 hover:bg-slate-800/60'
+                }`}
+              >
+                <Calendar className="w-4 h-4 text-slate-400" />
+                <span>My Sessions</span>
+              </Link>
+
+              <Link 
+                href="/wallet" 
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-semibold transition-colors ${
+                  pathname === '/wallet' ? 'bg-brand-500/10 text-brand-400 border border-brand-500/30' : 'text-slate-300 hover:bg-slate-800/60'
+                }`}
+              >
+                <Coins className="w-4 h-4 text-brand-400" />
+                <span>Wallet &amp; Credits ({user.balance})</span>
+              </Link>
+
+              <Link 
+                href="/profile" 
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-semibold transition-colors ${
+                  pathname === '/profile' ? 'bg-slate-800 text-white' : 'text-slate-300 hover:bg-slate-800/60'
+                }`}
+              >
+                <User className="w-4 h-4 text-brand-400" />
+                <span>My Profile ({user.display_name})</span>
+              </Link>
+
+              {user.role === 'MODERATOR' && (
+                <Link 
+                  href="/moderator" 
+                  className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-semibold transition-colors ${
+                    pathname === '/moderator' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30' : 'text-amber-400 hover:bg-slate-800/60'
+                  }`}
+                >
+                  <ShieldAlert className="w-4 h-4 text-amber-400" />
+                  <span>Moderation Queue</span>
+                </Link>
+              )}
+
+              {user.role === 'ADMIN' && (
+                <Link 
+                  href="/admin" 
+                  className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-semibold transition-colors ${
+                    pathname === '/admin' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/30' : 'text-rose-400 hover:bg-slate-800/60'
+                  }`}
+                >
+                  <Activity className="w-4 h-4 text-rose-400" />
+                  <span>Admin Dashboard</span>
+                </Link>
+              )}
+
+              <button
+                onClick={() => logout()}
+                className="w-full flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-semibold text-rose-400 hover:bg-rose-500/10 transition-colors text-left"
+              >
+                <LogOut className="w-4 h-4" />
+                <span>Log Out</span>
+              </button>
+            </>
+          )}
+
+          {!user && (
+            <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-800">
+              <Link 
+                href="/login" 
+                className="text-center py-2 rounded-xl bg-slate-800 text-white font-semibold text-sm border border-slate-700"
+              >
+                Log In
+              </Link>
+              <Link 
+                href="/register" 
+                className="text-center py-2 rounded-xl bg-brand-500 text-dark-bg font-bold text-sm shadow-glow-brand"
+              >
+                Sign Up
+              </Link>
+            </div>
+          )}
+        </div>
+      )}
     </header>
   );
 }
+

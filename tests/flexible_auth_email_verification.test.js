@@ -1,16 +1,12 @@
-const test = require('node:test');
+﻿const test = require('node:test');
 const assert = require('node:assert/strict');
-const Database = require('better-sqlite3');
+const db = require('./test-db');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
-const path = require('path');
 
-const dbPath = path.join(__dirname, '..', 'data', 'skillswap.db');
 
-test('SkillSwap Campus — Flexible Auth, Email Verification & Role Architecture Test Suite', async (t) => {
-  const db = new Database(dbPath);
-  db.pragma('journal_mode = WAL');
-  db.pragma('foreign_keys = ON');
+test('SkillSwap Campus â€” Flexible Auth, Email Verification & Role Architecture Test Suite', async (t) => {
+  const db = db  /* PostgreSQL via test-db.js */;
 
   // Academic domain detection helper logic (matching src/lib/db.ts)
   function isAcademicEmail(email) {
@@ -260,3 +256,4 @@ test('SkillSwap Campus — Flexible Auth, Email Verification & Role Architecture
 
   db.close();
 });
+

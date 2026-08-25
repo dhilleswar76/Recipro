@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
 
     // Check if Mode C cycle discovery is also requested
     let cycles: any[] = [];
-    if (mode === 'MODE_C' || mode === 'ALL') {
+    if (mode === 'MODE_C' || (mode === 'ALL' && (!q || !q.trim()))) {
       cycles = await discoverExchangeCycles(authUser?.userId);
     }
 
@@ -67,7 +67,7 @@ export async function GET(req: NextRequest) {
       }
     });
   } catch (err: any) {
-    console.error('Search API Error:', err);
-    return NextResponse.json({ error: 'Search processing error occurred' }, { status: 500 });
+    console.error('Search API Error:', err.message || err);
+    return NextResponse.json({ error: err.message || 'Search processing error occurred' }, { status: 500 });
   }
 }

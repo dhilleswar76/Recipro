@@ -25,15 +25,15 @@ export async function POST(req: NextRequest) {
       // 1. Update user capability (user_type)
       await client.query(`
         UPDATE users 
-        SET user_type = ?, updated_at = CURRENT_TIMESTAMP
-        WHERE id = ?
+        SET user_type = $1, updated_at = CURRENT_TIMESTAMP
+        WHERE id = $2
       `, [userType, user.userId]);
 
       // 2. Update profile details
       await client.query(`
         UPDATE profiles 
-        SET college = ?, major = ?, year = ?, teaching_preference = ?, bio = COALESCE(?, bio), updated_at = CURRENT_TIMESTAMP
-        WHERE user_id = ?
+        SET college = $1, major = $2, year = $3, teaching_preference = $4, bio = COALESCE($5, bio), updated_at = CURRENT_TIMESTAMP
+        WHERE user_id = $6
       `, [college, major, year, teachingPreference, bio || null, user.userId]);
     });
 
@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
       year,
     });
   } catch (err: any) {
-    console.error('Onboarding API Error:', err);
-    return NextResponse.json({ error: 'Failed to complete onboarding' }, { status: 500 });
+    console.error('Onboarding API Error:', err.message || err);
+    return NextResponse.json({ error: err.message || 'Failed to complete onboarding' }, { status: 500 });
   }
 }

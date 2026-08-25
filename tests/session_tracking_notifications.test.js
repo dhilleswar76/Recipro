@@ -1,57 +1,11 @@
-const test = require('node:test');
+﻿const test = require('node:test');
 const assert = require('node:assert/strict');
-const Database = require('better-sqlite3');
-const path = require('path');
+const db = require('./test-db');
 const jwt = require('jsonwebtoken');
 
-const dbPath = path.join(__dirname, '../data/skillswap.db');
 const JWT_SECRET = process.env.AUTH_SECRET || 'skillswap-super-secret-jwt-key-for-local-development-min32bytes';
 
-function getFreshDb() {
-  const db = new Database(dbPath);
-  db.pragma('journal_mode = WAL');
-  db.pragma('foreign_keys = ON');
-
-  // Ensure tables and columns exist
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS notifications (
-      id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL,
-      title TEXT NOT NULL,
-      message TEXT NOT NULL,
-      type TEXT NOT NULL DEFAULT 'INFO',
-      related_entity_type TEXT,
-      related_entity_id TEXT,
-      action_url TEXT,
-      link TEXT,
-      is_read INTEGER NOT NULL DEFAULT 0,
-      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      read_at DATETIME,
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE IF NOT EXISTS notification_preferences (
-      user_id TEXT PRIMARY KEY,
-      in_app_enabled INTEGER NOT NULL DEFAULT 1,
-      email_enabled INTEGER NOT NULL DEFAULT 1,
-      session_updates INTEGER NOT NULL DEFAULT 1,
-      mentor_available INTEGER NOT NULL DEFAULT 1,
-      credits INTEGER NOT NULL DEFAULT 1,
-      security INTEGER NOT NULL DEFAULT 1,
-      system INTEGER NOT NULL DEFAULT 1,
-      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE IF NOT EXISTS session_events (
-      id TEXT PRIMARY KEY,
-      session_id TEXT NOT NULL,
-      actor_id TEXT,
-      event_type TEXT NOT NULL,
-      title TEXT NOT NULL,
-      description TEXT,
-      previous_state TEXT,
-      new_state TEXT,
-      metadata_json TEXT DEFAULT '{}',
+function getFreshDb() { return db; }',
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
   `);
@@ -64,7 +18,7 @@ function getFreshDb() {
   return db;
 }
 
-test('SkillSwap Campus — Session Tracking, Filters, Notification Inbox & Mentor Allocation Suite', async (t) => {
+test('SkillSwap Campus â€” Session Tracking, Filters, Notification Inbox & Mentor Allocation Suite', async (t) => {
   const db = getFreshDb();
   const runId = Date.now();
 
@@ -308,3 +262,4 @@ test('SkillSwap Campus — Session Tracking, Filters, Notification Inbox & Mento
     assert.equal(userSummary.credits_earned, 1);
   });
 });
+

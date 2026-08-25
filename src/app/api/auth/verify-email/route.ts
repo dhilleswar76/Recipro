@@ -29,17 +29,17 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'This verification link has expired. Please request a new verification email.' }, { status: 400 });
     }
 
-    // Invalidate token and mark email_verified = 1
+    // Invalidate token and mark email_verified = TRUE
     await query(`
       UPDATE users 
-      SET email_verified = 1, verification_token = NULL, verification_token_expires = NULL, updated_at = CURRENT_TIMESTAMP
+      SET email_verified = TRUE, verification_token = NULL, verification_token_expires = NULL, updated_at = CURRENT_TIMESTAMP
       WHERE id = $1
     `, [user.id]);
 
     // Record verified event in notifications
     await query(`
       INSERT INTO notifications (id, user_id, title, message, type, link)
-      VALUES (?, ?, 'Email Verified Successfully', 'Your email address has been verified. You can now complete your onboarding.', 'INFO', '/onboarding')
+      VALUES ($1, $2, 'Email Verified Successfully', 'Your email address has been verified. You can now complete your onboarding.', 'INFO', '/onboarding')
     `, [`notif-verify-${Date.now()}`, user.id]);
 
     return NextResponse.json({
@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
 
     await query(`
       UPDATE users
-      SET verification_token = ?, verification_token_expires = ?, updated_at = CURRENT_TIMESTAMP
+      SET verification_token = $1, verification_token_expires = $2, updated_at = CURRENT_TIMESTAMP
       WHERE id = $3
     `, [freshToken, tokenExpires, user.userId]);
 
@@ -96,8 +96,8 @@ export async function POST(req: NextRequest) {
     const notifId = `notif-verify-req-${Date.now()}`;
     await query(`
       INSERT INTO notifications (id, user_id, title, message, type, link)
-      VALUES (?, ?, 'Email Verification Link', 'Click here to verify your campus email address.', 'INFO', '/verify-email?token=' || ?)
-    `, [notifId, user.userId, freshToken]);
+      VALUES ($1, $2, 'Email Verification Link', 'Click here to verify your campus email address.', 'INFO', $3)
+    `, [notifId, user.userId, `/verify-email?token=${freshToken}`]);
 
     return NextResponse.json({
       success: true,

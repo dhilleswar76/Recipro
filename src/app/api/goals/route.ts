@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
       const skillId = `skill-${skillName.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
       await query(`
         INSERT INTO skills (id, name, category, icon, description)
-        VALUES (?, ?, ?, 'BookOpen', 'Student learning goal')
+        VALUES ($1, $2, $3, 'BookOpen', 'Student learning goal')
       `, [skillId, skillName, category]);
       skill = { id: skillId };
     }
@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
     const preferredEndTime = body.preferredEndTime || '21:00';
     const sessionDurationMinutes = Number(body.sessionDurationMinutes) || 60;
     const timezone = body.timezone || 'Asia/Kolkata';
-    const isFlexible = body.isFlexible === false ? 0 : 1;
+    const isFlexible = body.isFlexible !== false;
 
     await query(`
       INSERT INTO learning_goals (
@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
         learning_days, available_start_time, available_end_time, preferred_start_time, preferred_end_time,
         session_duration_minutes, timezone, is_flexible
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
       ON CONFLICT(user_id, skill_id) DO UPDATE SET
         target_proficiency = excluded.target_proficiency,
         priority = excluded.priority,

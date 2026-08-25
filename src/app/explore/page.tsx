@@ -99,8 +99,9 @@ function ExploreComponent() {
   const [requestSubmitting, setRequestSubmitting] = useState(false);
   const [requestSuccessMsg, setRequestSuccessMsg] = useState<string | null>(null);
 
-  // Notification Subscription state
+  // Notification Subscription state & Request states
   const [subscribedSkills, setSubscribedSkills] = useState<Record<string, boolean>>({});
+  const [requestedSkills, setRequestedSkills] = useState<Record<string, boolean>>({});
 
   // Execute IRCTC-Style Smart Slot Search
   const executeSlotSearch = async () => {
@@ -133,12 +134,22 @@ function ExploreComponent() {
     }
   };
 
+  // Debounce the query string so fast typing doesn't spam the DB
+  const [debouncedQuery, setDebouncedQuery] = useState(query);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedQuery(query);
+    }, 200);
+    return () => clearTimeout(handler);
+  }, [query]);
+
   // Fetch search results from API (Catalog & ML Matching)
-  const executeSearch = async () => {
+  const executeSearch = async (searchQuery: string) => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
-      if (query.trim()) params.set('q', query.trim());
+      if (searchQuery.trim()) params.set('q', searchQuery.trim());
       if (selectedMode !== 'ALL' && selectedMode !== 'SLOT_FINDER') params.set('mode', selectedMode);
       if (selectedCategory) params.set('skillCategory', selectedCategory);
       if (minProficiency) params.set('minProficiency', minProficiency);
@@ -174,9 +185,14 @@ function ExploreComponent() {
   };
 
   useEffect(() => {
-    executeSearch();
-    executeSlotSearch();
-  }, [query, selectedMode, selectedCategory, minProficiency, selectedDay, verifiedOnly, minRating, campusFilter, slotDate, slotStartTime, slotEndTime, slotDuration, slotFlexibility]);
+    executeSearch(debouncedQuery);
+  }, [debouncedQuery, selectedMode, selectedCategory, minProficiency, selectedDay, verifiedOnly, minRating, campusFilter]);
+
+  useEffect(() => {
+    if (selectedMode === 'SLOT_FINDER') {
+      executeSlotSearch();
+    }
+  }, [debouncedQuery, selectedMode, slotDate, slotStartTime, slotEndTime, slotDuration, slotFlexibility, campusFilter, slotMode]);
 
   // Fetch ranked available slots when a booking candidate or date changes
   useEffect(() => {
@@ -287,10 +303,18 @@ function ExploreComponent() {
     }
   };
 
-  // 1-Click Subscribe to Mentor Availability
+  // 1-Click Subscribe to Mentor Availability (Instant Optimistic Feedback)
   const handleSubscribeSkill = async (skillName: string, category: string = 'Computer Science') => {
+    if (!user) {
+      router.push(`/login?redirect=/explore?q=${encodeURIComponent(skillName)}`);
+      return;
+    }
+    const skillKey = (skillName || 'Requested Skill').toLowerCase().trim();
+    // Instant Optimistic UI Update (0ms)
+    setSubscribedSkills(prev => ({ ...prev, [skillKey]: true }));
+
     try {
-      const res = await fetch('/api/skill-requests', {
+      await fetch('/api/skill-requests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -299,9 +323,6 @@ function ExploreComponent() {
           category,
         }),
       });
-      if (res.ok) {
-        setSubscribedSkills(prev => ({ ...prev, [skillName.toLowerCase()]: true }));
-      }
     } catch (err) {
       console.error('Subscription error:', err);
     }
@@ -310,9 +331,13 @@ function ExploreComponent() {
   // Submit Skill Request from Gap Resolver
   const handleSubmitSkillRequest = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user) {
+      router.push(`/login?redirect=/explore?q=${encodeURIComponent(requestSkillName || query || '')}`);
+      return;
+    }
     setRequestSubmitting(true);
     try {
-      const chosenSkill = requestSkillName || query || 'Python';
+      const chosenSkill = (requestSkillName || query || 'Requested Skill').trim();
       const res = await fetch('/api/learning-requests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -330,13 +355,14 @@ function ExploreComponent() {
       });
 
       const data = await res.json();
-      if (res.ok) {
-        setRequestSuccessMsg("We'll notify you when a suitable mentor becomes available.");
+      if (res.ok || res.status === 409) {
+        setRequestedSkills(prev => ({ ...prev, [chosenSkill.toLowerCase()]: true }));
+        setRequestSuccessMsg(data.message || "We'll notify you when a suitable mentor becomes available.");
         setTimeout(() => {
           setSkillRequestModalOpen(false);
           setRequestSuccessMsg(null);
           setRequestGoal('');
-        }, 2500);
+        }, 1500);
       } else {
         alert(data.error || 'Failed to submit skill request');
       }
@@ -361,7 +387,7 @@ function ExploreComponent() {
   const hasActiveFilters = Boolean(query || selectedCategory || minProficiency || selectedDay || verifiedOnly || minRating || campusFilter !== 'ALL' || selectedMode !== 'ALL');
   const categories = ['Computer Science', 'Design', 'Languages', 'Mathematics', 'Business'];
   const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-  const isSkillGapZeroSupply = (selectedMode === 'ALL' || selectedMode === 'MODE_B') && results.modeB.length === 0 && !loading;
+  const isSkillGapZeroSupply = (selectedMode === 'ALL' || selectedMode === 'MODE_B') && results.modeB.length === 0 && !loading && (Boolean(query.trim()) || hasActiveFilters);
 
   // Reusable Mentor Card Component (with 1-Click Slot Pills)
   const renderMentorCard = (cand: any, isOutside: boolean, showSlotPills: boolean = true) => {
@@ -513,10 +539,10 @@ function ExploreComponent() {
           </div>
 
           {/* Mode Selector Tabs */}
-          <div className="flex flex-wrap items-center gap-1 bg-slate-900/80 p-1 rounded-xl border border-slate-800 self-start sm:self-auto">
+          <div className="flex items-center gap-1 bg-slate-900/80 p-1 rounded-xl border border-slate-800 overflow-x-auto whitespace-nowrap no-scrollbar max-w-full">
             <button
               onClick={() => setSelectedMode('SLOT_FINDER')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1 ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold shrink-0 transition-colors flex items-center gap-1 ${
                 selectedMode === 'SLOT_FINDER' ? 'bg-brand-500 text-dark-bg shadow-glow-brand' : 'text-slate-400 hover:text-white'
               }`}
             >
@@ -524,7 +550,7 @@ function ExploreComponent() {
             </button>
             <button
               onClick={() => setSelectedMode('ALL')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold shrink-0 transition-colors ${
                 selectedMode === 'ALL' ? 'bg-brand-500 text-dark-bg' : 'text-slate-400 hover:text-white'
               }`}
             >
@@ -532,7 +558,7 @@ function ExploreComponent() {
             </button>
             <button
               onClick={() => setSelectedMode('MODE_A')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1 ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold shrink-0 transition-colors flex items-center gap-1 ${
                 selectedMode === 'MODE_A' ? 'bg-brand-500 text-dark-bg' : 'text-slate-400 hover:text-white'
               }`}
             >
@@ -540,7 +566,7 @@ function ExploreComponent() {
             </button>
             <button
               onClick={() => setSelectedMode('MODE_B')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1 ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold shrink-0 transition-colors flex items-center gap-1 ${
                 selectedMode === 'MODE_B' ? 'bg-brand-500 text-dark-bg' : 'text-slate-400 hover:text-white'
               }`}
             >
@@ -548,7 +574,7 @@ function ExploreComponent() {
             </button>
             <button
               onClick={() => setSelectedMode('MODE_C')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1 ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold shrink-0 transition-colors flex items-center gap-1 ${
                 selectedMode === 'MODE_C' ? 'bg-brand-500 text-dark-bg' : 'text-slate-400 hover:text-white'
               }`}
             >
@@ -838,10 +864,10 @@ function ExploreComponent() {
 
           {/* Category Pills & Filters */}
           <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar max-w-full">
               <button
                 onClick={() => setSelectedCategory('')}
-                className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
+                className={`px-3 py-1 rounded-lg text-xs font-medium shrink-0 transition-colors ${
                   selectedCategory === '' ? 'bg-brand-500/20 text-brand-400 border border-brand-500/40' : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-slate-200'
                 }`}
               >
@@ -851,7 +877,7 @@ function ExploreComponent() {
                 <button
                   key={cat}
                   onClick={() => setSelectedCategory(selectedCategory === cat ? '' : cat)}
-                  className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
+                  className={`px-3 py-1 rounded-lg text-xs font-medium shrink-0 transition-colors ${
                     selectedCategory === cat ? 'bg-brand-500/20 text-brand-400 border border-brand-500/40' : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-slate-200'
                   }`}
                 >
@@ -1063,9 +1089,18 @@ function ExploreComponent() {
                             setRequestSkillName(query || '');
                             setSkillRequestModalOpen(true);
                           }}
-                          className="w-full py-1.5 rounded-lg bg-brand-500 hover:bg-brand-400 text-dark-bg font-bold text-xs transition-colors"
+                          disabled={Boolean(requestedSkills[(query || 'Requested Skill').toLowerCase().trim()])}
+                          className={`w-full py-1.5 rounded-lg font-bold text-xs transition-colors flex items-center justify-center gap-1 ${
+                            requestedSkills[(query || 'Requested Skill').toLowerCase().trim()]
+                              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                              : 'bg-brand-500 hover:bg-brand-400 text-dark-bg'
+                          }`}
                         >
-                          Create Request
+                          {requestedSkills[(query || 'Requested Skill').toLowerCase().trim()] ? (
+                            <><Check className="w-3.5 h-3.5" /> Request Queued</>
+                          ) : (
+                            'Create Request'
+                          )}
                         </button>
                       </div>
 
@@ -1079,14 +1114,14 @@ function ExploreComponent() {
                         </div>
                         <button
                           onClick={() => handleSubscribeSkill(query || 'Requested Skill', selectedCategory || 'Computer Science')}
-                          disabled={subscribedSkills[(query || 'Requested Skill').toLowerCase()]}
+                          disabled={Boolean(subscribedSkills[(query || 'Requested Skill').toLowerCase().trim()])}
                           className={`w-full py-1.5 rounded-lg font-bold text-xs transition-colors flex items-center justify-center gap-1 ${
-                            subscribedSkills[(query || 'Requested Skill').toLowerCase()]
+                            subscribedSkills[(query || 'Requested Skill').toLowerCase().trim()]
                               ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
                               : 'bg-sky-600 hover:bg-sky-500 text-white'
                           }`}
                         >
-                          {subscribedSkills[(query || 'Requested Skill').toLowerCase()] ? (
+                          {subscribedSkills[(query || 'Requested Skill').toLowerCase().trim()] ? (
                             <><Check className="w-3.5 h-3.5" /> Subscribed</>
                           ) : (
                             'Notify Me'

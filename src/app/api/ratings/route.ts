@@ -36,7 +36,12 @@ export async function POST(req: NextRequest) {
     // Check if rating already submitted
     const existing = (await query(`SELECT id FROM ratings WHERE session_id = $1 AND rater_id = $2`, [sessionId, user.userId])).rows[0];
     if (existing) {
-      return NextResponse.json({ error: 'You have already submitted a rating for this session' }, { status: 409 });
+      return NextResponse.json({
+        success: true,
+        alreadyRated: true,
+        message: 'You have already submitted a rating for this session.',
+        rating: existing,
+      }, { status: 200 });
     }
 
     const ratingId = `rat-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;

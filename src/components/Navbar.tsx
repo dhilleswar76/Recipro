@@ -290,6 +290,16 @@ export function Navbar() {
               </Link>
 
               <Link 
+                href="/wallet" 
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-semibold transition-colors ${
+                  pathname === '/wallet' ? 'bg-brand-500/10 text-brand-400 border border-brand-500/30' : 'text-slate-300 hover:bg-slate-800/60'
+                }`}
+              >
+                <Coins className="w-4 h-4 text-brand-400" />
+                <span>Wallet &amp; Credits ({user.balance})</span>
+              </Link>
+
+              <Link 
                 href="/profile" 
                 className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-semibold transition-colors ${
                   pathname === '/profile' ? 'bg-slate-800 text-white' : 'text-slate-300 hover:bg-slate-800/60'
@@ -298,6 +308,30 @@ export function Navbar() {
                 <User className="w-4 h-4 text-brand-400" />
                 <span>My Profile ({user.display_name})</span>
               </Link>
+
+              {user.role === 'MODERATOR' && (
+                <Link 
+                  href="/moderator" 
+                  className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-semibold transition-colors ${
+                    pathname === '/moderator' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30' : 'text-amber-400 hover:bg-slate-800/60'
+                  }`}
+                >
+                  <ShieldAlert className="w-4 h-4 text-amber-400" />
+                  <span>Moderation Queue</span>
+                </Link>
+              )}
+
+              {user.role === 'ADMIN' && (
+                <Link 
+                  href="/admin" 
+                  className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-semibold transition-colors ${
+                    pathname === '/admin' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/30' : 'text-rose-400 hover:bg-slate-800/60'
+                  }`}
+                >
+                  <Activity className="w-4 h-4 text-rose-400" />
+                  <span>Admin Dashboard</span>
+                </Link>
+              )}
 
               <button
                 onClick={() => logout()}

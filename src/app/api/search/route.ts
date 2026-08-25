@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
 
     // Check if Mode C cycle discovery is also requested
     let cycles: any[] = [];
-    if (mode === 'MODE_C' || mode === 'ALL') {
+    if (mode === 'MODE_C' || (mode === 'ALL' && (!q || !q.trim()))) {
       cycles = await discoverExchangeCycles(authUser?.userId);
     }
 

@@ -521,10 +521,10 @@ function ExploreComponent() {
           </div>
 
           {/* Mode Selector Tabs */}
-          <div className="flex flex-wrap items-center gap-1 bg-slate-900/80 p-1 rounded-xl border border-slate-800 self-start sm:self-auto">
+          <div className="flex items-center gap-1 bg-slate-900/80 p-1 rounded-xl border border-slate-800 overflow-x-auto whitespace-nowrap no-scrollbar max-w-full">
             <button
               onClick={() => setSelectedMode('SLOT_FINDER')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1 ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold shrink-0 transition-colors flex items-center gap-1 ${
                 selectedMode === 'SLOT_FINDER' ? 'bg-brand-500 text-dark-bg shadow-glow-brand' : 'text-slate-400 hover:text-white'
               }`}
             >
@@ -532,7 +532,7 @@ function ExploreComponent() {
             </button>
             <button
               onClick={() => setSelectedMode('ALL')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold shrink-0 transition-colors ${
                 selectedMode === 'ALL' ? 'bg-brand-500 text-dark-bg' : 'text-slate-400 hover:text-white'
               }`}
             >
@@ -540,7 +540,7 @@ function ExploreComponent() {
             </button>
             <button
               onClick={() => setSelectedMode('MODE_A')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1 ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold shrink-0 transition-colors flex items-center gap-1 ${
                 selectedMode === 'MODE_A' ? 'bg-brand-500 text-dark-bg' : 'text-slate-400 hover:text-white'
               }`}
             >
@@ -548,7 +548,7 @@ function ExploreComponent() {
             </button>
             <button
               onClick={() => setSelectedMode('MODE_B')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1 ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold shrink-0 transition-colors flex items-center gap-1 ${
                 selectedMode === 'MODE_B' ? 'bg-brand-500 text-dark-bg' : 'text-slate-400 hover:text-white'
               }`}
             >
@@ -556,7 +556,7 @@ function ExploreComponent() {
             </button>
             <button
               onClick={() => setSelectedMode('MODE_C')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1 ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold shrink-0 transition-colors flex items-center gap-1 ${
                 selectedMode === 'MODE_C' ? 'bg-brand-500 text-dark-bg' : 'text-slate-400 hover:text-white'
               }`}
             >
@@ -846,10 +846,10 @@ function ExploreComponent() {
 
           {/* Category Pills & Filters */}
           <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar max-w-full">
               <button
                 onClick={() => setSelectedCategory('')}
-                className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
+                className={`px-3 py-1 rounded-lg text-xs font-medium shrink-0 transition-colors ${
                   selectedCategory === '' ? 'bg-brand-500/20 text-brand-400 border border-brand-500/40' : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-slate-200'
                 }`}
               >
@@ -859,7 +859,7 @@ function ExploreComponent() {
                 <button
                   key={cat}
                   onClick={() => setSelectedCategory(selectedCategory === cat ? '' : cat)}
-                  className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
+                  className={`px-3 py-1 rounded-lg text-xs font-medium shrink-0 transition-colors ${
                     selectedCategory === cat ? 'bg-brand-500/20 text-brand-400 border border-brand-500/40' : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-slate-200'
                   }`}
                 >

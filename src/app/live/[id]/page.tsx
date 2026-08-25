@@ -73,7 +73,16 @@ export default function LiveRoomPage() {
   const [meetingSeconds, setMeetingSeconds] = useState(0);
   const [hasRealWebcam, setHasRealWebcam] = useState(false);
   const [hasRemotePeerStream, setHasRemotePeerStream] = useState(false);
-  const [videoEngine, setVideoEngine] = useState<'STUDIO' | 'P2P'>('STUDIO');
+  const [videoEngine, setVideoEngine] = useState<'STUDIO' | 'AGORA' | 'P2P'>('STUDIO');
+
+  // Agora State & Refs
+  const agoraClientRef = useRef<any>(null);
+  const agoraLocalAudioRef = useRef<any>(null);
+  const agoraLocalVideoRef = useRef<any>(null);
+  const [agoraAppIdInput, setAgoraAppIdInput] = useState<string>(process.env.NEXT_PUBLIC_AGORA_APP_ID || '');
+  const [agoraJoined, setAgoraJoined] = useState<boolean>(false);
+  const [agoraLoading, setAgoraLoading] = useState<boolean>(false);
+  const [agoraError, setAgoraError] = useState<string | null>(null);
 
   // Scratchpad
   const [codeContent, setCodeContent] = useState(`// SkillSwap Campus Live Collaborative Scratchpad
@@ -539,6 +548,7 @@ function processLearningGoal() {
     return () => {
       clearInterval(durationTimer);
       clearInterval(interval);
+      leaveAgoraRoom();
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
       if (peerConnectionRef.current) {
         peerConnectionRef.current.close();
@@ -558,6 +568,100 @@ function processLearningGoal() {
     return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
   };
 
+  // Agora WebRTC Engine Logic (10,000 Free Minutes)
+  const initAgoraRoom = async (appIdToUse?: string) => {
+    const key = (appIdToUse || agoraAppIdInput || process.env.NEXT_PUBLIC_AGORA_APP_ID || '').trim();
+    if (!key) {
+      setAgoraError('Please enter a valid Agora App ID to initialize SD-RTN video.');
+      return;
+    }
+
+    setAgoraLoading(true);
+    setAgoraError(null);
+
+    try {
+      const AgoraRTC = (await import('agora-rtc-sdk-ng')).default;
+      AgoraRTC.setLogLevel(3);
+      const client = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
+      agoraClientRef.current = client;
+
+      // Handle remote peer stream publish
+      client.on('user-published', async (remoteUser, mediaType) => {
+        await client.subscribe(remoteUser, mediaType);
+        if (mediaType === 'video') {
+          setHasRemotePeerStream(true);
+          setTimeout(() => {
+            const playerContainer = document.getElementById('agora-remote-player');
+            if (playerContainer) {
+              remoteUser.videoTrack?.play(playerContainer);
+            }
+          }, 150);
+        }
+        if (mediaType === 'audio') {
+          remoteUser.audioTrack?.play();
+        }
+      });
+
+      client.on('user-unpublished', (remoteUser, mediaType) => {
+        if (mediaType === 'video') {
+          setHasRemotePeerStream(false);
+        }
+      });
+
+      const uid = Math.floor(Math.random() * 1000000);
+      const channelName = sessionId.replace(/[^a-zA-Z0-9]/g, '').substring(0, 60) || 'ReciproRoom';
+      await client.join(key, channelName, null, uid);
+
+      // Create Microphone & Camera Tracks
+      const audioTrack = await AgoraRTC.createMicrophoneAudioTrack({
+        AEC: true,
+        ANS: true,
+        AGC: true,
+      });
+      const videoTrack = await AgoraRTC.createCameraVideoTrack({
+        encoderConfig: '720p_2',
+      });
+
+      agoraLocalAudioRef.current = audioTrack;
+      agoraLocalVideoRef.current = videoTrack;
+
+      await client.publish([audioTrack, videoTrack]);
+      
+      const localContainer = document.getElementById('agora-local-player');
+      if (localContainer) {
+        videoTrack.play(localContainer);
+      }
+
+      setAgoraJoined(true);
+      setConnectionState('CONNECTED');
+    } catch (err: any) {
+      console.error('Agora Connection Error:', err);
+      setAgoraError(err.message || 'Failed to connect to Agora SD-RTN network.');
+    } finally {
+      setAgoraLoading(false);
+    }
+  };
+
+  const leaveAgoraRoom = async () => {
+    try {
+      if (agoraLocalAudioRef.current) {
+        agoraLocalAudioRef.current.close();
+        agoraLocalAudioRef.current = null;
+      }
+      if (agoraLocalVideoRef.current) {
+        agoraLocalVideoRef.current.close();
+        agoraLocalVideoRef.current = null;
+      }
+      if (agoraClientRef.current) {
+        await agoraClientRef.current.leave().catch(() => {});
+        agoraClientRef.current = null;
+      }
+    } catch (err) {
+      console.error('Error leaving Agora room:', err);
+    }
+    setAgoraJoined(false);
+  };
+
   // Telemetry event logger
   const logAttendance = (eventType: string, metadata?: any) => {
     fetch(`/api/sessions/${sessionId}/attendance`, {
@@ -571,6 +675,9 @@ function processLearningGoal() {
   const toggleMic = async () => {
     const next = !micOn;
     setMicOn(next);
+    if (videoEngine === 'AGORA' && agoraLocalAudioRef.current) {
+      agoraLocalAudioRef.current.setEnabled(next);
+    }
     if (localStreamRef.current) {
       localStreamRef.current.getAudioTracks().forEach(t => (t.enabled = next));
     }
@@ -585,6 +692,9 @@ function processLearningGoal() {
   const toggleCamera = async () => {
     const next = !cameraOn;
     setCameraOn(next);
+    if (videoEngine === 'AGORA' && agoraLocalVideoRef.current) {
+      agoraLocalVideoRef.current.setEnabled(next);
+    }
     if (localStreamRef.current) {
       localStreamRef.current.getVideoTracks().forEach(t => (t.enabled = next));
     }
@@ -828,7 +938,10 @@ function processLearningGoal() {
         {/* Center: Engine Mode Switcher */}
         <div className="flex items-center gap-1 bg-slate-950/80 border border-slate-800 p-0.5 rounded-xl">
           <button
-            onClick={() => setVideoEngine('STUDIO')}
+            onClick={() => {
+              if (videoEngine === 'AGORA') leaveAgoraRoom();
+              setVideoEngine('STUDIO');
+            }}
             className={`px-3 py-1 rounded-lg text-[11px] font-bold transition-all ${
               videoEngine === 'STUDIO'
                 ? 'bg-brand-500 text-dark-bg shadow-glow-brand'
@@ -838,7 +951,23 @@ function processLearningGoal() {
             ⚡ Studio HD (SFU)
           </button>
           <button
-            onClick={() => setVideoEngine('P2P')}
+            onClick={() => {
+              setVideoEngine('AGORA');
+              initAgoraRoom();
+            }}
+            className={`px-3 py-1 rounded-lg text-[11px] font-bold transition-all ${
+              videoEngine === 'AGORA'
+                ? 'bg-brand-500 text-dark-bg shadow-glow-brand'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            🌟 Agora Engine
+          </button>
+          <button
+            onClick={() => {
+              if (videoEngine === 'AGORA') leaveAgoraRoom();
+              setVideoEngine('P2P');
+            }}
             className={`px-3 py-1 rounded-lg text-[11px] font-bold transition-all ${
               videoEngine === 'P2P'
                 ? 'bg-brand-500 text-dark-bg shadow-glow-brand'
@@ -885,6 +1014,74 @@ function processLearningGoal() {
                 allow="camera; microphone; fullscreen; display-capture; autoplay"
                 className="w-full h-full border-0 rounded-3xl"
               />
+            </div>
+          ) : videoEngine === 'AGORA' ? (
+            /* Mode 2: Agora SD-RTN Video Grid */
+            <div className="flex-1 flex flex-col space-y-2 h-[calc(100vh-210px)] min-h-[500px]">
+              {!agoraJoined && (
+                <div className="p-3 bg-slate-900 border border-brand-500/30 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-brand-400" />
+                    <div>
+                      <span className="font-bold text-white">Agora Real-Time HD Video (10,000 Free Mins/Mo)</span>
+                      <p className="text-[11px] text-slate-400">Get your free App ID from console.agora.io (zero credit card needed)</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <input
+                      type="text"
+                      value={agoraAppIdInput}
+                      onChange={(e) => setAgoraAppIdInput(e.target.value)}
+                      placeholder="Paste Agora App ID..."
+                      className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-brand-500 w-full sm:w-48"
+                    />
+                    <button
+                      onClick={() => initAgoraRoom(agoraAppIdInput)}
+                      disabled={agoraLoading || !agoraAppIdInput.trim()}
+                      className="px-3 py-1.5 rounded-xl bg-brand-500 hover:bg-brand-400 text-dark-bg font-bold text-xs shadow-glow-brand transition-colors whitespace-nowrap disabled:opacity-40"
+                    >
+                      {agoraLoading ? 'Connecting...' : 'Join Agora'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {agoraError && (
+                <div className="p-2.5 rounded-xl bg-rose-500/20 border border-rose-500/30 text-rose-300 text-xs flex items-center justify-between">
+                  <span>{agoraError}</span>
+                  <button onClick={() => setVideoEngine('STUDIO')} className="underline font-semibold ml-2">Switch to Studio SFU</button>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 flex-1">
+                {/* Agora Local Player */}
+                <div className="glass-panel rounded-3xl border border-slate-800 relative flex items-center justify-center overflow-hidden bg-slate-950 shadow-2xl">
+                  <div id="agora-local-player" className="w-full h-full object-cover rounded-3xl" />
+                  <div className="absolute top-3 left-3 bg-black/70 px-2.5 py-1 rounded-xl text-[11px] font-bold text-white backdrop-blur-md border border-slate-800 flex items-center gap-1.5 z-10">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                    <span>You ({user?.display_name || 'Participant'})</span>
+                  </div>
+                </div>
+
+                {/* Agora Remote Player */}
+                <div className="glass-panel rounded-3xl border border-slate-800 relative flex items-center justify-center overflow-hidden bg-slate-950 shadow-2xl">
+                  <div id="agora-remote-player" className="w-full h-full object-cover rounded-3xl" />
+                  {!hasRemotePeerStream && (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/95 text-slate-400 space-y-3 p-4 text-center z-10">
+                      <div className="w-16 h-16 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-cyan-400 font-bold text-xl animate-pulse shadow-inner">
+                        {participantInfo?.role === 'TRAINER' ? 'L' : 'M'}
+                      </div>
+                      <p className="text-xs font-bold text-white">
+                        Waiting for {participantInfo?.role === 'TRAINER' ? (exchangeData?.session?.learner_name || 'Learner') : (exchangeData?.session?.teacher_name || 'Mentor')} on Agora...
+                      </p>
+                    </div>
+                  )}
+                  <div className="absolute top-3 left-3 bg-black/70 px-2.5 py-1 rounded-xl text-[11px] font-bold text-white backdrop-blur-md border border-slate-800 flex items-center gap-1.5 z-10">
+                    <span className={`w-2 h-2 rounded-full ${hasRemotePeerStream ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400 animate-ping'}`} />
+                    <span>{participantInfo?.role === 'TRAINER' ? (exchangeData?.session?.learner_name || 'Learner') : (exchangeData?.session?.teacher_name || 'Mentor')}</span>
+                  </div>
+                </div>
+              </div>
             </div>
           ) : (
             /* Mode 2: Custom P2P Video Grid */

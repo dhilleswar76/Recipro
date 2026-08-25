@@ -134,12 +134,22 @@ function ExploreComponent() {
     }
   };
 
+  // Debounce the query string so fast typing doesn't spam the DB
+  const [debouncedQuery, setDebouncedQuery] = useState(query);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedQuery(query);
+    }, 200);
+    return () => clearTimeout(handler);
+  }, [query]);
+
   // Fetch search results from API (Catalog & ML Matching)
-  const executeSearch = async () => {
+  const executeSearch = async (searchQuery: string) => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
-      if (query.trim()) params.set('q', query.trim());
+      if (searchQuery.trim()) params.set('q', searchQuery.trim());
       if (selectedMode !== 'ALL' && selectedMode !== 'SLOT_FINDER') params.set('mode', selectedMode);
       if (selectedCategory) params.set('skillCategory', selectedCategory);
       if (minProficiency) params.set('minProficiency', minProficiency);
@@ -175,9 +185,14 @@ function ExploreComponent() {
   };
 
   useEffect(() => {
-    executeSearch();
-    executeSlotSearch();
-  }, [query, selectedMode, selectedCategory, minProficiency, selectedDay, verifiedOnly, minRating, campusFilter, slotDate, slotStartTime, slotEndTime, slotDuration, slotFlexibility]);
+    executeSearch(debouncedQuery);
+  }, [debouncedQuery, selectedMode, selectedCategory, minProficiency, selectedDay, verifiedOnly, minRating, campusFilter]);
+
+  useEffect(() => {
+    if (selectedMode === 'SLOT_FINDER') {
+      executeSlotSearch();
+    }
+  }, [debouncedQuery, selectedMode, slotDate, slotStartTime, slotEndTime, slotDuration, slotFlexibility, campusFilter, slotMode]);
 
   // Fetch ranked available slots when a booking candidate or date changes
   useEffect(() => {

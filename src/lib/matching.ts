@@ -298,17 +298,28 @@ export async function searchAndMatchCandidates(params: SearchParams, weights: Ma
   const candidateRows = (await query(querySql, filterParams)).rows as any[];
 
   // ============================================================
-  // STAGE 3: ML FEATURE CALCULATION & EXPLAINABILITY ENGINE
+  // STAGE 3: ML FEATURE CALCULATION & EXPLAINABILITY ENGINE (Batched)
   // ============================================================
   const skillMatches: CandidateResult[] = [];
 
-  for (const row of candidateRows) {
-    // 1. Availability overlap score
-    const userAvail = (await query(`
-      SELECT day_of_week, start_time, end_time
+  // Batch fetch availability slots for all candidates in 1 single query
+  const userIds = Array.from(new Set(candidateRows.map(r => r.user_id)));
+  const availMap = new Map<string, any[]>();
+  if (userIds.length > 0) {
+    const availRows = (await query(`
+      SELECT user_id, day_of_week, start_time, end_time
       FROM availability_slots
-      WHERE user_id = $1
-    `, [row.user_id])).rows as any[];
+      WHERE user_id = ANY($1::text[])
+    `, [userIds])).rows as any[];
+    for (const a of availRows) {
+      if (!availMap.has(a.user_id)) availMap.set(a.user_id, []);
+      availMap.get(a.user_id)!.push(a);
+    }
+  }
+
+  for (const row of candidateRows) {
+    // 1. Availability overlap score from pre-fetched map
+    const userAvail = availMap.get(row.user_id) || [];
 
     // If dayOfWeek filter applied, enforce hard availability filter
     if (params.dayOfWeek) {
@@ -410,7 +421,18 @@ export async function searchAndMatchCandidates(params: SearchParams, weights: Ma
       explanationPoints.push(`✓ Classmate at your college (${row.college})`);
     }
 
-    const mentorQuality = await getMentorQualityForSkill(row.user_id, row.skill_id);
+    const totalReviews = Number(row.total_reviews) || 0;
+    const mentorQuality: MentorQualityResult = {
+      mentorId: row.user_id,
+      skillId: row.skill_id,
+      proficiency: row.proficiency,
+      qualityScore: totalReviews > 0 ? (row.bayesian_rating || 4.5) : (row.proficiency === 'Expert' ? 4.8 : row.proficiency === 'Advanced' ? 4.5 : 4.0),
+      qualitySource: totalReviews > 0 ? 'PEER_RATINGS' : 'PROFICIENCY_FIRST_LECTURE',
+      totalReviews,
+      totalSessionsTaught: Number(row.total_sessions_taught) || 0,
+      bayesianRating: row.bayesian_rating || 4.5,
+      isFirstLecture: totalReviews === 0,
+    };
 
     skillMatches.push({
       userId: row.user_id,

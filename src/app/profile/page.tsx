@@ -498,10 +498,10 @@ function ProfilePageContent() {
 
       {/* Tabs */}
       <div className="space-y-6">
-        <div className="flex flex-wrap items-center gap-2 border-b border-slate-800 pb-2">
+        <div className="flex items-center gap-2 overflow-x-auto pb-2 border-b border-slate-800 no-scrollbar">
           <button
             onClick={() => setActiveTab('SKILLS')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-colors ${
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold shrink-0 transition-colors ${
               activeTab === 'SKILLS' ? 'bg-brand-500 text-dark-bg' : 'text-slate-400 hover:text-white'
             }`}
           >
@@ -509,7 +509,7 @@ function ProfilePageContent() {
           </button>
           <button
             onClick={() => setActiveTab('GOALS')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-colors ${
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold shrink-0 transition-colors ${
               activeTab === 'GOALS' ? 'bg-accent-500 text-white' : 'text-slate-400 hover:text-white'
             }`}
           >
@@ -517,7 +517,7 @@ function ProfilePageContent() {
           </button>
           <button
             onClick={() => setActiveTab('REQUESTS')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-colors ${
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold shrink-0 transition-colors ${
               activeTab === 'REQUESTS' ? 'bg-amber-500 text-dark-bg' : 'text-slate-400 hover:text-white'
             }`}
           >
@@ -525,7 +525,7 @@ function ProfilePageContent() {
           </button>
           <button
             onClick={() => setActiveTab('AVAILABILITY')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-colors ${
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold shrink-0 transition-colors ${
               activeTab === 'AVAILABILITY' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
             }`}
           >
@@ -533,7 +533,7 @@ function ProfilePageContent() {
           </button>
           <button
             onClick={() => setActiveTab('PREFERENCES')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-colors ${
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold shrink-0 transition-colors ${
               activeTab === 'PREFERENCES' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'
             }`}
           >

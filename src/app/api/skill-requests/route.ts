@@ -52,13 +52,14 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Invalid subscription data', details: parsed.error.format() }, { status: 400 });
       }
 
-      const skillResult = await query('SELECT id FROM skills WHERE LOWER(name) = LOWER($1)', [parsed.data.skillName]);
+      const skillId = `skill-${parsed.data.skillName.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
+      const skillResult = await query('SELECT id FROM skills WHERE LOWER(name) = LOWER($1) OR id = $2', [parsed.data.skillName, skillId]);
       let skill = skillResult.rows[0] as { id: string } | undefined;
       if (!skill) {
-        const skillId = `skill-${parsed.data.skillName.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
         await query(`
           INSERT INTO skills (id, name, category, icon, description)
           VALUES ($1, $2, $3, 'BookOpen', 'Student requested topic')
+          ON CONFLICT (id) DO UPDATE SET name = excluded.name
         `, [skillId, parsed.data.skillName, parsed.data.category]);
         skill = { id: skillId };
       }

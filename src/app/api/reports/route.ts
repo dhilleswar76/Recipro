@@ -1,15 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { query } from '@/lib/postgres';
 import { requireAuth } from '@/lib/auth';
 import { CreateReportSchema } from '@/lib/validations';
 
 export async function POST(req: NextRequest) {
-  const authRes = requireAuth(req);
+  const authRes = await requireAuth(req);
   if ('errorResponse' in authRes) return authRes.errorResponse;
 
   const { user } = authRes;
-  const db = getDb();
-
   try {
     const body = await req.json();
     const parsed = CreateReportSchema.safeParse(body);
@@ -22,10 +20,10 @@ export async function POST(req: NextRequest) {
 
     const reportId = `rep-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
 
-    db.prepare(`
+    await query(`
       INSERT INTO reports (id, reporter_id, reported_id, session_id, reason, details, status)
-      VALUES (?, ?, ?, ?, ?, ?, 'OPEN')
-    `).run(reportId, user.userId, reportedId, sessionId || null, reason, details);
+      VALUES ($1, $2, $3, $4, $5, $6, 'OPEN')
+    `, [reportId, user.userId, reportedId, sessionId || null, reason, details]);
 
     return NextResponse.json({
       success: true,

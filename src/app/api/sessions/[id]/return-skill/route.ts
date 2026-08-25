@@ -7,7 +7,7 @@ export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const authRes = requireAuth(req);
+  const authRes = await requireAuth(req);
   if ('errorResponse' in authRes) return authRes.errorResponse;
 
   const { user } = authRes;
@@ -31,7 +31,7 @@ export async function POST(
       return NextResponse.json({ error: 'Invalid return skill format', details: parsed.error.format() }, { status: 400 });
     }
 
-    const result = proposeReturnSkill({
+    const result = await proposeReturnSkill({
       sessionId,
       actorUserId: user.userId,
       skillName: parsed.data.skillName,

@@ -1,5 +1,4 @@
-import Database from 'better-sqlite3';
-import { getDb } from './db';
+import { query, withTransaction } from './postgres';
 
 export interface AuthorizedParticipant {
   authorized: boolean;
@@ -42,20 +41,20 @@ export function escapeHtml(unsafe: string): string {
 /**
  * Strict Backend Authorization: Verifies user is an active participant in the session
  */
-export function authorizeSessionParticipant(
-  db: Database.Database,
+export async function authorizeSessionParticipant(
   sessionId: string,
   userId: string
-): AuthorizedParticipant {
-  const session = db.prepare(`
+): Promise<AuthorizedParticipant> {
+  const sessionResult = await query(`
     SELECT s.*, sk.name as skill_name,
            tp.display_name as teacher_name, lp.display_name as learner_name
     FROM sessions s
     LEFT JOIN skills sk ON s.skill_id = sk.id
     LEFT JOIN profiles tp ON s.teacher_id = tp.user_id
     LEFT JOIN profiles lp ON s.learner_id = lp.user_id
-    WHERE s.id = ?
-  `).get(sessionId) as any;
+    WHERE s.id = $1
+  `, [sessionId]);
+  const session = sessionResult.rows[0] as any;
 
   if (!session) {
     return {
@@ -125,9 +124,11 @@ export function authorizeSessionParticipant(
   }
 
   // Pre-Session Return Skill Start Gate for Direct Skill Exchanges
-  const agreement = db.prepare(`
-    SELECT * FROM session_exchange_agreements WHERE session_id = ?
-  `).get(sessionId) as any;
+  const agreementResult = await query(
+    'SELECT * FROM session_exchange_agreements WHERE session_id = $1',
+    [sessionId],
+  );
+  const agreement = agreementResult.rows[0] as any;
 
   if (agreement && agreement.return_type === 'SKILL' && agreement.status !== 'ACCEPTED') {
     return {
@@ -166,45 +167,38 @@ export function authorizeSessionParticipant(
 /**
  * Records session attendance and telemetry events
  */
-export function recordAttendanceEvent(
-  db: Database.Database,
+export async function recordAttendanceEvent(
   sessionId: string,
   userId: string,
   eventType: 'JOINED' | 'LEFT' | 'RECONNECTED' | 'MUTED' | 'UNMUTED' | 'VIDEO_ON' | 'VIDEO_OFF' | 'SCREEN_SHARE_START' | 'SCREEN_SHARE_STOP',
   metadata?: any
-) {
+): Promise<void> {
   const eventId = `att-${sessionId}-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-  db.prepare(`
-    INSERT INTO session_attendance (
-      id, session_id, user_id, event_type, joined_at, metadata_json, created_at
-    ) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, ?, CURRENT_TIMESTAMP)
-  `).run(
-    eventId,
-    sessionId,
-    userId,
-    eventType,
-    JSON.stringify(metadata || {})
-  );
+  await withTransaction(async (client) => {
+    await client.query(`
+      INSERT INTO session_attendance (
+        id, session_id, user_id, event_type, joined_at, metadata_json, created_at
+      ) VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, $5, CURRENT_TIMESTAMP)
+    `, [eventId, sessionId, userId, eventType, JSON.stringify(metadata || {})]);
 
-  // Update participant joined timestamp in session_participants
-  if (eventType === 'JOINED') {
-    db.prepare(`
-      UPDATE session_participants 
-      SET joined_at = CURRENT_TIMESTAMP 
-      WHERE session_id = ? AND user_id = ?
-    `).run(sessionId, userId);
-  }
+    if (eventType === 'JOINED') {
+      await client.query(`
+        UPDATE session_participants
+        SET joined_at = CURRENT_TIMESTAMP
+        WHERE session_id = $1 AND user_id = $2
+      `, [sessionId, userId]);
+    }
+  });
 }
 
 /**
  * Validates, escapes, and sends an in-room session chat message
  */
-export function sendSessionChatMessage(
-  db: Database.Database,
+export async function sendSessionChatMessage(
   sessionId: string,
   senderId: string,
   rawMessage: string
-): { success: boolean; message?: ChatMessageRecord; error?: string } {
+): Promise<{ success: boolean; message?: ChatMessageRecord; error?: string }> {
   const trimmed = rawMessage.trim();
   if (!trimmed) {
     return { success: false, error: 'Message cannot be empty' };
@@ -215,31 +209,40 @@ export function sendSessionChatMessage(
   }
 
   // Authorize participant
-  const auth = authorizeSessionParticipant(db, sessionId, senderId);
+  const auth = await authorizeSessionParticipant(sessionId, senderId);
   if (!auth.authorized) {
     return { success: false, error: auth.error || 'Unauthorized to chat in this session' };
   }
 
   // Rate-limiting check: Max 10 messages per 10 seconds per user
-  const recentCount = (db.prepare(`
-    SELECT COUNT(*) as count FROM chat_messages 
-    WHERE session_id = ? AND sender_id = ? AND created_at >= datetime('now', '-10 seconds')
-  `).get(sessionId, senderId) as any)?.count || 0;
-
-  if (recentCount >= 10) {
-    return { success: false, error: 'Rate limit exceeded: Please wait a moment before sending another message.' };
-  }
-
   // XSS-Safe Sanitization
   const safeMessage = escapeHtml(trimmed);
   const messageId = `msg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+  const senderProfile = await withTransaction(async (client) => {
+    const recentResult = await client.query(`
+      SELECT COUNT(*)::int as count FROM chat_messages
+      WHERE session_id = $1 AND sender_id = $2
+        AND created_at >= CURRENT_TIMESTAMP - INTERVAL '10 seconds'
+    `, [sessionId, senderId]);
+    if (Number(recentResult.rows[0]?.count || 0) >= 10) {
+      return { rateLimited: true, profile: undefined };
+    }
 
-  db.prepare(`
-    INSERT INTO chat_messages (id, session_id, sender_id, message, status, is_system, created_at)
-    VALUES (?, ?, ?, ?, 'SENT', 0, CURRENT_TIMESTAMP)
-  `).run(messageId, sessionId, senderId, safeMessage);
+    await client.query(`
+      INSERT INTO chat_messages (id, session_id, sender_id, message, status, is_system, created_at)
+      VALUES ($1, $2, $3, $4, 'SENT', false, CURRENT_TIMESTAMP)
+    `, [messageId, sessionId, senderId, safeMessage]);
 
-  const senderProfile = db.prepare(`SELECT display_name, avatar FROM profiles WHERE user_id = ?`).get(senderId) as any;
+    const profileResult = await client.query(
+      'SELECT display_name, avatar FROM profiles WHERE user_id = $1',
+      [senderId],
+    );
+    return { rateLimited: false, profile: profileResult.rows[0] as any };
+  });
+
+  if (senderProfile.rateLimited) {
+    return { success: false, error: 'Rate limit exceeded: Please wait a moment before sending another message.' };
+  }
 
   return {
     success: true,
@@ -247,8 +250,8 @@ export function sendSessionChatMessage(
       id: messageId,
       sessionId,
       senderId,
-      senderName: senderProfile?.display_name || auth.displayName,
-      senderAvatar: senderProfile?.avatar || null,
+      senderName: senderProfile.profile?.display_name || auth.displayName,
+      senderAvatar: senderProfile.profile?.avatar || null,
       message: safeMessage,
       status: 'SENT',
       isSystem: false,
@@ -260,23 +263,23 @@ export function sendSessionChatMessage(
 /**
  * Retrieves chat history for authorized session participants
  */
-export function getSessionChatHistory(
-  db: Database.Database,
+export async function getSessionChatHistory(
   sessionId: string,
   userId: string
-): { authorized: boolean; messages: ChatMessageRecord[]; error?: string } {
-  const auth = authorizeSessionParticipant(db, sessionId, userId);
+): Promise<{ authorized: boolean; messages: ChatMessageRecord[]; error?: string }> {
+  const auth = await authorizeSessionParticipant(sessionId, userId);
   if (!auth.authorized) {
     return { authorized: false, messages: [], error: auth.error };
   }
 
-  const rows = db.prepare(`
+  const chatResult = await query(`
     SELECT m.*, p.display_name as sender_name, p.avatar as sender_avatar
     FROM chat_messages m
     LEFT JOIN profiles p ON m.sender_id = p.user_id
-    WHERE m.session_id = ?
+    WHERE m.session_id = $1
     ORDER BY m.created_at ASC
-  `).all(sessionId) as any[];
+  `, [sessionId]);
+  const rows = chatResult.rows as any[];
 
   return {
     authorized: true,

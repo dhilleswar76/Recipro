@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
 import { requireAuth } from '@/lib/auth';
 import { NotificationService } from '@/lib/notifications';
 
 export async function GET(req: NextRequest) {
-  const authRes = requireAuth(req);
+  const authRes = await requireAuth(req);
   if ('errorResponse' in authRes) return authRes.errorResponse;
 
   const { user } = authRes;
-  const db = getDb();
   const { searchParams } = new URL(req.url);
 
   const category = searchParams.get('category') || 'ALL';
@@ -17,7 +15,7 @@ export async function GET(req: NextRequest) {
   const limit = parseInt(searchParams.get('limit') || '15', 10);
 
   try {
-    const result = NotificationService.getUserNotifications(db, user.userId, {
+    const result = await NotificationService.getUserNotifications(user.userId, {
       category,
       unreadOnly,
       page,
@@ -32,12 +30,10 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const authRes = requireAuth(req);
+  const authRes = await requireAuth(req);
   if ('errorResponse' in authRes) return authRes.errorResponse;
 
   const { user } = authRes;
-  const db = getDb();
-
   try {
     const body = await req.json();
     const { recipientUserId, type, title, message, actionUrl, relatedEntityType, relatedEntityId } = body;
@@ -47,7 +43,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized to send arbitrary notifications' }, { status: 403 });
     }
 
-    const result = await NotificationService.send(db, {
+    const result = await NotificationService.send({
       userId: recipientUserId || user.userId,
       type: type || 'SYSTEM_NOTIFICATION',
       title,

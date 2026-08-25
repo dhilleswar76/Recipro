@@ -1,4 +1,4 @@
-import { getDb } from './db';
+import { query } from './postgres';
 
 export interface FraudEvaluationResult {
   userId: string;
@@ -21,17 +21,16 @@ export interface FraudEvaluationResult {
  * Multi-Signal Fraud & Sybil Detector:
  * Evaluates account patterns against Isolation Forest / Heuristic rule signals.
  */
-export function evaluateUserFraudRisk(userId: string): FraudEvaluationResult {
-  const db = getDb();
+export async function evaluateUserFraudRisk(userId: string): Promise<FraudEvaluationResult> {
 
   // 1. Fetch user account metadata
-  const user = db.prepare(`
+  const user = (await query(`
     SELECT u.id, u.email, u.created_at, u.status,
            p.completion_rate, p.cancellation_rate, p.is_verified_student
     FROM users u
     JOIN profiles p ON u.id = p.user_id
-    WHERE u.id = ?
-  `).get(userId) as any;
+    WHERE u.id = $1
+  `, [userId])).rows[0] as any;
 
   if (!user) {
     return {
@@ -56,13 +55,13 @@ export function evaluateUserFraudRisk(userId: string): FraudEvaluationResult {
   const accountAgeDays = Math.max(0.1, accountAgeMs / (1000 * 60 * 60 * 24));
 
   // 2. Fetch rating reciprocity (A rates B 5*, B rates A 5*)
-  const givenRatings = db.prepare(`
-    SELECT ratee_id, score, created_at FROM ratings WHERE rater_id = ?
-  `).all(userId) as any[];
+  const givenRatings = (await query(`
+    SELECT ratee_id, score, created_at FROM ratings WHERE rater_id = $1
+  `, [userId])).rows as any[];
 
-  const receivedRatings = db.prepare(`
-    SELECT rater_id, score, created_at FROM ratings WHERE ratee_id = ?
-  `).all(userId) as any[];
+  const receivedRatings = (await query(`
+    SELECT rater_id, score, created_at FROM ratings WHERE ratee_id = $1
+  `, [userId])).rows as any[];
 
   let reciprocalMatches = 0;
   const receivedRaterMap = new Map<string, number>();
@@ -87,26 +86,26 @@ export function evaluateUserFraudRisk(userId: string): FraudEvaluationResult {
   const ratingConcentration = totalReviews > 0 ? (maxReviewsFromSingleUser / totalReviews) : 0;
 
   // 4. Session Velocity (Sessions completed per day)
-  const sessionCount = db.prepare(`
-    SELECT COUNT(*) as count FROM sessions WHERE (teacher_id = ? OR learner_id = ?) AND status = 'COMPLETED'
-  `).get(userId, userId) as { count: number };
-  const dailySessionVelocity = sessionCount.count / accountAgeDays;
+  const sessionCount = (await query(`
+    SELECT COUNT(*) as count FROM sessions WHERE (teacher_id = $1 OR learner_id = $2) AND status = 'COMPLETED'
+  `, [userId, userId])).rows[0] as { count: number };
+  const dailySessionVelocity = Number(sessionCount.count) / accountAgeDays;
 
   // 5. Credit Velocity (Transactions in last 24h)
-  const recentCreditTx = db.prepare(`
+  const recentCreditTx = (await query(`
     SELECT COUNT(*) as count, SUM(amount) as total_amount 
     FROM credit_transactions 
-    WHERE (sender_id = ? OR receiver_id = ?) 
-      AND created_at >= datetime('now', '-1 day')
-  `).get(userId, userId) as { count: number; total_amount: number | null };
-  const creditVelocity = recentCreditTx.count || 0;
+    WHERE (sender_id = $1 OR receiver_id = $2)
+      AND created_at >= CURRENT_TIMESTAMP - INTERVAL '1 day'
+  `, [userId, userId])).rows[0] as { count: number; total_amount: number | null };
+  const creditVelocity = Number(recentCreditTx.count) || 0;
 
   // 6. Wallet Reuse Detection (Same wallet linked to multiple accounts)
   let walletReuseDetected = false;
-  const userWallet = db.prepare(`SELECT address FROM wallets WHERE user_id = ?`).get(userId) as { address: string } | undefined;
+  const userWallet = (await query(`SELECT address FROM wallets WHERE user_id = $1`, [userId])).rows[0] as { address: string } | undefined;
   if (userWallet?.address) {
-    const reuseCount = db.prepare(`SELECT COUNT(*) as count FROM wallets WHERE address = ?`).get(userWallet.address) as { count: number };
-    if (reuseCount.count > 1) {
+    const reuseCount = (await query(`SELECT COUNT(*) as count FROM wallets WHERE address = $1`, [userWallet.address])).rows[0] as { count: number };
+    if (Number(reuseCount.count) > 1) {
       walletReuseDetected = true;
     }
   }
@@ -194,26 +193,25 @@ export function evaluateUserFraudRisk(userId: string): FraudEvaluationResult {
 /**
  * Evaluates and syncs fraud alerts to the database for moderator review.
  */
-export function scanAndRecordFraudAlert(userId: string): FraudEvaluationResult {
-  const result = evaluateUserFraudRisk(userId);
-  const db = getDb();
+export async function scanAndRecordFraudAlert(userId: string): Promise<FraudEvaluationResult> {
+  const result = await evaluateUserFraudRisk(userId);
 
   if (result.riskLevel === 'HIGH' || result.riskLevel === 'MEDIUM') {
-    const existing = db.prepare(`
-      SELECT id FROM fraud_alerts WHERE user_id = ? AND status = 'PENDING_REVIEW'
-    `).get(userId);
+    const existing = (await query(`
+      SELECT id FROM fraud_alerts WHERE user_id = $1 AND status = 'PENDING_REVIEW'
+    `, [userId])).rows[0];
 
     if (!existing) {
-      db.prepare(`
+      await query(`
         INSERT INTO fraud_alerts (id, user_id, risk_score, risk_level, anomaly_reasons, status)
-        VALUES (?, ?, ?, ?, ?, 'PENDING_REVIEW')
-      `).run(
+        VALUES ($1, $2, $3, $4, $5, 'PENDING_REVIEW')
+      `, [
         `alert-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
         userId,
         result.riskScore,
         result.riskLevel,
         JSON.stringify(result.anomalyReasons)
-      );
+      ]);
     }
   }
 
@@ -221,7 +219,7 @@ export function scanAndRecordFraudAlert(userId: string): FraudEvaluationResult {
 }
 
 export async function evaluateUserFraudRiskAsync(userId: string): Promise<FraudEvaluationResult> {
-  const baseResult = evaluateUserFraudRisk(userId);
+  const baseResult = await evaluateUserFraudRisk(userId);
   const mlServiceUrl = process.env.ML_SERVICE_URL || 'http://127.0.0.1:8000';
 
   try {
@@ -262,24 +260,22 @@ export async function evaluateUserFraudRiskAsync(userId: string): Promise<FraudE
 
 export async function scanAndRecordFraudAlertAsync(userId: string): Promise<FraudEvaluationResult> {
   const result = await evaluateUserFraudRiskAsync(userId);
-  const db = getDb();
-
   if (result.riskLevel === 'HIGH' || result.riskLevel === 'MEDIUM') {
-    const existing = db.prepare(`
-      SELECT id FROM fraud_alerts WHERE user_id = ? AND status = 'PENDING_REVIEW'
-    `).get(userId);
+    const existing = (await query(`
+      SELECT id FROM fraud_alerts WHERE user_id = $1 AND status = 'PENDING_REVIEW'
+    `, [userId])).rows[0];
 
     if (!existing) {
-      db.prepare(`
+      await query(`
         INSERT INTO fraud_alerts (id, user_id, risk_score, risk_level, anomaly_reasons, status)
-        VALUES (?, ?, ?, ?, ?, 'PENDING_REVIEW')
-      `).run(
+        VALUES ($1, $2, $3, $4, $5, 'PENDING_REVIEW')
+      `, [
         `alert-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
         userId,
         result.riskScore,
         result.riskLevel,
         JSON.stringify(result.anomalyReasons)
-      );
+      ]);
     }
   }
 

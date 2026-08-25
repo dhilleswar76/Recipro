@@ -4,7 +4,7 @@ import { AnalyzeSkillsInputSchema } from '@/lib/validations';
 import { analyzeAndExtractSkills } from '@/lib/ai-extractor';
 
 export async function POST(req: NextRequest) {
-  const authRes = requireAuth(req);
+  const authRes = await requireAuth(req);
   if ('errorResponse' in authRes) return authRes.errorResponse;
 
   try {

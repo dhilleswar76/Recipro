@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
-import { getDb, isAcademicEmail } from '@/lib/db';
+import { isAcademicEmail } from '@/lib/db';
+import { query, withTransaction } from '@/lib/postgres';
 import { RegisterSchema } from '@/lib/validations';
 import { hashPassword, signToken } from '@/lib/auth';
 import { EmailService } from '@/lib/email-service';
@@ -21,10 +22,9 @@ export async function POST(req: NextRequest) {
     const displayName = (parsed.data.name || parsed.data.displayName || 'Campus Member').trim();
     const cleanEmail = email.trim().toLowerCase();
     const userType = parsed.data.userType || 'TEACHER_LEARNER';
-    const db = getDb();
-
     // Check if user already exists (case-insensitive)
-    const existing = db.prepare('SELECT id FROM users WHERE LOWER(email) = ?').get(cleanEmail);
+    const existingResult = await query('SELECT id FROM users WHERE LOWER(email) = $1', [cleanEmail]);
+    const existing = existingResult.rows[0];
     if (existing) {
       return NextResponse.json(
         { error: 'An account with this email address already exists' },
@@ -44,46 +44,44 @@ export async function POST(req: NextRequest) {
     const tokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
     const isAcademic = isAcademicEmail(cleanEmail) ? 1 : 0;
 
-    const tx = db.transaction(() => {
+    await withTransaction(async (client) => {
       // 1. Insert User as active and verified
-      db.prepare(`
+      await client.query(`
         INSERT INTO users (
           id, email, password_hash, role, status, campus_id, user_type,
           email_verified, verification_token, verification_token_expires, is_academic_email
         ) VALUES (?, ?, ?, ?, 'ACTIVE', ?, ?, 1, ?, ?, ?)
-      `).run(userId, cleanEmail, passwordHash, userRole, campusId, userType, verificationToken, tokenExpires, isAcademic);
+      `, [userId, cleanEmail, passwordHash, userRole, campusId, userType, verificationToken, tokenExpires, isAcademic]);
 
       // 2. Insert Profile with default values
-      db.prepare(`
+      await client.query(`
         INSERT INTO profiles (
           id, user_id, display_name, college, major, year, is_verified_student, trust_score, teaching_preference
         ) VALUES (?, ?, ?, ?, ?, ?, 1, 75.0, 'Anyone')
-      `).run(`prof-${userId}`, userId, displayName, college || 'SkillSwap Campus', major || 'General Studies', year || 'Freshman');
+      `, [`prof-${userId}`, userId, displayName, college || 'SkillSwap Campus', major || 'General Studies', year || 'Freshman']);
 
       // 3. Insert Skill Credit Account with 3 starter credits
-      db.prepare(`
+      await client.query(`
         INSERT INTO skill_credit_accounts (id, user_id, balance, escrow_balance, lifetime_earned, lifetime_spent)
         VALUES (?, ?, 3, 0, 0, 0)
-      `).run(`acc-${userId}`, userId);
+      `, [`acc-${userId}`, userId]);
 
       // 4. Insert Initial Reputation
-      db.prepare(`
+      await client.query(`
         INSERT INTO reputations (id, user_id, total_reviews, total_sessions_taught, total_sessions_learned, bayesian_rating, reliability_score)
         VALUES (?, ?, 0, 0, 0, 4.5, 95.0)
-      `).run(`rep-${userId}`, userId);
+      `, [`rep-${userId}`, userId]);
 
       // 5. Welcome Notification
-      db.prepare(`
+      await client.query(`
         INSERT INTO notifications (id, user_id, title, message, type, link)
         VALUES (?, ?, 'Welcome to SkillSwap Campus!', 'Your account has been created! Complete your profile setup to start exchanging skills.', 'INFO', '/onboarding')
-      `).run(`notif-${Date.now()}`, userId);
+      `, [`notif-${Date.now()}`, userId]);
     });
-
-    tx();
 
     // Send welcome email in background
     try {
-      await EmailService.sendEmail(db, {
+      await EmailService.sendEmail({
         to: cleanEmail,
         subject: 'Welcome to SkillSwap Campus!',
         html: `

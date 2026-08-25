@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { query } from '@/lib/postgres';
 import { LoginSchema } from '@/lib/validations';
 import { verifyPassword, signToken } from '@/lib/auth';
 
@@ -14,9 +14,7 @@ export async function POST(req: NextRequest) {
 
     const { email, password } = parsed.data;
     const cleanEmail = email.trim().toLowerCase();
-    const db = getDb();
-
-    const user = db.prepare(`
+    const { rows } = await query(`
       SELECT 
         u.id, u.email, u.password_hash, u.role, u.status, u.campus_id, u.user_type,
         COALESCE(u.email_verified, 0) as email_verified, COALESCE(u.is_academic_email, 0) as is_academic_email,
@@ -25,8 +23,9 @@ export async function POST(req: NextRequest) {
       FROM users u
       JOIN profiles p ON u.id = p.user_id
       LEFT JOIN skill_credit_accounts acc ON u.id = acc.user_id
-      WHERE LOWER(u.email) = ?
-    `).get(cleanEmail) as any;
+      WHERE LOWER(u.email) = $1
+    `, [cleanEmail]);
+    const user = rows[0] as any;
 
     if (!user) {
       return NextResponse.json({ error: 'Invalid email or password credentials' }, { status: 401 });

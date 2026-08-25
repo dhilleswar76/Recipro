@@ -3,7 +3,7 @@ import { requireAdmin } from '@/lib/auth';
 import { getDailyReport, logAdminAction } from '@/lib/admin-reporting';
 
 export async function GET(req: NextRequest) {
-  const authRes = requireAdmin(req);
+  const authRes = await requireAdmin(req);
   if ('errorResponse' in authRes) return authRes.errorResponse;
 
   const { user } = authRes;
@@ -16,9 +16,9 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const report = getDailyReport(dateStr);
+    const report = await getDailyReport(dateStr);
 
-    logAdminAction({
+    await logAdminAction({
       adminUserId: user.userId,
       action: 'ADMIN_VIEWED_DAILY_REPORT',
       targetType: 'DAILY_REPORT',

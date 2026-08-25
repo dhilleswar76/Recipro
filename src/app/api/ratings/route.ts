@@ -1,16 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { query } from '@/lib/postgres';
 import { requireAuth } from '@/lib/auth';
 import { SubmitRatingSchema } from '@/lib/validations';
 import { refreshUserReputation } from '@/lib/reputation';
 import { scanAndRecordFraudAlert } from '@/lib/fraud-detector';
 
 export async function POST(req: NextRequest) {
-  const authRes = requireAuth(req);
+  const authRes = await requireAuth(req);
   if ('errorResponse' in authRes) return authRes.errorResponse;
 
   const { user } = authRes;
-  const db = getDb();
 
   try {
     const body = await req.json();
@@ -23,7 +22,7 @@ export async function POST(req: NextRequest) {
     const { sessionId, score, review, punctualityScore, clarityScore, skillsDemonstrated } = parsed.data;
 
     // Verify session
-    const session = db.prepare(`SELECT * FROM sessions WHERE id = ?`).get(sessionId) as any;
+    const session = (await query(`SELECT * FROM sessions WHERE id = $1`, [sessionId])).rows[0] as any;
     if (!session) {
       return NextResponse.json({ error: 'Session not found' }, { status: 404 });
     }
@@ -35,18 +34,18 @@ export async function POST(req: NextRequest) {
     const rateeId = session.teacher_id === user.userId ? session.learner_id : session.teacher_id;
 
     // Check if rating already submitted
-    const existing = db.prepare(`SELECT id FROM ratings WHERE session_id = ? AND rater_id = ?`).get(sessionId, user.userId);
+    const existing = (await query(`SELECT id FROM ratings WHERE session_id = $1 AND rater_id = $2`, [sessionId, user.userId])).rows[0];
     if (existing) {
       return NextResponse.json({ error: 'You have already submitted a rating for this session' }, { status: 409 });
     }
 
     const ratingId = `rat-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
 
-    db.prepare(`
+    await query(`
       INSERT INTO ratings (
         id, session_id, rater_id, ratee_id, score, review, punctuality_score, clarity_score, skills_demonstrated
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    `, [
       ratingId,
       sessionId,
       user.userId,
@@ -56,14 +55,14 @@ export async function POST(req: NextRequest) {
       punctualityScore,
       clarityScore,
       skillsDemonstrated || ''
-    );
+    ]);
 
     // Refresh ratee Bayesian reputation and reliability metrics
-    const updatedRep = refreshUserReputation(rateeId);
+    const updatedRep = await refreshUserReputation(rateeId);
 
     // Check for fraud/reciprocity anomalies
-    scanAndRecordFraudAlert(user.userId);
-    scanAndRecordFraudAlert(rateeId);
+    await scanAndRecordFraudAlert(user.userId);
+    await scanAndRecordFraudAlert(rateeId);
 
     return NextResponse.json({
       success: true,

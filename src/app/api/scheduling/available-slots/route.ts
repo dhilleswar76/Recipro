@@ -4,7 +4,7 @@ import { CalculateSlotsSchema } from '@/lib/validations';
 import { calculateAvailableSlots } from '@/lib/scheduling';
 
 export async function POST(req: NextRequest) {
-  const authRes = requireAuth(req);
+  const authRes = await requireAuth(req);
   if ('errorResponse' in authRes) return authRes.errorResponse;
 
   const { user } = authRes;
@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
 
     const { teacherId, date, startTimeWindow, endTimeWindow, durationHours, bufferMinutes } = parsed.data;
 
-    const result = calculateAvailableSlots({
+    const result = await calculateAvailableSlots({
       teacherId,
       learnerId: user.userId,
       date,

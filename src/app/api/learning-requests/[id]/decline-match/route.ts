@@ -1,24 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
 import { requireAuth } from '@/lib/auth';
 import { getLearningRequestDetail } from '@/lib/learning-requests';
+import { withTransaction } from '@/lib/postgres';
 
 export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const authRes = requireAuth(req);
+  const authRes = await requireAuth(req);
   if ('errorResponse' in authRes) return authRes.errorResponse;
 
   const { user } = authRes;
-  const db = getDb();
   const requestId = params.id;
 
   try {
     const body = await req.json().catch(() => ({}));
     const { cancelRequest } = body;
 
-    const request = getLearningRequestDetail(db, requestId);
+    const request = await getLearningRequestDetail(requestId);
     if (!request) {
       return NextResponse.json({ error: 'Learning request not found' }, { status: 404 });
     }
@@ -28,11 +27,13 @@ export async function POST(
     }
 
     if (cancelRequest) {
-      db.prepare(`UPDATE learning_requests SET status = 'CANCELLED', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(requestId);
-      db.prepare(`
+      await withTransaction(async (client) => {
+        await client.query(`UPDATE learning_requests SET status = 'CANCELLED', updated_at = CURRENT_TIMESTAMP WHERE id = $1`, [requestId]);
+        await client.query(`
         INSERT INTO learning_request_events (id, request_id, event_type, title, description, created_at)
-        VALUES (?, ?, 'REQUEST_CANCELLED', 'Request Cancelled by Learner', 'Learner chose to cancel the request.', CURRENT_TIMESTAMP)
-      `).run(`ev-${requestId}-decl-${Date.now()}`, requestId);
+        VALUES ($1, $2, 'REQUEST_CANCELLED', 'Request Cancelled by Learner', 'Learner chose to cancel the request.', CURRENT_TIMESTAMP)
+      `, [`ev-${requestId}-decl-${Date.now()}`, requestId]);
+      });
 
       return NextResponse.json({
         success: true,
@@ -41,11 +42,13 @@ export async function POST(
       });
     } else {
       // Keep request active and searching
-      db.prepare(`UPDATE learning_requests SET status = 'OPEN', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(requestId);
-      db.prepare(`
+      await withTransaction(async (client) => {
+        await client.query(`UPDATE learning_requests SET status = 'OPEN', updated_at = CURRENT_TIMESTAMP WHERE id = $1`, [requestId]);
+        await client.query(`
         INSERT INTO learning_request_events (id, request_id, event_type, title, description, created_at)
-        VALUES (?, ?, 'MATCH_DECLINED', 'Match Declined — Kept In Search Queue', 'Learner declined the matched mentor. Continuing search for alternative mentors.', CURRENT_TIMESTAMP)
-      `).run(`ev-${requestId}-decl-${Date.now()}`, requestId);
+        VALUES ($1, $2, 'MATCH_DECLINED', 'Match Declined — Kept In Search Queue', 'Learner declined the matched mentor. Continuing search for alternative mentors.', CURRENT_TIMESTAMP)
+      `, [`ev-${requestId}-decl-${Date.now()}`, requestId]);
+      });
 
       return NextResponse.json({
         success: true,

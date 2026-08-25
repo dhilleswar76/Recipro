@@ -1,17 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
 import { requireAuth } from '@/lib/auth';
 import { NotificationService } from '@/lib/notifications';
 
 export async function GET(req: NextRequest) {
-  const authRes = requireAuth(req);
+  const authRes = await requireAuth(req);
   if ('errorResponse' in authRes) return authRes.errorResponse;
 
   const { user } = authRes;
-  const db = getDb();
-
   try {
-    const preferences = NotificationService.getUserPreferences(db, user.userId);
+    const preferences = await NotificationService.getUserPreferences(user.userId);
     return NextResponse.json({ preferences });
   } catch (err: any) {
     console.error('Fetch Notification Preferences Error:', err);
@@ -20,15 +17,13 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const authRes = requireAuth(req);
+  const authRes = await requireAuth(req);
   if ('errorResponse' in authRes) return authRes.errorResponse;
 
   const { user } = authRes;
-  const db = getDb();
-
   try {
     const body = await req.json();
-    const preferences = NotificationService.updateUserPreferences(db, user.userId, {
+    const preferences = await NotificationService.updateUserPreferences(user.userId, {
       inAppEnabled: body.in_app_enabled,
       emailEnabled: body.email_enabled,
       sessionUpdates: body.session_updates,

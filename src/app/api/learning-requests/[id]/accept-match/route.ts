@@ -1,26 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
 import { requireAuth } from '@/lib/auth';
 import { getLearningRequestDetail } from '@/lib/learning-requests';
 import { reserveEscrowCredits, recordSessionEvent } from '@/lib/state-machine';
 import { NotificationService } from '@/lib/notifications';
+import { withTransaction } from '@/lib/postgres';
+import { getDb } from '@/lib/db';
 
 export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const authRes = requireAuth(req);
+  const authRes = await requireAuth(req);
   if ('errorResponse' in authRes) return authRes.errorResponse;
 
   const { user } = authRes;
-  const db = getDb();
   const requestId = params.id;
 
   try {
     const body = await req.json().catch(() => ({}));
     const { scheduledStart, scheduledEnd, mentorId: reqMentorId } = body;
 
-    const request = getLearningRequestDetail(db, requestId);
+    const request = await getLearningRequestDetail(requestId);
     if (!request) {
       return NextResponse.json({ error: 'Learning request not found' }, { status: 404 });
     }
@@ -43,13 +43,13 @@ export async function POST(
     const sessionId = `sess-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     const idempotencyKey = `book-${sessionId}`;
 
-    const tx = db.transaction(() => {
+    await withTransaction(async (client) => {
       // 1. Create Session
-      db.prepare(`
+      await client.query(`
         INSERT INTO sessions (
           id, title, skill_id, teacher_id, learner_id, status, scheduled_start, scheduled_end, duration_hours, credits_amount, mode, location_or_url, idempotency_key, notes
-        ) VALUES (?, ?, ?, ?, ?, 'REQUESTED', ?, ?, ?, 1, 'ONLINE', ?, ?, ?)
-      `).run(
+        ) VALUES ($1, $2, $3, $4, $5, 'REQUESTED', $6, $7, $8, 1, 'ONLINE', $9, $10, $11)
+      `, [
         sessionId,
         `Learn ${request.skillName}`,
         request.skillId,
@@ -61,36 +61,37 @@ export async function POST(
         `https://meet.skillswap.internal/room/${sessionId}`,
         idempotencyKey,
         `Created from Learning Request ${requestId}`
-      );
+      ]);
 
       // 1b. Session Participants
-      db.prepare(`
-        INSERT OR IGNORE INTO session_participants (id, session_id, user_id, session_role, confirmed)
-        VALUES (?, ?, ?, 'TRAINER', 0), (?, ?, ?, 'LEARNER', 0)
-      `).run(
+      await client.query(`
+        INSERT INTO session_participants (id, session_id, user_id, session_role, confirmed)
+        VALUES ($1, $2, $3, 'TRAINER', 0), ($4, $5, $6, 'LEARNER', 0)
+        ON CONFLICT DO NOTHING
+      `, [
         `sp-${sessionId}-trainer`,
         sessionId,
         mentorId,
         `sp-${sessionId}-learner`,
         sessionId,
         user.userId
-      );
+      ]);
 
       // 2. Reserve Escrow Credits
-      const escrowRes = reserveEscrowCredits(user.userId, 1, sessionId, idempotencyKey);
+      const escrowRes = await reserveEscrowCredits(user.userId, 1, sessionId, idempotencyKey);
       if (!escrowRes.success) {
         throw new Error(escrowRes.message);
       }
 
       // 3. Update Learning Request Status
-      db.prepare(`
+      await client.query(`
         UPDATE learning_requests 
         SET status = 'SESSION_REQUESTED', updated_at = CURRENT_TIMESTAMP
-        WHERE id = ?
-      `).run(requestId);
+        WHERE id = $1
+      `, [requestId]);
 
       // 4. Log Event
-      recordSessionEvent(
+      await recordSessionEvent(
         sessionId,
         user.userId,
         'REQUESTED',
@@ -100,17 +101,17 @@ export async function POST(
         'REQUESTED'
       );
 
-      db.prepare(`
+      await client.query(`
         INSERT INTO learning_request_events (id, request_id, event_type, title, description, created_at)
-        VALUES (?, ?, 'SESSION_REQUESTED', 'Session Request Submitted', ?, CURRENT_TIMESTAMP)
-      `).run(
+        VALUES ($1, $2, 'SESSION_REQUESTED', 'Session Request Submitted', $3, CURRENT_TIMESTAMP)
+      `, [
         `ev-${requestId}-sess-${Date.now()}`,
         requestId,
         `Submitted session booking request to ${request.matchedMentor?.displayName || 'Mentor'}.`
-      );
+      ]);
 
       // 5. Notify Mentor
-      NotificationService.send(db, {
+      await NotificationService.send({
         userId: mentorId,
         type: 'SESSION_REQUESTED',
         title: 'New Session Request from Matched Learner',
@@ -120,8 +121,6 @@ export async function POST(
         actionUrl: `/sessions/${sessionId}`,
       });
     });
-
-    tx();
 
     return NextResponse.json({
       success: true,

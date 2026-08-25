@@ -1,30 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { query, withTransaction } from '@/lib/postgres';
 import { requireAuth } from '@/lib/auth';
 import { generateStudyRoadmap } from '@/lib/gemini';
 
 export async function GET(req: NextRequest) {
-  const authRes = requireAuth(req);
+  const authRes = await requireAuth(req);
   if ('errorResponse' in authRes) {
     return NextResponse.json({ roadmap: null }, { status: 200 });
   }
 
   const { user } = authRes;
-  const db = getDb();
 
   try {
     // Get latest active roadmap for this user if available
-    const roadmap = db.prepare(`
-      SELECT * FROM study_roadmaps WHERE user_id = ? ORDER BY created_at DESC LIMIT 1
-    `).get(user.userId) as any;
+    const roadmap = (await query(`
+      SELECT * FROM study_roadmaps WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1
+    `, [user.userId])).rows[0] as any;
 
     if (!roadmap) {
       return NextResponse.json({ roadmap: null });
     }
 
-    const stages = db.prepare(`
-      SELECT * FROM roadmap_stages WHERE roadmap_id = ? ORDER BY stage_order ASC
-    `).all(roadmap.id) as any[];
+    const stages = (await query(`
+      SELECT * FROM roadmap_stages WHERE roadmap_id = $1 ORDER BY stage_order ASC
+    `, [roadmap.id])).rows as any[];
 
     return NextResponse.json({
       success: true,
@@ -58,9 +57,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const authRes = requireAuth(req);
+  const authRes = await requireAuth(req);
   const userId = 'errorResponse' in authRes ? null : authRes.user.userId;
-  const db = getDb();
 
   try {
     const body = await req.json();
@@ -81,11 +79,12 @@ export async function POST(req: NextRequest) {
 
     // Persist in database if user is authenticated
     if (userId) {
-      db.prepare(`
+      await withTransaction(async (client) => {
+        await client.query(`
         INSERT INTO study_roadmaps (
           id, user_id, title, goal, current_level, target_level, weekly_hours, estimated_duration, version
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
-      `).run(
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1)
+      `, [
         roadmapId,
         userId,
         generated.title,
@@ -94,18 +93,16 @@ export async function POST(req: NextRequest) {
         targetLevel,
         weeklyHours,
         generated.estimatedDuration
-      );
-
-      const insertStage = db.prepare(`
-        INSERT INTO roadmap_stages (
-          id, roadmap_id, stage_order, title, description, skill_query,
-          estimated_hours, objectives_json, practice_tasks_json, completion_criteria_json, status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'NOT_STARTED')
-      `);
+      ]);
 
       for (const st of generated.stages) {
         const stageId = `stg-${roadmapId}-${st.order}`;
-        insertStage.run(
+        await client.query(`
+        INSERT INTO roadmap_stages (
+          id, roadmap_id, stage_order, title, description, skill_query,
+          estimated_hours, objectives_json, practice_tasks_json, completion_criteria_json, status
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'NOT_STARTED')
+      `, [
           stageId,
           roadmapId,
           st.order,
@@ -116,15 +113,16 @@ export async function POST(req: NextRequest) {
           JSON.stringify(st.objectives || []),
           JSON.stringify(st.practiceTasks || []),
           JSON.stringify(st.completionCriteria || [])
-        );
+        ]);
       }
+      });
     }
 
     // Query real verified mentors matching topic
     const searchParam = `%${topic.toLowerCase()}%`;
     const excludeId = userId || 'anonymous';
     
-    let matchedMentors = db.prepare(`
+    let matchedMentors = (await query(`
       SELECT 
         u.id as user_id, p.display_name, p.avatar, p.college, p.major, p.is_verified_student,
         s.name as skill_name, us.proficiency, us.experience_years, us.teaching_style, us.verification_status,
@@ -136,18 +134,18 @@ export async function POST(req: NextRequest) {
       JOIN profiles p ON u.id = p.user_id
       LEFT JOIN reputations r ON u.id = r.user_id
       WHERE u.status = 'ACTIVE' 
-        AND u.id != ?
-        AND (LOWER(s.name) LIKE ? OR LOWER(s.category) LIKE ?)
+        AND u.id != $1
+        AND (LOWER(s.name) LIKE $2 OR LOWER(s.category) LIKE $3)
       ORDER BY 
         CASE WHEN us.verification_status IN ('PLATFORM_VERIFIED', 'ASSESSMENT_VERIFIED') THEN 1 ELSE 2 END,
         r.bayesian_rating DESC,
         us.experience_years DESC
       LIMIT 6
-    `).all(excludeId, searchParam, searchParam) as any[];
+    `, [excludeId, searchParam, searchParam])).rows as any[];
 
     // If niche topic has 0 specific mentors, provide top active verified campus mentors
     if (matchedMentors.length === 0) {
-      matchedMentors = db.prepare(`
+      matchedMentors = (await query(`
         SELECT 
           u.id as user_id, p.display_name, p.avatar, p.college, p.major, p.is_verified_student,
           s.name as skill_name, us.proficiency, us.experience_years, us.teaching_style, us.verification_status,
@@ -158,12 +156,12 @@ export async function POST(req: NextRequest) {
         JOIN users u ON us.user_id = u.id
         JOIN profiles p ON u.id = p.user_id
         LEFT JOIN reputations r ON u.id = r.user_id
-        WHERE u.status = 'ACTIVE' AND u.id != ?
+        WHERE u.status = 'ACTIVE' AND u.id != $1
         ORDER BY 
           CASE WHEN us.verification_status IN ('PLATFORM_VERIFIED', 'ASSESSMENT_VERIFIED') THEN 1 ELSE 2 END,
           r.bayesian_rating DESC
         LIMIT 4
-      `).all(excludeId) as any[];
+      `, [excludeId])).rows as any[];
     }
 
     return NextResponse.json({

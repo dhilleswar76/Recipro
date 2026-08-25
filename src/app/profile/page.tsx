@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { Suspense, useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useAuth, UserProfile } from '@/context/AuthContext';
 import { 
@@ -27,7 +27,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import MyLearningRequests from '@/components/MyLearningRequests';
 import { getSkillStatusDisplay } from '@/lib/skill-display';
 
-export default function ProfilePage() {
+function ProfilePageContent() {
   const router = useRouter();
   const { user, refreshUser } = useAuth();
   const searchParams = useSearchParams();
@@ -1402,5 +1402,13 @@ export default function ProfilePage() {
       )}
 
     </div>
+  );
+}
+
+export default function ProfilePage() {
+  return (
+    <Suspense fallback={null}>
+      <ProfilePageContent />
+    </Suspense>
   );
 }

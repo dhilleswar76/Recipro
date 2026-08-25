@@ -7,7 +7,7 @@ export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const authRes = requireAuth(req);
+  const authRes = await requireAuth(req);
   if ('errorResponse' in authRes) return authRes.errorResponse;
 
   const { user } = authRes;
@@ -23,7 +23,7 @@ export async function POST(
       return NextResponse.json({ error: 'Missing targetState in request body' }, { status: 400 });
     }
 
-    const result = transitionSessionState(sessionId, targetState, user.userId, {
+    const result = await transitionSessionState(sessionId, targetState, user.userId, {
       reason,
       idempotencyKey,
     });

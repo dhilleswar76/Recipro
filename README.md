@@ -1,4 +1,4 @@
-# 🎓 SkillSwap Campus (Recipro Protocol)
+﻿# ðŸŽ“ SkillSwap Campus (Recipro Protocol)
 
 > **"A Decentralized Peer-to-Peer Campus Skill Barter Economy & Collaborative Video Classroom."**
 
@@ -6,7 +6,7 @@ SkillSwap Campus is an open, production-grade campus learning protocol where col
 
 ---
 
-## 📑 Table of Contents
+## ðŸ“‘ Table of Contents
 1. [System Architecture](#-system-architecture)
 2. [Session Lifecycle & State Machine](#-session-lifecycle--state-machine)
 3. [Key Subsystems & Features](#-key-subsystems--features)
@@ -19,7 +19,7 @@ SkillSwap Campus is an open, production-grade campus learning protocol where col
 
 ---
 
-## 🏛️ System Architecture
+## ðŸ›ï¸ System Architecture
 
 ```mermaid
 flowchart TD
@@ -42,7 +42,7 @@ flowchart TD
     end
 
     subgraph Data & Storage Layer [Persistence & Blockchain]
-        SQLite[(SQLite Database / better-sqlite3 with WAL)]
+        PostgreSQL[(PostgreSQL Database / Render Cloud / pg pool)]
         Contracts[Solidity Smart Contracts: Escrow, Soulbound NFT, Anchor]
     end
 
@@ -52,19 +52,19 @@ flowchart TD
     VideoRoom --> SignalingAPI
     AdminUI --> AdminAPI
 
-    AuthAPI --> SQLite
-    SearchAPI --> SQLite
+    AuthAPI --> PostgreSQL
+    SearchAPI --> PostgreSQL
     ExchangeAPI --> EscrowSM
-    EscrowSM --> SQLite
-    SignalingAPI --> SQLite
-    GeminiAI --> SQLite
-    AdminAPI --> SQLite
+    EscrowSM --> PostgreSQL
+    SignalingAPI --> PostgreSQL
+    GeminiAI --> PostgreSQL
+    AdminAPI --> PostgreSQL
     EscrowSM -.-> Contracts
 ```
 
 ---
 
-## 🔄 Session Lifecycle & State Machine
+## ðŸ”„ Session Lifecycle & State Machine
 
 ```mermaid
 stateDiagram-v2
@@ -97,7 +97,7 @@ stateDiagram-v2
 
 ---
 
-## 🌟 Key Subsystems & Features
+## ðŸŒŸ Key Subsystems & Features
 
 ### 1. Unified Authentication & Role System
 - **Single-flow login**: Clean, standard `Email` and `Password` inputs with no rigid role selector blocks.
@@ -124,7 +124,7 @@ stateDiagram-v2
 
 ---
 
-## 📹 Live Video Classroom & WebRTC Signaling
+## ðŸ“¹ Live Video Classroom & WebRTC Signaling
 
 - **Hardware Camera Capture & Studio Canvas Fallback**:
   - Automatically captures 720p HD webcam video via `navigator.mediaDevices.getUserMedia`.
@@ -132,7 +132,7 @@ stateDiagram-v2
 - **Real-Time WebRTC Peer Signaling**:
   - Exchanging SDP Offers, Answers, and ICE candidates persisted via `session_signaling_messages`.
 - **Collaborative Code Scratchpad**:
-  - Shared interactive code and note workspace synchronized in real time to the SQLite database.
+  - Shared interactive code and note workspace synchronized in real time to the PostgreSQL database.
 - **In-Room Encrypted Chat**:
   - Persistent, XSS-sanitized chat messages logged in `chat_messages`.
 - **Screen Sharing**:
@@ -140,9 +140,9 @@ stateDiagram-v2
 
 ---
 
-## 🗄️ Database Schema Specification
+## ðŸ—„ï¸ Database Schema Specification
 
-The application uses an ACID-compliant SQLite database with WAL mode enabled:
+The application uses an ACID-compliant PostgreSQL database hosted on Render:
 
 | Table Name | Description | Key Fields |
 | :--- | :--- | :--- |
@@ -166,55 +166,55 @@ The application uses an ACID-compliant SQLite database with WAL mode enabled:
 
 ---
 
-## 🔌 API Route Reference
+## ðŸ”Œ API Route Reference
 
 ### Authentication & Profiles
-- `POST /api/auth/register` — Register a new student account.
-- `POST /api/auth/login` — Sign in and receive an HTTP-only JWT cookie.
-- `GET /api/auth/me` — Retrieve current authenticated user profile.
-- `POST /api/auth/verify-email` — Verify campus email with token.
+- `POST /api/auth/register` â€” Register a new student account.
+- `POST /api/auth/login` â€” Sign in and receive an HTTP-only JWT cookie.
+- `GET /api/auth/me` â€” Retrieve current authenticated user profile.
+- `POST /api/auth/verify-email` â€” Verify campus email with token.
 
 ### Discovery & Scheduling
-- `POST /api/scheduling/search` — IRCTC smart slot search with 15-minute gap and college fallback.
-- `GET /api/skills` — List campus skill catalog.
-- `POST /api/skills` — Add a new skill to user profile.
-- `GET /api/availability` — Retrieve or set mentor recurring weekly availability.
+- `POST /api/scheduling/search` â€” IRCTC smart slot search with 15-minute gap and college fallback.
+- `GET /api/skills` â€” List campus skill catalog.
+- `POST /api/skills` â€” Add a new skill to user profile.
+- `GET /api/availability` â€” Retrieve or set mentor recurring weekly availability.
 
 ### Sessions & Return Skill Flow
-- `GET /api/sessions` — List user's booked and teaching sessions.
-- `GET /api/sessions/:id/exchange` — Get session exchange agreement and start readiness.
-- `POST /api/sessions/:id/return-skill` — Mentor proposes a return skill.
-- `POST /api/sessions/:id/return-skill/accept` — Learner confirms return exchange agreement.
-- `POST /api/sessions/:id/return-skill/reject` — Learner rejects return exchange terms.
-- `POST /api/sessions/:id/action` — Trigger state transitions (`START`, `CONFIRM_COMPLETION`, `CANCEL`, `DISPUTE`).
+- `GET /api/sessions` â€” List user's booked and teaching sessions.
+- `GET /api/sessions/:id/exchange` â€” Get session exchange agreement and start readiness.
+- `POST /api/sessions/:id/return-skill` â€” Mentor proposes a return skill.
+- `POST /api/sessions/:id/return-skill/accept` â€” Learner confirms return exchange agreement.
+- `POST /api/sessions/:id/return-skill/reject` â€” Learner rejects return exchange terms.
+- `POST /api/sessions/:id/action` â€” Trigger state transitions (`START`, `CONFIRM_COMPLETION`, `CANCEL`, `DISPUTE`).
 
 ### Video Classroom & Live Signaling
-- `GET /api/sessions/:id/video-token` — Authorize participant and issue room access credentials.
-- `GET /api/sessions/:id/signaling` — Poll WebRTC SDP offers/answers & ICE candidates.
-- `POST /api/sessions/:id/signaling` — Dispatch WebRTC signaling packet.
-- `GET & POST /api/sessions/:id/presence` — Sync live camera, mic, and screen-sharing state.
-- `GET & POST /api/sessions/:id/scratchpad` — Sync live collaborative code editor.
-- `GET & POST /api/sessions/:id/chat` — Send and retrieve persistent in-room chat messages.
-- `POST /api/sessions/:id/attendance` — Log telemetry events (`JOINED`, `LEFT`, `MUTED`, `VIDEO_ON`).
+- `GET /api/sessions/:id/video-token` â€” Authorize participant and issue room access credentials.
+- `GET /api/sessions/:id/signaling` â€” Poll WebRTC SDP offers/answers & ICE candidates.
+- `POST /api/sessions/:id/signaling` â€” Dispatch WebRTC signaling packet.
+- `GET & POST /api/sessions/:id/presence` â€” Sync live camera, mic, and screen-sharing state.
+- `GET & POST /api/sessions/:id/scratchpad` â€” Sync live collaborative code editor.
+- `GET & POST /api/sessions/:id/chat` â€” Send and retrieve persistent in-room chat messages.
+- `POST /api/sessions/:id/attendance` â€” Log telemetry events (`JOINED`, `LEFT`, `MUTED`, `VIDEO_ON`).
 
 ### Notifications & Learning Requests
-- `GET & POST /api/notifications` — Notification inbox list and dispatch.
-- `GET /api/notifications/unread-count` — Live unread notification counter.
-- `PATCH /api/notifications/:id/read` — Mark individual notification as read.
-- `POST /api/notifications/read-all` — Mark all user notifications as read.
-- `GET & POST /api/notifications/settings` — Notification preferences (in-app & email per category).
-- `POST /api/learning-requests/:id/accept-match` — YES Flow: Confirm matched course & reserve escrow credit.
-- `POST /api/learning-requests/:id/decline-match` — NO Flow: Keep request active in search queue.
+- `GET & POST /api/notifications` â€” Notification inbox list and dispatch.
+- `GET /api/notifications/unread-count` â€” Live unread notification counter.
+- `PATCH /api/notifications/:id/read` â€” Mark individual notification as read.
+- `POST /api/notifications/read-all` â€” Mark all user notifications as read.
+- `GET & POST /api/notifications/settings` â€” Notification preferences (in-app & email per category).
+- `POST /api/learning-requests/:id/accept-match` â€” YES Flow: Confirm matched course & reserve escrow credit.
+- `POST /api/learning-requests/:id/decline-match` â€” NO Flow: Keep request active in search queue.
 
 ### Admin & Operational Auditing
-- `GET /api/admin/reports/daily` — Daily report and lifetime platform metrics.
-- `GET /api/admin/reports/sessions` — Comprehensive sessions directory with search, filter, and pagination.
-- `GET /api/admin/reports/sessions/:id` — Deep-dive audit report of a specific session.
-- `GET /api/admin/reports/users` — User-wise activity, session tallies, and credit ledgers.
+- `GET /api/admin/reports/daily` â€” Daily report and lifetime platform metrics.
+- `GET /api/admin/reports/sessions` â€” Comprehensive sessions directory with search, filter, and pagination.
+- `GET /api/admin/reports/sessions/:id` â€” Deep-dive audit report of a specific session.
+- `GET /api/admin/reports/users` â€” User-wise activity, session tallies, and credit ledgers.
 
 ---
 
-## 👥 Demo Accounts & Test Scenarios
+## ðŸ‘¥ Demo Accounts & Test Scenarios
 
 > [!NOTE]
 > All passwords for seeded accounts are: `Password123!`
@@ -222,7 +222,7 @@ The application uses an ACID-compliant SQLite database with WAL mode enabled:
 | Role / Scenario | Email | Campus College | Verification Status & Features Tested |
 | :--- | :--- | :--- | :--- |
 | **Python Learner** | `ananya.reddy@campus.edu` | Godavari Institute of CS | Has open Python demand request & 4 Skill Credits. |
-| **Verified Python Mentor** | `rahul.reddy@campus.edu` | Andhra Institute of Tech | `PLATFORM_VERIFIED` (Score: 95%). Availability Mon/Wed/Fri 5–8 PM with a 5–6 PM booked session (tests 15-min gap & Smart Slot Finder). |
+| **Verified Python Mentor** | `rahul.reddy@campus.edu` | Andhra Institute of Tech | `PLATFORM_VERIFIED` (Score: 95%). Availability Mon/Wed/Fri 5â€“8 PM with a 5â€“6 PM booked session (tests 15-min gap & Smart Slot Finder). |
 | **Mentor + Student (Web3)** | `sai.kiran@campus.edu` | Krishna Valley Eng College | Verified in Python & Solidity; Learning Figma UI/UX. Tests multi-role credit earning and spending. |
 | **Pending Mentor** | `sravani@campus.edu` | Andhra Institute of Tech | `SELF_DECLARED` (Verification Pending). Tests *Verified Only* search filter toggle. |
 | **Design Mentor** | `bhavya.reddy@campus.edu` | Coastal Andhra University | Figma UI/UX Mentor (`PLATFORM_VERIFIED`). Tests return barter exchanges (Python $\leftrightarrow$ UI/UX). |
@@ -230,7 +230,7 @@ The application uses an ACID-compliant SQLite database with WAL mode enabled:
 
 ---
 
-## 🛠️ Installation & Local Setup
+## ðŸ› ï¸ Installation & Local Setup
 
 ### 1. Prerequisites
 - **Node.js** >= 18.0.0
@@ -248,7 +248,7 @@ Create a `.env` file in the root directory:
 ```env
 NEXT_PUBLIC_APP_NAME="SkillSwap Campus"
 NEXT_PUBLIC_APP_URL="http://localhost:3000"
-DATABASE_URL="./data/skillswap.db"
+DATABASE_URL="postgresql://user:pass@host/db?sslmode=require"
 AUTH_SECRET="skillswap-super-secret-jwt-key-for-local-development-min32bytes"
 GEMINI_API_KEY="" # Optional: Leave blank for curated local assessment bank fallback
 EMAIL_PROVIDER="development" # Options: resend | sendgrid | smtp | development
@@ -270,7 +270,7 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ---
 
-## 🧪 Automated Test Suites
+## ðŸ§ª Automated Test Suites
 
 The codebase includes 13 automated test suites covering 39 unit and integration tests:
 
@@ -280,21 +280,24 @@ node --test tests/session_tracking_notifications.test.js tests/admin_reporting.t
 ```
 
 ### Test Suite Breakdown
-1. `session_tracking_notifications.test.js` — State machine transitions, persistent audit timeline in `session_events`, multi-field search & filters, notifications inbox, unread counts, mentor allocation idempotency, and email delivery logging.
-2. `smart_slot_finder.test.js` — Availability vs. preference ranking, 15-min gap buffer calculation, double-booking race condition prevention.
-3. `fallback_discovery.test.js` — Staged discovery fallback (Inside-College $\rightarrow$ Outside-College $\rightarrow$ Request Pool).
-4. `return_skill_flow.test.js` — Pre-session exchange proposal, counter-proposal, learner acceptance, and session start lock.
-5. `video_classroom_signaling.test.js` — WebRTC SDP/ICE signaling, room presence, synced scratchpad, and chat message persistence.
-6. `learning_requests_video_session.test.js` — End-to-end demand request matching, classroom authorization, attendance logging, and settlement.
-7. `admin_reporting.test.js` — Daily operational report, user-wise activity, session classification, and dispute resolution.
-8. `flexible_auth_email_verification.test.js` — Campus email validation and registration invariants.
-9. `gemini_quiz_roadmap.test.js` — AI-generated and local fallback quiz generation and curriculum roadmaps.
-10. `role_auth_demo.test.js` — Clean authentication UI, bcrypt password hashes, and database idempotency.
-11. `pre_session_return.test.js` — Exchange agreement lifecycle, counter-proposals, and credit escrow reservation.
-12. `domain.test.js` — Data models and validation rules.
-13. `extension.test.js` — Verification extensions and API helpers.
+1. `session_tracking_notifications.test.js` â€” State machine transitions, persistent audit timeline in `session_events`, multi-field search & filters, notifications inbox, unread counts, mentor allocation idempotency, and email delivery logging.
+2. `smart_slot_finder.test.js` â€” Availability vs. preference ranking, 15-min gap buffer calculation, double-booking race condition prevention.
+3. `fallback_discovery.test.js` â€” Staged discovery fallback (Inside-College $\rightarrow$ Outside-College $\rightarrow$ Request Pool).
+4. `return_skill_flow.test.js` â€” Pre-session exchange proposal, counter-proposal, learner acceptance, and session start lock.
+5. `video_classroom_signaling.test.js` â€” WebRTC SDP/ICE signaling, room presence, synced scratchpad, and chat message persistence.
+6. `learning_requests_video_session.test.js` â€” End-to-end demand request matching, classroom authorization, attendance logging, and settlement.
+7. `admin_reporting.test.js` â€” Daily operational report, user-wise activity, session classification, and dispute resolution.
+8. `flexible_auth_email_verification.test.js` â€” Campus email validation and registration invariants.
+9. `gemini_quiz_roadmap.test.js` â€” AI-generated and local fallback quiz generation and curriculum roadmaps.
+10. `role_auth_demo.test.js` â€” Clean authentication UI, bcrypt password hashes, and database idempotency.
+11. `pre_session_return.test.js` â€” Exchange agreement lifecycle, counter-proposals, and credit escrow reservation.
+12. `domain.test.js` â€” Data models and validation rules.
+13. `extension.test.js` â€” Verification extensions and API helpers.
 
 ---
 
-## 📄 License
+## ðŸ“„ License
 MIT License. Developed for SkillSwap Campus & Recipro Protocol.
+
+
+

@@ -1,14 +1,10 @@
-const test = require('node:test');
+﻿const test = require('node:test');
 const assert = require('node:assert/strict');
-const Database = require('better-sqlite3');
-const path = require('path');
+const db = require('./test-db');
 
-const dbPath = path.join(__dirname, '..', 'data', 'skillswap.db');
 
-test('SkillSwap Campus — Post-Session Peer Rating & Reputation Engine Suite', async (t) => {
-  const db = new Database(dbPath);
-  db.pragma('journal_mode = WAL');
-  db.pragma('foreign_keys = ON');
+test('SkillSwap Campus â€” Post-Session Peer Rating & Reputation Engine Suite', async (t) => {
+  const db = db  /* PostgreSQL via test-db.js */;
 
   const rand = Math.random().toString(36).substring(2, 8);
   const mentorId = `usr-mentor-rate-${rand}`;
@@ -142,3 +138,4 @@ test('SkillSwap Campus — Post-Session Peer Rating & Reputation Engine Suite', 
 
   db.close();
 });
+

@@ -1,18 +1,11 @@
-const test = require('node:test');
+﻿const test = require('node:test');
 const assert = require('node:assert');
-const Database = require('better-sqlite3');
-const path = require('path');
+const db = require('./test-db');
 
-const dbPath = path.join(__dirname, '../data/skillswap.db');
 
-function getFreshDb() {
-  const db = new Database(dbPath);
-  db.pragma('journal_mode = WAL');
-  db.pragma('foreign_keys = ON');
-  return db;
-}
+function getFreshDb() { return db; }
 
-test('SkillSwap Campus — Return Skill Flow, Learner Confirmation & Session Entry Gate Suite', async (t) => {
+test('SkillSwap Campus â€” Return Skill Flow, Learner Confirmation & Session Entry Gate Suite', async (t) => {
   const db = getFreshDb();
 
   // Test Entities Setup
@@ -156,3 +149,4 @@ test('SkillSwap Campus — Return Skill Flow, Learner Confirmation & Session Ent
   db.prepare(`DELETE FROM session_exchange_agreements WHERE session_id = ?`).run(testSessionId);
   db.prepare(`DELETE FROM session_participants WHERE session_id = ?`).run(testSessionId);
 });
+

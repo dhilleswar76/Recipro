@@ -1,9 +1,9 @@
-const test = require('node:test');
+﻿const test = require('node:test');
 const assert = require('node:assert');
-const Database = require('better-sqlite3');
+const db = require('./test-db');
 
 function setupTestDb() {
-  const db = new Database(':memory:');
+  const db = db  /* PostgreSQL via test-db.js */;
   db.exec(`
     CREATE TABLE users (
       id TEXT PRIMARY KEY,
@@ -85,7 +85,7 @@ function setupTestDb() {
 }
 
 // ----------------------------------------------------
-// Test 1: Stage 1 — Inside College Mentor Discovery
+// Test 1: Stage 1 â€” Inside College Mentor Discovery
 // ----------------------------------------------------
 test('Stage 1: Inside College Mentor is discovered first when available', () => {
   const db = setupTestDb();
@@ -130,7 +130,7 @@ test('Stage 1: Inside College Mentor is discovered first when available', () => 
 });
 
 // ----------------------------------------------------
-// Test 2: Stage 2 — Outside College Fallback when Inside is Empty
+// Test 2: Stage 2 â€” Outside College Fallback when Inside is Empty
 // ----------------------------------------------------
 test('Stage 2: Outside College Fallback activates when no inside-college mentor exists', () => {
   const db = setupTestDb();
@@ -170,7 +170,7 @@ test('Stage 2: Outside College Fallback activates when no inside-college mentor 
 });
 
 // ----------------------------------------------------
-// Test 3: Stage 3 — No Mentor Found in Entire Network
+// Test 3: Stage 3 â€” No Mentor Found in Entire Network
 // ----------------------------------------------------
 test('Stage 3: No Mentor Found anywhere in network triggers Learner Request System', () => {
   const db = setupTestDb();
@@ -207,7 +207,7 @@ test('Stage 3: No Mentor Found anywhere in network triggers Learner Request Syst
 });
 
 // ----------------------------------------------------
-// Test 4: Stage 4 — Future Monitoring & Automatic Notification Dispatch
+// Test 4: Stage 4 â€” Future Monitoring & Automatic Notification Dispatch
 // ----------------------------------------------------
 test('Stage 4: New mentor joining triggers automatic notification to waiting learners', () => {
   const db = setupTestDb();
@@ -255,3 +255,4 @@ test('Stage 4: New mentor joining triggers automatic notification to waiting lea
   assert.strictEqual(updatedReq.status, 'MATCHED');
   assert.strictEqual(updatedReq.matched_teacher_id, 'u-cam-mentor');
 });
+

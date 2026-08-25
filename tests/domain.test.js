@@ -1,6 +1,6 @@
-const test = require('node:test');
+﻿const test = require('node:test');
 const assert = require('node:assert');
-const Database = require('better-sqlite3');
+const db = require('./test-db');
 
 function calculateBayesianRating(ratings, priorMean = 4.5, priorWeight = 3) {
   if (ratings.length === 0) return priorMean;
@@ -48,31 +48,43 @@ test('Deterministic Skill NLP Extractor Invariant Test', () => {
   assert.ok(skillNames.includes('Node.js'), 'Should extract Node.js');
 });
 
-test('Session State Machine & Escrow Double Settlement Guard', () => {
-  const db = new Database(':memory:');
-  db.exec(`
-    CREATE TABLE skill_credit_accounts (
-      id TEXT PRIMARY KEY,
-      user_id TEXT UNIQUE NOT NULL,
-      balance INTEGER NOT NULL DEFAULT 3,
-      escrow_balance INTEGER NOT NULL DEFAULT 0
-    );
-  `);
+test('Session State Machine & Escrow Double Settlement Guard', async (t) => {
+  const runId = Date.now();
+  const aliceId = `test-alice-${runId}`;
+  const rahulId = `test-rahul-${runId}`;
 
-  db.prepare("INSERT INTO skill_credit_accounts (id, user_id, balance, escrow_balance) VALUES ('acc-1', 'u-alice', 3, 0)").run();
-  db.prepare("INSERT INTO skill_credit_accounts (id, user_id, balance, escrow_balance) VALUES ('acc-2', 'u-rahul', 0, 0)").run();
+  // Setup: insert isolated test users and credit accounts
+  await db.run(
+    `INSERT INTO users (id, email, password_hash, role, user_type) VALUES ($1,$2,'hash','STUDENT','TEACHER_LEARNER'),($3,$4,'hash','STUDENT','TEACHER_LEARNER')`,
+    [aliceId, `alice-${runId}@test.edu`, rahulId, `rahul-${runId}@test.edu`]
+  );
+  await db.run(
+    `INSERT INTO skill_credit_accounts (id, user_id, balance, escrow_balance) VALUES ($1,$2,3,0),($3,$4,0,0)`,
+    [`acc-a-${runId}`, aliceId, `acc-r-${runId}`, rahulId]
+  );
 
   // 1. Escrow Reservation
-  db.prepare("UPDATE skill_credit_accounts SET balance = balance - 1, escrow_balance = escrow_balance + 1 WHERE user_id = 'u-alice'").run();
-  
-  const aliceAcc = db.prepare("SELECT balance, escrow_balance FROM skill_credit_accounts WHERE user_id = 'u-alice'").get();
-  assert.strictEqual(aliceAcc.balance, 2, 'Alice balance should decrease to 2');
-  assert.strictEqual(aliceAcc.escrow_balance, 1, 'Alice escrow balance should be 1');
+  await db.run(
+    `UPDATE skill_credit_accounts SET balance = balance - 1, escrow_balance = escrow_balance + 1 WHERE user_id = $1`,
+    [aliceId]
+  );
+  const aliceAcc = await db.get(`SELECT balance, escrow_balance FROM skill_credit_accounts WHERE user_id = $1`, [aliceId]);
+  assert.strictEqual(Number(aliceAcc.balance), 2, 'Alice balance should decrease to 2');
+  assert.strictEqual(Number(aliceAcc.escrow_balance), 1, 'Alice escrow balance should be 1');
 
   // 2. Settlement Release
-  db.prepare("UPDATE skill_credit_accounts SET escrow_balance = escrow_balance - 1 WHERE user_id = 'u-alice'").run();
-  db.prepare("UPDATE skill_credit_accounts SET balance = balance + 1 WHERE user_id = 'u-rahul'").run();
+  await db.run(`UPDATE skill_credit_accounts SET escrow_balance = escrow_balance - 1 WHERE user_id = $1`, [aliceId]);
+  await db.run(`UPDATE skill_credit_accounts SET balance = balance + 1 WHERE user_id = $1`, [rahulId]);
 
-  const rahulAcc = db.prepare("SELECT balance FROM skill_credit_accounts WHERE user_id = 'u-rahul'").get();
-  assert.strictEqual(rahulAcc.balance, 1, 'Rahul should receive 1 settled Skill Credit');
+  const rahulAcc = await db.get(`SELECT balance FROM skill_credit_accounts WHERE user_id = $1`, [rahulId]);
+  assert.strictEqual(Number(rahulAcc.balance), 1, 'Rahul should receive 1 settled Skill Credit');
+
+  // Cleanup
+  await db.run(`DELETE FROM skill_credit_accounts WHERE user_id IN ($1,$2)`, [aliceId, rahulId]);
+  await db.run(`DELETE FROM users WHERE id IN ($1,$2)`, [aliceId, rahulId]);
+  await db.close();
 });
+
+
+function calculateBayesianRating(ratings, priorMean = 4.5, priorWeight = 3) {
+  if (ratings.length === 0) return priorMean;

@@ -1,16 +1,9 @@
-const test = require('node:test');
+﻿const test = require('node:test');
 const assert = require('node:assert');
-const Database = require('better-sqlite3');
-const path = require('path');
+const db = require('./test-db');
 
-const dbPath = path.join(__dirname, '../data/skillswap.db');
 
-function getFreshDb() {
-  const db = new Database(dbPath);
-  db.pragma('journal_mode = WAL');
-  db.pragma('foreign_keys = ON');
-  return db;
-}
+function getFreshDb() { return db; }
 
 const CREDIT_RATE_PER_HOUR = 1;
 function calculateRequiredCredits(durationHours = 1.0) {
@@ -531,3 +524,4 @@ test('Pre-Session Skill Return Confirmation Test Suite', async (t) => {
     assert.strictEqual(agreement.return_type, 'SKILL');
   });
 });
+

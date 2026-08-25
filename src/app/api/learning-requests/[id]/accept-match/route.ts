@@ -4,7 +4,6 @@ import { getLearningRequestDetail } from '@/lib/learning-requests';
 import { reserveEscrowCredits, recordSessionEvent } from '@/lib/state-machine';
 import { NotificationService } from '@/lib/notifications';
 import { withTransaction } from '@/lib/postgres';
-import { getDb } from '@/lib/db';
 
 export async function POST(
   req: NextRequest,

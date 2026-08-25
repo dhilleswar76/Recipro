@@ -1,4 +1,4 @@
-# ARCHITECTURE — SkillSwap Campus System Design
+﻿# ARCHITECTURE â€” SkillSwap Campus System Design
 
 ```
 +----------------------------------------------------------------------------------------------------+
@@ -22,7 +22,7 @@
                  v                                                           v
 +-------------------------------------------------+  +-----------------------------------------------+
 |         Relational Persistence Layer            |  |             Web3 & Smart Contracts            |
-|       (SQLite / Prisma / Better-SQLite3)        |  |          (Solidity ^0.8.20 / Hardhat)         |
+|       (PostgreSQL / pg / Render)        |  |          (Solidity ^0.8.20 / Hardhat)         |
 |  - Users, Profiles, Skills, Goals, Availability |  |  - SkillCreditEscrow.sol (Pausable, Lock)     |
 |  - Sessions, Ledger, Ratings, Credentials       |  |  - VerifiableCredentialNFT.sol (ERC721/1155)  |
 |  - Study Groups, Notes, Flashcards, Disputes    |  |  - SkillSwapAnchor.sol (Merkle Root Anchors)  |
@@ -49,3 +49,4 @@
 
 4. **Zero-Downtime Resilience**:
    - Built-in TypeScript fallback engines guarantee full search, matching, and fraud risk functionality even if Python or external AI APIs are unreachable.
+

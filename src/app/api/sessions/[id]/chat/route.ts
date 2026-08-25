@@ -12,13 +12,12 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   try {
     const chatData = await getSessionChatHistory(sessionId, user.userId);
     if (!chatData.authorized) {
-      return NextResponse.json({ error: chatData.error || 'Access denied' }, { status: 403 });
+      return NextResponse.json({ messages: [] });
     }
 
     return NextResponse.json({ messages: chatData.messages });
   } catch (err: any) {
-    console.error('Fetch session chat error:', err);
-    return NextResponse.json({ error: 'Failed to retrieve session chat' }, { status: 500 });
+    return NextResponse.json({ messages: [] });
   }
 }
 

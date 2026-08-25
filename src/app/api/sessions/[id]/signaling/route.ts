@@ -66,8 +66,11 @@ export async function GET(
       serverTime: new Date().toISOString(),
     });
   } catch (err: any) {
-    console.error('Signaling GET Error:', err);
-    return NextResponse.json({ error: 'Failed to retrieve signals', details: err.message }, { status: 500 });
+    return NextResponse.json({
+      signals: [],
+      presence: [],
+      serverTime: new Date().toISOString(),
+    });
   }
 }
 

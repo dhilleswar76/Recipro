@@ -12,14 +12,28 @@ const VALID_TRANSITIONS: Record<SessionState, SessionState[]> = {
 };
 const makeId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
 
-export async function reserveEscrowCredits(learnerId: string, creditsAmount: number, sessionId: string, idempotencyKey: string): Promise<{ success: boolean; message: string }> {
-  const account = (await query<{ balance: number }>('SELECT balance FROM skill_credit_accounts WHERE user_id = $1', [learnerId])).rows[0];
-  if (!account || Number(account.balance) < creditsAmount) return { success: false, message: `Insufficient Skill Credits. You have ${account?.balance || 0} credits, but ${creditsAmount} is required.` };
-  await withTransaction(async (client) => {
+export async function reserveEscrowCredits(
+  learnerId: string,
+  creditsAmount: number,
+  sessionId: string,
+  idempotencyKey: string,
+  txClient?: any
+): Promise<{ success: boolean; message: string }> {
+  const runner = txClient ? txClient.query.bind(txClient) : query;
+  const account = (await runner('SELECT balance FROM skill_credit_accounts WHERE user_id = $1', [learnerId])).rows[0];
+  if (!account || Number(account.balance) < creditsAmount) {
+    return { success: false, message: `Insufficient Skill Credits. You have ${account?.balance || 0} credits, but ${creditsAmount} is required.` };
+  }
+  const executeReserve = async (client: any) => {
     if ((await client.query('SELECT id FROM credit_transactions WHERE idempotency_key = $1', [idempotencyKey])).rowCount) return;
     await client.query('UPDATE skill_credit_accounts SET balance = balance - $1, escrow_balance = escrow_balance + $2, updated_at = CURRENT_TIMESTAMP WHERE user_id = $3', [creditsAmount, creditsAmount, learnerId]);
     await client.query(`INSERT INTO credit_transactions (id, reference_session_id, sender_id, receiver_id, amount, transaction_type, status, idempotency_key) VALUES ($1, $2, $3, NULL, $4, 'ESCROW_RESERVE', 'SETTLED', $5)`, [makeId('tx'), sessionId, learnerId, creditsAmount, idempotencyKey]);
-  });
+  };
+  if (txClient) {
+    await executeReserve(txClient);
+  } else {
+    await withTransaction(executeReserve);
+  }
   return { success: true, message: 'Credits reserved in escrow' };
 }
 
@@ -137,11 +151,33 @@ export async function transitionSessionState(sessionId: string, targetState: Ses
   if (targetState === 'CANCELLED') { await refundEscrowCredits(session.learner_id, session.credits_amount, session.id, metadata?.reason || 'Cancelled'); await query(`UPDATE session_exchange_agreements SET status = 'CANCELLED', updated_at = CURRENT_TIMESTAMP WHERE session_id = $1`, [sessionId]); await query(`UPDATE sessions SET status = 'CANCELLED', cancellation_reason = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`, [metadata?.reason || 'Cancelled', sessionId]); await recordSessionEvent(sessionId, actorUserId, 'CANCELLED', 'Session Cancelled', metadata?.reason ? `Session cancelled. Reason: ${metadata.reason}` : 'Session was cancelled. Escrow credits refunded.', currentState, 'CANCELLED', metadata); await notify(teacher ? session.learner_id : session.teacher_id, 'Session Cancelled', `The session was cancelled: ${metadata?.reason || 'Cancelled by participant'}. Any reserved credits have been refunded.`, 'SESSION_CANCELLED', `/sessions/${sessionId}`); return { success: true, previousState: currentState, newState: 'CANCELLED', sessionId, message: 'Session cancelled and credits refunded to learner' }; }
   if (targetState === 'ACCEPTED') { if (!teacher && !privileged) return { success: false, previousState: currentState, newState: currentState, sessionId, message: 'Only the mentor can accept this session request' }; await query(`UPDATE sessions SET status = 'ACCEPTED', updated_at = CURRENT_TIMESTAMP WHERE id = $1`, [sessionId]); await recordSessionEvent(sessionId, actorUserId, 'ACCEPTED', 'Session Accepted by Mentor', 'The mentor has accepted the session booking request.', currentState, 'ACCEPTED'); await notify(session.learner_id, 'Session Request Accepted!', 'Your mentor accepted the session. You can now review exchange terms or enter the classroom when scheduled.', 'SESSION_ACCEPTED', `/sessions/${sessionId}`); return { success: true, previousState: currentState, newState: 'ACCEPTED', sessionId, message: 'Session accepted by mentor' }; }
   if (targetState === 'IN_PROGRESS') { const agreement = (await query('SELECT * FROM session_exchange_agreements WHERE session_id = $1', [sessionId])).rows[0] as any; if (!agreement || agreement.status !== 'ACCEPTED') return { success: false, previousState: currentState, newState: currentState, sessionId, message: 'Pre-session exchange confirmation required. The mentor and learner must confirm the return skill or credit terms before starting.' }; await query(`UPDATE sessions SET status = 'IN_PROGRESS', updated_at = CURRENT_TIMESTAMP WHERE id = $1`, [sessionId]); await recordSessionEvent(sessionId, actorUserId, 'STARTED', 'Session Started Live', 'Participants joined the live collaborative classroom.', currentState, 'IN_PROGRESS'); return { success: true, previousState: currentState, newState: 'IN_PROGRESS', sessionId, message: 'Session is now live in progress' }; }
-  if (targetState === 'PENDING_CONFIRMATION' || targetState === 'COMPLETED') { const learnerConfirmed = learner || privileged ? 1 : session.learner_confirmed, teacherConfirmed = teacher || privileged ? 1 : session.teacher_confirmed; if ((learnerConfirmed === 1 && teacherConfirmed === 1) || privileged) { await query(`UPDATE sessions SET learner_confirmed = 1, teacher_confirmed = 1, status = 'COMPLETED', updated_at = CURRENT_TIMESTAMP WHERE id = $1`, [sessionId]); const settled = await settleSessionCredits(sessionId); await recordSessionEvent(sessionId, actorUserId, 'CREDITS_SETTLED', 'Session Completed & Credits Settled', 'Both participants confirmed completion. Escrow credits successfully transferred.', currentState, 'CREDIT_SETTLED', { txHash: settled.txHash }); await notify(session.teacher_id, 'Skill Credit Earned!', `Your mentoring session is complete. ${session.credits_amount || 1} Skill Credit was added to your balance.`, 'CREDIT_SETTLED', '/wallet'); await notify(session.learner_id, 'Session Completed', 'Your learning session has been finalized and settled. Don\'t forget to leave a review!', 'SESSION_COMPLETED', `/sessions/${sessionId}`); return { success: true, previousState: currentState, newState: 'CREDIT_SETTLED', sessionId, txHash: settled.txHash, message: 'Session confirmed complete by both parties. Credits settled!' }; } await query(`UPDATE sessions SET learner_confirmed = $1, teacher_confirmed = $2, status = 'PENDING_CONFIRMATION', updated_at = CURRENT_TIMESTAMP WHERE id = $3`, [learnerConfirmed, teacherConfirmed, sessionId]); await recordSessionEvent(sessionId, actorUserId, 'CONFIRMED', 'Completion Confirmed', `${teacher ? 'Mentor' : 'Learner'} confirmed session completion. Waiting for counterparty confirmation.`, currentState, 'PENDING_CONFIRMATION'); await notify(teacher ? session.learner_id : session.teacher_id, 'Session Completion Awaiting Confirmation', 'The other participant marked the session as complete. Please confirm completion to finalize escrow settlement.', 'SESSION_COMPLETION_PENDING', `/sessions/${sessionId}`); return { success: true, previousState: currentState, newState: 'PENDING_CONFIRMATION', sessionId, message: 'Your confirmation was recorded. Waiting for the other participant to confirm.' }; }
+  if (targetState === 'PENDING_CONFIRMATION' || targetState === 'COMPLETED') {
+    const learnerConfirmed = learner || privileged ? true : Boolean(session.learner_confirmed);
+    const teacherConfirmed = teacher || privileged ? true : Boolean(session.teacher_confirmed);
+    if ((learnerConfirmed === true && teacherConfirmed === true) || privileged) {
+      await query(`UPDATE sessions SET learner_confirmed = true, teacher_confirmed = true, status = 'COMPLETED', updated_at = CURRENT_TIMESTAMP WHERE id = $1`, [sessionId]);
+      const settled = await settleSessionCredits(sessionId);
+      await recordSessionEvent(sessionId, actorUserId, 'CREDITS_SETTLED', 'Session Completed & Credits Settled', 'Both participants confirmed completion. Escrow credits successfully transferred.', currentState, 'CREDIT_SETTLED', { txHash: settled.txHash });
+      await notify(session.teacher_id, 'Skill Credit Earned!', `Your mentoring session is complete. ${session.credits_amount || 1} Skill Credit was added to your balance.`, 'CREDIT_SETTLED', '/wallet');
+      await notify(session.learner_id, 'Session Completed', 'Your learning session has been finalized and settled. Don\'t forget to leave a review!', 'SESSION_COMPLETED', `/sessions/${sessionId}`);
+      return { success: true, previousState: currentState, newState: 'CREDIT_SETTLED', sessionId, txHash: settled.txHash, message: 'Session confirmed complete by both parties. Credits settled!' };
+    }
+    await query(`UPDATE sessions SET learner_confirmed = $1, teacher_confirmed = $2, status = 'PENDING_CONFIRMATION', updated_at = CURRENT_TIMESTAMP WHERE id = $3`, [learnerConfirmed, teacherConfirmed, sessionId]);
+    await recordSessionEvent(sessionId, actorUserId, 'CONFIRMED', 'Completion Confirmed', `${teacher ? 'Mentor' : 'Learner'} confirmed session completion. Waiting for counterparty confirmation.`, currentState, 'PENDING_CONFIRMATION');
+    await notify(teacher ? session.learner_id : session.teacher_id, 'Session Completion Awaiting Confirmation', 'The other participant marked the session as complete. Please confirm completion to finalize escrow settlement.', 'SESSION_COMPLETION_PENDING', `/sessions/${sessionId}`);
+    return { success: true, previousState: currentState, newState: 'PENDING_CONFIRMATION', sessionId, message: 'Your confirmation was recorded. Waiting for the other participant to confirm.' };
+  }
   if (targetState === 'DISPUTED') { await query(`UPDATE sessions SET status = 'DISPUTED', updated_at = CURRENT_TIMESTAMP WHERE id = $1`, [sessionId]); await recordSessionEvent(sessionId, actorUserId, 'DISPUTED', 'Session Flagged for Dispute', metadata?.reason ? `Dispute filed: ${metadata.reason}` : 'Session was flagged for dispute. Escrow credits frozen pending review.', currentState, 'DISPUTED', metadata); return { success: true, previousState: currentState, newState: 'DISPUTED', sessionId, message: 'Session flagged for dispute. Escrow credits frozen pending moderator review.' }; }
   return { success: false, previousState: currentState, newState: currentState, sessionId, message: 'Unhandled transition state' };
 }
 
-export async function recordSessionEvent(sessionId: string, actorId: string | null, eventType: string, title: string, description: string, previousState?: string, newState?: string, metadata?: any): Promise<void> { try { await query(`INSERT INTO session_events (id, session_id, actor_id, event_type, title, description, previous_state, new_state, metadata_json, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP)`, [makeId('sev'), sessionId, actorId, eventType, title, description, previousState || null, newState || null, JSON.stringify(metadata || {})]); } catch (error) { console.error('Record Session Event Error:', error); } }
+export async function recordSessionEvent(sessionId: string, actorId: string | null, eventType: string, title: string, description: string, previousState?: string, newState?: string, metadata?: any, txClient?: any): Promise<void> {
+  try {
+    const runner = txClient ? txClient.query.bind(txClient) : query;
+    await runner(`INSERT INTO session_events (id, session_id, actor_id, event_type, title, description, previous_state, new_state, metadata_json, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP)`, [makeId('sev'), sessionId, actorId, eventType, title, description, previousState || null, newState || null, JSON.stringify(metadata || {})]);
+  } catch (error) {
+    console.error('Record Session Event Error:', error);
+  }
+}
 export async function getSessionEvents(sessionId: string): Promise<any[]> { try { return (await query(`SELECT se.*, p.display_name AS actor_name FROM session_events se LEFT JOIN profiles p ON se.actor_id = p.user_id WHERE se.session_id = $1 ORDER BY se.created_at ASC`, [sessionId])).rows; } catch { return []; } }
 export function canTransition(currentState: SessionState, targetState: SessionState, actorRole: 'TEACHER' | 'LEARNER' | 'ADMIN'): { allowed: boolean; reason?: string } { if (!(VALID_TRANSITIONS[currentState] || []).includes(targetState) && actorRole !== 'ADMIN') return { allowed: false, reason: `Cannot transition from ${currentState} to ${targetState}` }; if (targetState === 'ACCEPTED' && actorRole !== 'TEACHER' && actorRole !== 'ADMIN') return { allowed: false, reason: 'Only the mentor can accept a session' }; return { allowed: true }; }

@@ -330,13 +330,13 @@ export async function POST(req: NextRequest) {
         user.userId,
       ]);
 
-      // 3. Reserve Learner Escrow Credits (Now references existing sessionId)
-      const escrowRes = await reserveEscrowCredits(user.userId, creditsAmount, sessionId, idempotencyKey);
+      // 3. Reserve Learner Escrow Credits (passing client to keep within atomic transaction)
+      const escrowRes = await reserveEscrowCredits(user.userId, creditsAmount, sessionId, idempotencyKey, client);
       if (!escrowRes.success) {
         throw new Error(`INSUFFICIENT_CREDITS:${escrowRes.message}`);
       }
 
-      // 4. Record Initial Lifecycle Audit Event
+      // 4. Record Initial Lifecycle Audit Event (passing client to keep within atomic transaction)
       await recordSessionEvent(
         sessionId,
         user.userId,
@@ -344,7 +344,9 @@ export async function POST(req: NextRequest) {
         'Session Requested',
         `Learner requested a ${durationHours}h ${mode} session with 1 credit reserved in escrow.`,
         undefined,
-        'REQUESTED'
+        'REQUESTED',
+        undefined,
+        client
       );
 
       // 5. Notify Teacher

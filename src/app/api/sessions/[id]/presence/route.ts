@@ -72,9 +72,9 @@ export async function POST(
       user.userId,
       displayName,
       role,
-      cameraOn !== undefined ? (cameraOn ? 1 : 0) : 1,
-      micOn !== undefined ? (micOn ? 1 : 0) : 1,
-      screenSharing !== undefined ? (screenSharing ? 1 : 0) : 0,
+      cameraOn !== undefined ? Boolean(cameraOn) : true,
+      micOn !== undefined ? Boolean(micOn) : true,
+      screenSharing !== undefined ? Boolean(screenSharing) : false,
       status || 'CONNECTED',
     ]);
 

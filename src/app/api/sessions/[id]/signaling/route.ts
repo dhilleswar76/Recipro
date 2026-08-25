@@ -109,7 +109,7 @@ export async function POST(
       await client.query(`
         INSERT INTO session_signaling_messages (
           id, session_id, sender_id, receiver_id, signal_type, payload_json, is_consumed, created_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, 0, CURRENT_TIMESTAMP)
+        ) VALUES ($1, $2, $3, $4, $5, $6, false, CURRENT_TIMESTAMP)
       `, [
         signalId,
         sessionId,
@@ -120,6 +120,10 @@ export async function POST(
       ]);
 
       // 2. Update room presence
+      const cam = cameraOn !== undefined ? Boolean(cameraOn) : true;
+      const mic = micOn !== undefined ? Boolean(micOn) : true;
+      const scr = screenSharing !== undefined ? Boolean(screenSharing) : false;
+
       await client.query(`
         INSERT INTO session_room_presence (
           id, session_id, user_id, display_name, role, camera_on, mic_on, screen_sharing, status, last_ping
@@ -127,9 +131,9 @@ export async function POST(
         ON CONFLICT(session_id, user_id) DO UPDATE SET
           display_name = excluded.display_name,
           role = excluded.role,
-          camera_on = COALESCE($9, session_room_presence.camera_on),
-          mic_on = COALESCE($10, session_room_presence.mic_on),
-          screen_sharing = COALESCE($11, session_room_presence.screen_sharing),
+          camera_on = excluded.camera_on,
+          mic_on = excluded.mic_on,
+          screen_sharing = excluded.screen_sharing,
           status = 'CONNECTED',
           last_ping = CURRENT_TIMESTAMP
       `, [
@@ -138,12 +142,9 @@ export async function POST(
         user.userId,
         displayName,
         role,
-        cameraOn !== undefined ? (cameraOn ? 1 : 0) : 1,
-        micOn !== undefined ? (micOn ? 1 : 0) : 1,
-        screenSharing !== undefined ? (screenSharing ? 1 : 0) : 0,
-        cameraOn !== undefined ? (cameraOn ? 1 : 0) : null,
-        micOn !== undefined ? (micOn ? 1 : 0) : null,
-        screenSharing !== undefined ? (screenSharing ? 1 : 0) : null
+        cam,
+        mic,
+        scr
       ]);
     });
 

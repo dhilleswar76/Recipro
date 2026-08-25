@@ -28,11 +28,20 @@ export async function GET(
     const signalsQuery = `
       SELECT id, session_id, sender_id, receiver_id, signal_type, payload_json, created_at
       FROM session_signaling_messages
-      WHERE session_id = $1 AND sender_id != $2
+      WHERE session_id = $1 AND sender_id != $2 AND is_consumed = false AND created_at >= CURRENT_TIMESTAMP - INTERVAL '30 seconds'
       ORDER BY created_at ASC
-      LIMIT 100
+      LIMIT 20
     `;
     const rawSignals = (await query(signalsQuery, [sessionId, user.userId])).rows as any[];
+
+    if (rawSignals.length > 0) {
+      const ids = rawSignals.map(r => r.id);
+      await query(`
+        UPDATE session_signaling_messages 
+        SET is_consumed = true 
+        WHERE id = ANY($1::text[])
+      `, [ids]).catch(console.error);
+    }
 
     const signals = rawSignals.map((s) => ({
       id: s.id,

@@ -57,6 +57,7 @@ export default function LiveRoomPage() {
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
+  const remoteStreamRef = useRef<MediaStream | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const animationFrameRef = useRef<number | null>(null);
@@ -252,20 +253,27 @@ function processLearningGoal() {
     // Handle incoming opponent Audio & Video stream (individual tracks or bundled streams)
     pc.ontrack = (event) => {
       console.log('Received remote media track:', event.track.kind, event.streams);
-      let incomingStream: MediaStream | null = null;
-      if (event.streams && event.streams[0]) {
-        incomingStream = event.streams[0];
-      } else if (remoteVideoRef.current && remoteVideoRef.current.srcObject instanceof MediaStream) {
-        incomingStream = remoteVideoRef.current.srcObject;
-        incomingStream.addTrack(event.track);
-      } else {
-        incomingStream = new MediaStream([event.track]);
+      let stream = remoteStreamRef.current;
+      if (!stream) {
+        stream = new MediaStream();
+        remoteStreamRef.current = stream;
       }
 
-      if (remoteVideoRef.current && incomingStream) {
-        remoteVideoRef.current.srcObject = incomingStream;
-        remoteVideoRef.current.play().catch(e => console.log('Remote playback notice:', e));
+      // Add or replace track to avoid duplicate playback collisions
+      const existing = stream.getTracks().filter(t => t.kind === event.track.kind);
+      existing.forEach(t => stream?.removeTrack(t));
+      stream.addTrack(event.track);
+
+      if (remoteVideoRef.current && remoteVideoRef.current.srcObject !== stream) {
+        remoteVideoRef.current.srcObject = stream;
       }
+
+      if (remoteVideoRef.current) {
+        remoteVideoRef.current.play().catch(e => {
+          if (e.name !== 'AbortError') console.log('Remote playback note:', e);
+        });
+      }
+
       setHasRemotePeerStream(true);
       setConnectionState('CONNECTED');
     };
@@ -328,10 +336,11 @@ function processLearningGoal() {
       if (data.presence) {
         setRoomPresence(data.presence);
 
-        // Auto-initiate WebRTC offer as soon as peer is detected in presence
+        // Auto-initiate WebRTC offer only if not yet connected and politely negotiated
         const otherParticipantInPresence = data.presence.find((p: any) => p.user_id !== user?.id);
         const now = Date.now();
-        if (otherParticipantInPresence && !hasRemotePeerStream && (now - lastOfferAttemptRef.current > 3000)) {
+        const shouldInitiate = isInitiatorRef.current || (user?.id && otherParticipantInPresence?.user_id && user.id < otherParticipantInPresence.user_id);
+        if (otherParticipantInPresence && !hasRemotePeerStream && shouldInitiate && (now - lastOfferAttemptRef.current > 5000)) {
           const pc = peerConnectionRef.current || createPeerConnection();
           if (pc.signalingState === 'stable') {
             initiateWebRTCCall(pc);

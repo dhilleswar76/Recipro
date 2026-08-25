@@ -1,18 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
 import { requireAuth } from '@/lib/auth';
 import { getLearningRequestDetail } from '@/lib/learning-requests';
 import { calculateAvailableSlots } from '@/lib/scheduling';
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
-  const authRes = requireAuth(req);
+  const authRes = await requireAuth(req);
   if ('errorResponse' in authRes) return authRes.errorResponse;
 
-  const db = getDb();
   const requestId = params.id;
 
   try {
-    const request = getLearningRequestDetail(db, requestId);
+    const request = await getLearningRequestDetail(requestId);
     if (!request) {
       return NextResponse.json({ error: 'Learning request not found' }, { status: 404 });
     }
@@ -30,7 +28,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     const now = new Date();
     const startDate = now.toISOString().split('T')[0];
 
-    const slotResult = calculateAvailableSlots({
+    const slotResult = await calculateAvailableSlots({
       teacherId: mentorId,
       learnerId: request.learnerId,
       skillId: request.skillId,

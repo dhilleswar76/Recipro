@@ -1,19 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { query } from '@/lib/postgres';
 import { requireRole } from '@/lib/auth';
 import { getSkillDemandAnalytics, findPotentialMentorsForSkill } from '@/lib/skill-gap';
 
 export async function GET(req: NextRequest) {
-  const authRes = requireRole(req, ['MODERATOR', 'ADMIN']);
+  const authRes = await requireRole(req, ['MODERATOR', 'ADMIN']);
   if ('errorResponse' in authRes) return authRes.errorResponse;
 
   const { searchParams } = new URL(req.url);
   const skillName = searchParams.get('skill');
 
-  const demand = getSkillDemandAnalytics();
+  const demand = await getSkillDemandAnalytics();
   let potentialMentors: any[] = [];
   if (skillName) {
-    potentialMentors = findPotentialMentorsForSkill(skillName);
+    potentialMentors = await findPotentialMentorsForSkill(skillName);
   }
 
   return NextResponse.json({
@@ -24,11 +24,10 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const authRes = requireRole(req, ['MODERATOR', 'ADMIN']);
+  const authRes = await requireRole(req, ['MODERATOR', 'ADMIN']);
   if ('errorResponse' in authRes) return authRes.errorResponse;
 
   const { user } = authRes;
-  const db = getDb();
 
   try {
     const body = await req.json();
@@ -38,24 +37,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing targetUserId or requestedSkillName' }, { status: 400 });
     }
 
-    const targetProfile = db.prepare('SELECT display_name FROM profiles WHERE user_id = ?').get(targetUserId) as { display_name: string } | undefined;
+    const targetProfile = (await query<{ display_name: string }>('SELECT display_name FROM profiles WHERE user_id = $1', [targetUserId])).rows[0];
 
     // Send high-priority mentor invitation notification
-    db.prepare(`
+    await query(`
       INSERT INTO notifications (id, user_id, title, message, type, link)
-      VALUES (?, ?, ?, ?, 'INFO', '/profile')
-    `).run(
+      VALUES ($1, $2, $3, $4, 'INFO', '/profile')
+    `, [
       `notif-${Date.now()}`,
       targetUserId,
       `Campus Invitation: Teach "${requestedSkillName}"!`,
       `Students at your campus have high demand for "${requestedSkillName}". Based on your related coursework & expertise, campus moderators invite you to take a quick skill assessment to become a verified mentor and earn Skill Credits!`
-    );
+    ]);
 
     // Audit log
-    db.prepare(`
+    await query(`
       INSERT INTO audit_logs (id, actor_id, action, target_type, target_id, new_state)
-      VALUES (?, ?, 'INVITE_POTENTIAL_MENTOR', 'USER', ?, ?)
-    `).run(`audit-${Date.now()}`, user.userId, targetUserId, requestedSkillName);
+      VALUES ($1, $2, 'INVITE_POTENTIAL_MENTOR', 'USER', $3, $4)
+    `, [`audit-${Date.now()}`, user.userId, targetUserId, requestedSkillName]);
 
     return NextResponse.json({
       success: true,

@@ -1,21 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { query } from '@/lib/postgres';
 import { requireAuth } from '@/lib/auth';
 
 export async function GET(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const authRes = requireAuth(req);
+  const authRes = await requireAuth(req);
   if ('errorResponse' in authRes) return authRes.errorResponse;
 
   const sessionId = params.id;
-  const db = getDb();
-
   try {
-    const pad = db.prepare(`
-      SELECT * FROM session_scratchpads WHERE session_id = ?
-    `).get(sessionId) as any;
+    const padResult = await query(`
+      SELECT * FROM session_scratchpads WHERE session_id = $1
+    `, [sessionId]);
+    const pad = padResult.rows[0] as any;
 
     if (!pad) {
       const defaultContent = `// SkillSwap Campus Live Collaborative Scratchpad\n// Topic: Mentoring Session Interactive Workspace\n\nfunction startSession() {\n  console.log("Welcome to your live SkillSwap peer classroom!");\n}\n`;
@@ -41,32 +40,30 @@ export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const authRes = requireAuth(req);
+  const authRes = await requireAuth(req);
   if ('errorResponse' in authRes) return authRes.errorResponse;
 
   const { user } = authRes;
   const sessionId = params.id;
-  const db = getDb();
-
   try {
     const body = await req.json();
     const { content, language } = body;
 
-    db.prepare(`
+    await query(`
       INSERT INTO session_scratchpads (id, session_id, content, language, updated_by, updated_at)
-      VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
       ON CONFLICT(session_id) DO UPDATE SET
         content = excluded.content,
         language = COALESCE(excluded.language, session_scratchpads.language),
         updated_by = excluded.updated_by,
         updated_at = CURRENT_TIMESTAMP
-    `).run(
+    `, [
       `pad-${sessionId}`,
       sessionId,
       content || '',
       language || 'javascript',
-      user.userId
-    );
+      user.userId,
+    ]);
 
     return NextResponse.json({ success: true });
   } catch (err: any) {

@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
 import { requireAuth } from '@/lib/auth';
 import { cancelLearningRequest } from '@/lib/learning-requests';
 
@@ -7,15 +6,14 @@ export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const authRes = requireAuth(req);
+  const authRes = await requireAuth(req);
   if ('errorResponse' in authRes) return authRes.errorResponse;
 
   const { user } = authRes;
-  const db = getDb();
   const requestId = params.id;
 
   try {
-    const success = cancelLearningRequest(db, requestId, user.userId);
+    const success = await cancelLearningRequest(requestId, user.userId);
     if (!success) {
       return NextResponse.json({ error: 'Failed to cancel request or unauthorized' }, { status: 400 });
     }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { query } from '@/lib/postgres';
 import { requireAuth } from '@/lib/auth';
 import { SubmitAssessmentSchema } from '@/lib/validations';
 import { evaluateSkillAssessment } from '@/lib/skill-verification';
@@ -38,11 +38,10 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const authRes = requireAuth(req);
+  const authRes = await requireAuth(req);
   if ('errorResponse' in authRes) return authRes.errorResponse;
 
   const { user } = authRes;
-  const db = getDb();
 
   try {
     const body = await req.json();
@@ -58,11 +57,11 @@ export async function POST(req: NextRequest) {
     const { skillId, targetLevel, answers } = parsed.data;
 
     // Check attempt limits (Max 3 attempts per skill within a 24-hour rolling window)
-    const recentAttempts = db.prepare(`
+    const recentAttempts = (await query(`
       SELECT created_at FROM skill_assessments
-      WHERE user_id = ? AND skill_id = ?
+      WHERE user_id = $1 AND skill_id = $2
       ORDER BY created_at DESC LIMIT 3
-    `).all(user.userId, skillId) as any[];
+    `, [user.userId, skillId])).rows as any[];
 
     if (recentAttempts.length >= 3) {
       const thirdRecent = recentAttempts[2];
@@ -77,7 +76,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Authoritative server-side evaluation
-    const evaluation = evaluateSkillAssessment({
+    const evaluation = await evaluateSkillAssessment({
       userId: user.userId,
       skillId,
       requestedProficiency: targetLevel,
@@ -86,8 +85,8 @@ export async function POST(req: NextRequest) {
 
     // If verified, trigger automatic notifications to waiting learners
     if (evaluation.passed) {
-      notifyLearnersOfNewMentor(user.userId, skillId);
-      evaluateActiveLearningRequests(db, { triggerSkillId: skillId });
+      await notifyLearnersOfNewMentor(user.userId, skillId);
+      await evaluateActiveLearningRequests({ triggerSkillId: skillId });
     }
 
     return NextResponse.json({

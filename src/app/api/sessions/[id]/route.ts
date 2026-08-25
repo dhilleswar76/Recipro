@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { query } from '@/lib/postgres';
 import { requireAuth } from '@/lib/auth';
 import { getSessionEvents, canTransition, SessionState } from '@/lib/state-machine';
 
@@ -7,15 +7,14 @@ export async function GET(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const authRes = requireAuth(req);
+  const authRes = await requireAuth(req);
   if ('errorResponse' in authRes) return authRes.errorResponse;
 
   const { user } = authRes;
-  const db = getDb();
   const sessionId = params.id;
 
   try {
-    const session = db.prepare(`
+    const session = (await query(`
       SELECT 
         s.*,
         sk.name as skill_name, sk.category as skill_category, sk.icon as skill_icon,
@@ -39,8 +38,8 @@ export async function GET(
       LEFT JOIN user_skills tus ON s.teacher_id = tus.user_id AND s.skill_id = tus.skill_id
       LEFT JOIN session_exchange_agreements sea ON s.id = sea.session_id
       LEFT JOIN disputes d ON s.id = d.session_id
-      WHERE s.id = ?
-    `).get(sessionId) as any;
+      WHERE s.id = $1
+    `, [sessionId])).rows[0] as any;
 
     if (!session) {
       return NextResponse.json({ error: 'Session not found' }, { status: 404 });
@@ -61,7 +60,7 @@ export async function GET(
       : 'LEARNER';
 
     // Fetch persistent lifecycle events
-    let events = getSessionEvents(sessionId);
+    let events = await getSessionEvents(sessionId);
 
     // If no events recorded yet (for legacy sessions), generate synthetic baseline events
     if (events.length === 0) {
@@ -149,19 +148,19 @@ export async function GET(
     }
 
     // Fetch existing ratings for this session
-    const userRating = db.prepare(`
+    const userRating = (await query(`
       SELECT r.*, p.display_name as rater_name
       FROM ratings r
       LEFT JOIN profiles p ON r.rater_id = p.user_id
-      WHERE r.session_id = ? AND r.rater_id = ?
-    `).get(sessionId, user.userId) as any;
+      WHERE r.session_id = $1 AND r.rater_id = $2
+    `, [sessionId, user.userId])).rows[0] as any;
 
-    const peerRating = db.prepare(`
+    const peerRating = (await query(`
       SELECT r.*, p.display_name as rater_name
       FROM ratings r
       LEFT JOIN profiles p ON r.rater_id = p.user_id
-      WHERE r.session_id = ? AND r.rater_id != ?
-    `).get(sessionId, user.userId) as any;
+      WHERE r.session_id = $1 AND r.rater_id != $2
+    `, [sessionId, user.userId])).rows[0] as any;
 
     return NextResponse.json({
       session: {

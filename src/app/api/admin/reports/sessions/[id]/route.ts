@@ -6,20 +6,20 @@ export async function GET(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const authRes = requireAdmin(req);
+  const authRes = await requireAdmin(req);
   if ('errorResponse' in authRes) return authRes.errorResponse;
 
   const { user } = authRes;
   const sessionId = params.id;
 
   try {
-    const report = getSessionDetailReport(sessionId);
+    const report = await getSessionDetailReport(sessionId);
 
     if (!report) {
       return NextResponse.json({ error: 'Session not found' }, { status: 404 });
     }
 
-    logAdminAction({
+    await logAdminAction({
       adminUserId: user.userId,
       action: 'ADMIN_VIEWED_SESSION_REPORT',
       targetType: 'SESSION_REPORT',

@@ -1,4 +1,4 @@
-import { getDb } from './db';
+import { query } from './postgres';
 import { getMentorQualityForSkill, MentorQualityResult } from './reputation';
 
 export interface MatchingWeights {
@@ -101,8 +101,7 @@ const PROFICIENCY_RANK: Record<string, number> = {
   'Expert': 4,
 };
 
-export function searchAndMatchCandidates(params: SearchParams, weights: MatchingWeights = DEFAULT_WEIGHTS): SearchMatchResult {
-  const db = getDb();
+export async function searchAndMatchCandidates(params: SearchParams, weights: MatchingWeights = DEFAULT_WEIGHTS): Promise<SearchMatchResult> {
   const q = (params.query || '').trim().toLowerCase();
   const requesterId = params.requesterUserId || '';
 
@@ -111,16 +110,16 @@ export function searchAndMatchCandidates(params: SearchParams, weights: Matching
   let requesterAvailability: Array<{ day_of_week: string; start_time: string; end_time: string }> = [];
 
   if (requesterId) {
-    const rProf = db.prepare('SELECT college FROM profiles WHERE user_id = ?').get(requesterId) as { college: string } | undefined;
+    const rProf = (await query<{ college: string }>('SELECT college FROM profiles WHERE user_id = $1', [requesterId])).rows[0];
     if (rProf) requesterCollege = (rProf.college || '').toLowerCase();
 
-    requesterGoals = db.prepare(`
-      SELECT skill_id, target_proficiency FROM learning_goals WHERE user_id = ?
-    `).all(requesterId) as Array<{ skill_id: string; target_proficiency: string }>;
+    requesterGoals = (await query<{ skill_id: string; target_proficiency: string }>(`
+      SELECT skill_id, target_proficiency FROM learning_goals WHERE user_id = $1
+    `, [requesterId])).rows;
 
-    requesterAvailability = db.prepare(`
-      SELECT day_of_week, start_time, end_time FROM availability_slots WHERE user_id = ?
-    `).all(requesterId) as Array<{ day_of_week: string; start_time: string; end_time: string }>;
+    requesterAvailability = (await query<{ day_of_week: string; start_time: string; end_time: string }>(`
+      SELECT day_of_week, start_time, end_time FROM availability_slots WHERE user_id = $1
+    `, [requesterId])).rows;
   }
 
   // ============================================================
@@ -130,7 +129,7 @@ export function searchAndMatchCandidates(params: SearchParams, weights: Matching
 
   if (q.length > 0) {
     // Check if query directly matches a user display name, email handle, or college ID
-    const personRows = db.prepare(`
+    const personRows = (await query(`
       SELECT 
         u.id as user_id, u.email, u.status, u.campus_id, COALESCE(u.user_type, 'TEACHER_LEARNER') as user_type,
         p.display_name, p.avatar, p.bio, p.college, p.major, p.year,
@@ -141,29 +140,29 @@ export function searchAndMatchCandidates(params: SearchParams, weights: Matching
       JOIN profiles p ON u.id = p.user_id
       LEFT JOIN reputations r ON u.id = r.user_id
       WHERE u.status = 'ACTIVE'
-        AND u.id != ?
+          AND u.id != $1
         AND (
-          LOWER(p.display_name) LIKE ?
-          OR LOWER(u.email) LIKE ?
-          OR LOWER(u.campus_id) LIKE ?
+          LOWER(p.display_name) LIKE $2
+          OR LOWER(u.email) LIKE $3
+          OR LOWER(u.campus_id) LIKE $4
         )
       LIMIT 5
-    `).all(requesterId, `%${q}%`, `${q}%`, `${q}%`) as any[];
+    `, [requesterId, `%${q}%`, `${q}%`, `${q}%`])).rows as any[];
 
     for (const pRow of personRows) {
       // Fetch skills taught by this person
-      const userSkills = db.prepare(`
+      const userSkills = (await query(`
         SELECT us.*, s.name as skill_name, s.category as skill_category
         FROM user_skills us
         JOIN skills s ON us.skill_id = s.id
-        WHERE us.user_id = ?
-      `).all(pRow.user_id) as any[];
+        WHERE us.user_id = $1
+      `, [pRow.user_id])).rows as any[];
 
-      const userAvail = db.prepare(`
+      const userAvail = (await query(`
         SELECT day_of_week, start_time, end_time
         FROM availability_slots
-        WHERE user_id = ?
-      `).all(pRow.user_id) as any[];
+        WHERE user_id = $1
+      `, [pRow.user_id])).rows as any[];
 
       const primarySkill = userSkills[0] || {
         skill_id: 'general',
@@ -182,7 +181,7 @@ export function searchAndMatchCandidates(params: SearchParams, weights: Matching
         campusTier = 'PARTNER_COLLEGE';
       }
 
-        const mentorQuality = getMentorQualityForSkill(pRow.user_id, primarySkill.skill_id);
+        const mentorQuality = await getMentorQualityForSkill(pRow.user_id, primarySkill.skill_id);
 
         knownPersonMatches.push({
           userId: pRow.user_id,
@@ -250,23 +249,24 @@ export function searchAndMatchCandidates(params: SearchParams, weights: Matching
   let filterConditions = [
     `u.status = 'ACTIVE'`,
     `COALESCE(u.user_type, 'TEACHER_LEARNER') IN ('TEACHER', 'TEACHER_LEARNER')`,
-    `u.id != ?`
+    `u.id != $1`
   ];
   let filterParams: any[] = [requesterId];
 
   // Skill keyword or category search
   if (q.length > 0) {
+    const searchParam = filterParams.length + 1;
     filterConditions.push(`(
-      LOWER(s.name) LIKE ? 
-      OR LOWER(s.category) LIKE ? 
-      OR LOWER(us.teaching_style) LIKE ?
-      OR LOWER(p.bio) LIKE ?
+      LOWER(s.name) LIKE $${searchParam}
+      OR LOWER(s.category) LIKE $${searchParam + 1}
+      OR LOWER(us.teaching_style) LIKE $${searchParam + 2}
+      OR LOWER(p.bio) LIKE $${searchParam + 3}
     )`);
     filterParams.push(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`);
   }
 
   if (params.skillCategory) {
-    filterConditions.push(`LOWER(s.category) = LOWER(?)`);
+    filterConditions.push(`LOWER(s.category) = LOWER($${filterParams.length + 1})`);
     filterParams.push(params.skillCategory);
   }
 
@@ -275,7 +275,7 @@ export function searchAndMatchCandidates(params: SearchParams, weights: Matching
   }
 
   if (params.minRating && params.minRating > 0) {
-    filterConditions.push(`COALESCE(r.bayesian_rating, 4.0) >= ?`);
+    filterConditions.push(`COALESCE(r.bayesian_rating, 4.0) >= $${filterParams.length + 1}`);
     filterParams.push(params.minRating);
   }
 
@@ -297,7 +297,7 @@ export function searchAndMatchCandidates(params: SearchParams, weights: Matching
     WHERE ${filterConditions.join(' AND ')}
   `;
 
-  const candidateRows = db.prepare(querySql).all(...filterParams) as any[];
+  const candidateRows = (await query(querySql, filterParams)).rows as any[];
 
   // ============================================================
   // STAGE 3: ML FEATURE CALCULATION & EXPLAINABILITY ENGINE
@@ -306,11 +306,11 @@ export function searchAndMatchCandidates(params: SearchParams, weights: Matching
 
   for (const row of candidateRows) {
     // 1. Availability overlap score
-    const userAvail = db.prepare(`
+    const userAvail = (await query(`
       SELECT day_of_week, start_time, end_time
       FROM availability_slots
-      WHERE user_id = ?
-    `).all(row.user_id) as any[];
+      WHERE user_id = $1
+    `, [row.user_id])).rows as any[];
 
     // If dayOfWeek filter applied, enforce hard availability filter
     if (params.dayOfWeek) {
@@ -412,7 +412,7 @@ export function searchAndMatchCandidates(params: SearchParams, weights: Matching
       explanationPoints.push(`✓ Classmate at your college (${row.college})`);
     }
 
-    const mentorQuality = getMentorQualityForSkill(row.user_id, row.skill_id);
+    const mentorQuality = await getMentorQualityForSkill(row.user_id, row.skill_id);
 
     skillMatches.push({
       userId: row.user_id,
@@ -488,7 +488,7 @@ export function searchAndMatchCandidates(params: SearchParams, weights: Matching
 }
 
 export async function searchAndMatchCandidatesAsync(params: SearchParams, weights: MatchingWeights = DEFAULT_WEIGHTS): Promise<SearchMatchResult> {
-  const baseResult = searchAndMatchCandidates(params, weights);
+  const baseResult = await searchAndMatchCandidates(params, weights);
   if (baseResult.skillMatches.length === 0) {
     return baseResult;
   }

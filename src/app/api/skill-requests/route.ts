@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { query } from '@/lib/postgres';
 import { requireAuth } from '@/lib/auth';
 import { CreateSkillRequestSchema, SubscribeSkillNotificationSchema } from '@/lib/validations';
 import { createSkillRequest, getSkillDemandAnalytics, findPotentialMentorsForSkill } from '@/lib/skill-gap';
@@ -10,17 +10,16 @@ export async function GET(req: NextRequest) {
   const querySkill = searchParams.get('skill');
 
   if (demandOnly) {
-    const demand = getSkillDemandAnalytics();
+    const demand = await getSkillDemandAnalytics();
     return NextResponse.json({ demand });
   }
 
   if (querySkill) {
-    const potential = findPotentialMentorsForSkill(querySkill);
+    const potential = await findPotentialMentorsForSkill(querySkill);
     return NextResponse.json({ skillName: querySkill, potentialMentors: potential });
   }
 
-  const db = getDb();
-  const requests = db.prepare(`
+  const requestsResult = await query(`
     SELECT 
       sr.*,
       s.name as skill_name, s.category as skill_category,
@@ -31,13 +30,14 @@ export async function GET(req: NextRequest) {
     WHERE sr.status = 'OPEN'
     ORDER BY sr.created_at DESC
     LIMIT 30
-  `).all();
+  `);
+  const requests = requestsResult.rows;
 
-  return NextResponse.json({ requests, demand: getSkillDemandAnalytics() });
+  return NextResponse.json({ requests, demand: await getSkillDemandAnalytics() });
 }
 
 export async function POST(req: NextRequest) {
-  const authRes = requireAuth(req);
+  const authRes = await requireAuth(req);
   if ('errorResponse' in authRes) return authRes.errorResponse;
 
   const { user } = authRes;
@@ -52,21 +52,22 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Invalid subscription data', details: parsed.error.format() }, { status: 400 });
       }
 
-      const db = getDb();
-      let skill = db.prepare('SELECT id FROM skills WHERE LOWER(name) = LOWER(?)').get(parsed.data.skillName) as { id: string } | undefined;
+      const skillResult = await query('SELECT id FROM skills WHERE LOWER(name) = LOWER($1)', [parsed.data.skillName]);
+      let skill = skillResult.rows[0] as { id: string } | undefined;
       if (!skill) {
         const skillId = `skill-${parsed.data.skillName.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
-        db.prepare(`
+        await query(`
           INSERT INTO skills (id, name, category, icon, description)
           VALUES (?, ?, ?, 'BookOpen', 'Student requested topic')
-        `).run(skillId, parsed.data.skillName, parsed.data.category);
+        `, [skillId, parsed.data.skillName, parsed.data.category]);
         skill = { id: skillId };
       }
 
-      db.prepare(`
-        INSERT OR IGNORE INTO skill_subscriptions (id, user_id, skill_id)
-        VALUES (?, ?, ?)
-      `).run(`sub-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`, user.userId, skill.id);
+      await query(`
+        INSERT INTO skill_subscriptions (id, user_id, skill_id)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (user_id, skill_id) DO NOTHING
+      `, [`sub-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`, user.userId, skill.id]);
 
       return NextResponse.json({
         success: true,
@@ -79,7 +80,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid request data', details: parsed.error.format() }, { status: 400 });
     }
 
-    const result = createSkillRequest({
+    const result = await createSkillRequest({
       learnerId: user.userId,
       skillName: parsed.data.skillName,
       category: parsed.data.category,

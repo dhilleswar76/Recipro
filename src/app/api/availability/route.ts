@@ -1,19 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { query, withTransaction } from '@/lib/postgres';
 import { requireAuth } from '@/lib/auth';
 import { SetAvailabilitySchema } from '@/lib/validations';
 
 export async function GET(req: NextRequest) {
-  const authRes = requireAuth(req);
+  const authRes = await requireAuth(req);
   if ('errorResponse' in authRes) return authRes.errorResponse;
 
   const { user } = authRes;
-  const db = getDb();
-
-  const slots = db.prepare(`
+  const result = await query(`
     SELECT id, day_of_week, start_time, end_time, timezone, is_preferred, window_label, skill_id
     FROM availability_slots
-    WHERE user_id = ?
+    WHERE user_id = $1
     ORDER BY 
       CASE day_of_week
         WHEN 'Monday' THEN 1
@@ -24,35 +22,33 @@ export async function GET(req: NextRequest) {
         WHEN 'Saturday' THEN 6
         WHEN 'Sunday' THEN 7
       END, start_time
-  `).all(user.userId);
+  `, [user.userId]);
 
-  return NextResponse.json({ slots });
+  return NextResponse.json({ slots: result.rows });
 }
 
 export async function POST(req: NextRequest) {
-  const authRes = requireAuth(req);
+  const authRes = await requireAuth(req);
   if ('errorResponse' in authRes) return authRes.errorResponse;
 
   const { user } = authRes;
-  const db = getDb();
-
   try {
     const body = await req.json();
     const rawSlots = body.slots || [];
 
-    const tx = db.transaction(() => {
+    await withTransaction(async (client) => {
       // Clear previous slots
-      db.prepare(`DELETE FROM availability_slots WHERE user_id = ?`).run(user.userId);
+      await client.query(`DELETE FROM availability_slots WHERE user_id = $1`, [user.userId]);
 
       // Insert new slots
-      const insertStmt = db.prepare(`
+      const insertSql = `
         INSERT INTO availability_slots (id, user_id, day_of_week, start_time, end_time, is_preferred, window_label, skill_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `);
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      `;
 
       for (const slot of rawSlots) {
         const slotId = `avail-${user.userId}-${slot.dayOfWeek}-${(slot.startTime || '').replace(':', '')}-${(slot.endTime || '').replace(':', '')}-${Math.random().toString(36).substring(2, 7)}`;
-        insertStmt.run(
+        await client.query(insertSql, [
           slotId,
           user.userId,
           slot.dayOfWeek,
@@ -61,11 +57,9 @@ export async function POST(req: NextRequest) {
           slot.isPreferred ? 1 : 0,
           slot.windowLabel || 'General',
           slot.skillId || null
-        );
+        ]);
       }
     });
-
-    tx();
 
     return NextResponse.json({
       success: true,

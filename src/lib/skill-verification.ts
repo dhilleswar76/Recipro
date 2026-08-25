@@ -1,4 +1,4 @@
-import { getDb } from './db';
+import { query, withTransaction } from './postgres';
 
 export type SkillVerificationStatus = 
   | 'SELF_DECLARED'
@@ -264,13 +264,12 @@ export interface EvaluationResult {
 /**
  * Evaluate Assessment & Determine Skill Verification Status based on Centralized Configurable Rules
  */
-export function evaluateSkillAssessment(
+export async function evaluateSkillAssessment(
   params: EvaluateAssessmentParams,
   rules: VerificationRuleConfig = DEFAULT_VERIFICATION_RULES
-): EvaluationResult {
-  const db = getDb();
+): Promise<EvaluationResult> {
 
-  const skill = db.prepare('SELECT id, name FROM skills WHERE id = ?').get(params.skillId) as { id: string; name: string } | undefined;
+  const skill = (await query('SELECT id, name FROM skills WHERE id = $1', [params.skillId])).rows[0] as { id: string; name: string } | undefined;
   const skillName = skill ? skill.name : 'Skill';
 
   const questions = getAssessmentQuestionsForSkill(skillName);
@@ -352,31 +351,31 @@ export function evaluateSkillAssessment(
   const percentage = maxScore > 0 ? Math.round((score / maxScore) * 100) : 0;
 
   // Retrieve user experience signals
-  const userSkill = db.prepare(`
+  const userSkill = (await query(`
     SELECT proficiency, experience_years, verification_status, evidence_url
     FROM user_skills
-    WHERE user_id = ? AND skill_id = ?
-  `).get(params.userId, params.skillId) as any;
+    WHERE user_id = $1 AND skill_id = $2
+  `, [params.userId, params.skillId])).rows[0] as any;
 
   const experienceYears = userSkill?.experience_years || 1;
 
   // Retrieve session history signals
-  const sessionStats = db.prepare(`
+  const sessionStats = (await query(`
     SELECT 
       COUNT(*) as total_taught,
       AVG(r.score) as avg_rating
     FROM sessions s
     LEFT JOIN ratings r ON s.id = r.session_id
-    WHERE s.teacher_id = ? AND s.skill_id = ? AND s.status = 'CREDIT_SETTLED'
-  `).get(params.userId, params.skillId) as { total_taught: number; avg_rating: number | null };
+    WHERE s.teacher_id = $1 AND s.skill_id = $2 AND s.status = 'CREDIT_SETTLED'
+  `, [params.userId, params.skillId])).rows[0] as { total_taught: number; avg_rating: number | null };
 
-  const sessionsTaught = sessionStats?.total_taught || 0;
-  const avgRating = sessionStats?.avg_rating || 5.0;
+  const sessionsTaught = Number(sessionStats?.total_taught) || 0;
+  const avgRating = Number(sessionStats?.avg_rating) || 5.0;
 
   // Check evidence submissions
-  const evidenceCount = (db.prepare(`
-    SELECT COUNT(*) as count FROM skill_evidence WHERE user_id = ? AND skill_id = ? AND status = 'APPROVED'
-  `).get(params.userId, params.skillId) as any)?.count || 0;
+  const evidenceCount = Number((await query(`
+    SELECT COUNT(*) as count FROM skill_evidence WHERE user_id = $1 AND skill_id = $2 AND status = 'APPROVED'
+  `, [params.userId, params.skillId])).rows[0]?.count) || 0;
 
   // Determine Verified Level & Verification Status
   let verifiedLevel = 'Beginner';
@@ -414,13 +413,13 @@ export function evaluateSkillAssessment(
   const assessmentId = `assess-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
 
   // Atomic transaction to persist assessment and update user skill verification
-  const runTransaction = db.transaction(() => {
+  await withTransaction(async (client) => {
     // 1. Save assessment record
-    db.prepare(`
+    await client.query(`
       INSERT INTO skill_assessments (
         id, user_id, skill_id, score, max_score, percentage, passed, target_level, verified_level, version, answers_json
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'v1.0', ?)
-    `).run(
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'v1.0', $10)
+    `, [
       assessmentId,
       params.userId,
       params.skillId,
@@ -431,21 +430,21 @@ export function evaluateSkillAssessment(
       params.requestedProficiency,
       verifiedLevel,
       JSON.stringify(params.answers)
-    );
+    ]);
 
     // 2. Update user_skills record
     if (userSkill) {
-      db.prepare(`
+      await client.query(`
         UPDATE user_skills
         SET 
-          verification_status = ?,
-          assessment_score = ?,
-          proficiency = CASE WHEN ? = 1 THEN ? ELSE proficiency END,
+          verification_status = $1,
+          assessment_score = $2,
+          proficiency = CASE WHEN $3 = 1 THEN $4 ELSE proficiency END,
           verified_at = CURRENT_TIMESTAMP,
           verified_by = 'SYSTEM_ASSESSMENT_ENGINE',
-          reassessment_required = CASE WHEN ? = 1 THEN 0 ELSE 1 END
-        WHERE user_id = ? AND skill_id = ?
-      `).run(
+          reassessment_required = CASE WHEN $5 = 1 THEN 0 ELSE 1 END
+        WHERE user_id = $6 AND skill_id = $7
+      `, [
         verificationStatus,
         percentage,
         passed ? 1 : 0,
@@ -453,23 +452,21 @@ export function evaluateSkillAssessment(
         passed ? 1 : 0,
         params.userId,
         params.skillId
-      );
+      ]);
     }
 
     // 3. Create notification for student
-    db.prepare(`
+    await client.query(`
       INSERT INTO notifications (id, user_id, title, message, type, link)
-      VALUES (?, ?, ?, ?, ?, '/profile')
-    `).run(
+      VALUES ($1, $2, $3, $4, $5, '/profile')
+    `, [
       `notif-${Date.now()}`,
       params.userId,
       passed ? `Skill Verified: ${skillName}` : `Assessment Result: ${skillName}`,
       feedback,
       passed ? 'CREDENTIAL_ISSUED' : 'INFO'
-    );
+    ]);
   });
-
-  runTransaction();
 
   return {
     passed,

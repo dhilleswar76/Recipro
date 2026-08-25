@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { SearchQuerySchema } from '@/lib/validations';
-import { searchAndMatchCandidates, searchAndMatchCandidatesAsync } from '@/lib/matching';
+import { searchAndMatchCandidatesAsync } from '@/lib/matching';
 import { discoverExchangeCycles } from '@/lib/cycle-finder';
 import { getAuthUser } from '@/lib/auth';
 
@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
     // Check if Mode C cycle discovery is also requested
     let cycles: any[] = [];
     if (mode === 'MODE_C' || mode === 'ALL') {
-      cycles = discoverExchangeCycles(authUser?.userId);
+      cycles = await discoverExchangeCycles(authUser?.userId);
     }
 
     return NextResponse.json({

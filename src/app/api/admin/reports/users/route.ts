@@ -3,7 +3,7 @@ import { requireAdmin } from '@/lib/auth';
 import { getUserListReport, logAdminAction } from '@/lib/admin-reporting';
 
 export async function GET(req: NextRequest) {
-  const authRes = requireAdmin(req);
+  const authRes = await requireAdmin(req);
   if ('errorResponse' in authRes) return authRes.errorResponse;
 
   const { user } = authRes;
@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
   const limit = parseInt(searchParams.get('limit') || '20', 10);
 
   try {
-    const report = getUserListReport({
+    const report = await getUserListReport({
       search,
       role,
       status,
@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
       limit,
     });
 
-    logAdminAction({
+    await logAdminAction({
       adminUserId: user.userId,
       action: 'ADMIN_VIEWED_USER_LIST_REPORT',
       targetType: 'USER_REPORT_LIST',

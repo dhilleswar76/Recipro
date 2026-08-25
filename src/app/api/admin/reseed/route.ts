@@ -1,17 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth';
-import { getDb } from '@/lib/db';
+import { withTransaction } from '@/lib/postgres';
 import bcrypt from 'bcryptjs';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
-  const authRes = requireRole(req, ['ADMIN']);
+  const authRes = await requireRole(req, ['ADMIN']);
   if ('errorResponse' in authRes) return authRes.errorResponse;
 
   try {
-    const db = getDb();
     const passwordHash = await bcrypt.hash('Password123!', 10);
+
+    await withTransaction(async (client) => {
 
     // Skills
     const skillsData = [
@@ -28,7 +29,7 @@ export async function POST(req: NextRequest) {
     ];
 
     for (const s of skillsData) {
-      db.prepare(`INSERT OR IGNORE INTO skills (id, name, category) VALUES (?, ?, ?)`).run(s.id, s.name, s.category);
+      await client.query('INSERT INTO skills (id, name, category) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING', [s.id, s.name, s.category]);
     }
 
     const students = [
@@ -42,64 +43,74 @@ export async function POST(req: NextRequest) {
     ];
 
     for (const s of students) {
-      db.prepare(`INSERT OR REPLACE INTO users (id, email, password_hash, role, status, campus_id) VALUES (?, ?, ?, ?, 'ACTIVE', ?)`).run(s.id, s.email, passwordHash, s.role, `STU-${s.id.toUpperCase()}`);
-      db.prepare(`INSERT OR REPLACE INTO profiles (id, user_id, display_name, college, major, year, is_verified_student, trust_score) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(`prof-${s.id}`, s.id, s.name, s.college, s.major, s.year, s.verified, s.trust);
-      db.prepare(`INSERT OR REPLACE INTO skill_credit_accounts (id, user_id, balance, escrow_balance) VALUES (?, ?, ?, 0)`).run(`acc-${s.id}`, s.id, s.balance);
-      db.prepare(`INSERT OR REPLACE INTO reputations (id, user_id, total_reviews, total_sessions_taught, total_sessions_learned, bayesian_rating, reliability_score) VALUES (?, ?, 0, 0, 0, 4.5, 95.0)`).run(`rep-${s.id}`, s.id);
+      await client.query(`INSERT INTO users (id, email, password_hash, role, status, campus_id) VALUES ($1, $2, $3, $4, 'ACTIVE', $5) ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, password_hash = EXCLUDED.password_hash, role = EXCLUDED.role, status = EXCLUDED.status, campus_id = EXCLUDED.campus_id`, [s.id, s.email, passwordHash, s.role, `STU-${s.id.toUpperCase()}`]);
+      await client.query(`INSERT INTO profiles (id, user_id, display_name, college, major, year, is_verified_student, trust_score) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (id) DO UPDATE SET user_id = EXCLUDED.user_id, display_name = EXCLUDED.display_name, college = EXCLUDED.college, major = EXCLUDED.major, year = EXCLUDED.year, is_verified_student = EXCLUDED.is_verified_student, trust_score = EXCLUDED.trust_score`, [`prof-${s.id}`, s.id, s.name, s.college, s.major, s.year, Boolean(s.verified), s.trust]);
+      await client.query(`INSERT INTO skill_credit_accounts (id, user_id, balance, escrow_balance) VALUES ($1, $2, $3, 0) ON CONFLICT (id) DO UPDATE SET user_id = EXCLUDED.user_id, balance = EXCLUDED.balance, escrow_balance = EXCLUDED.escrow_balance`, [`acc-${s.id}`, s.id, s.balance]);
+      await client.query(`INSERT INTO reputations (id, user_id, total_reviews, total_sessions_taught, total_sessions_learned, bayesian_rating, reliability_score) VALUES ($1, $2, 0, 0, 0, 4.5, 95.0) ON CONFLICT (id) DO UPDATE SET user_id = EXCLUDED.user_id, total_reviews = EXCLUDED.total_reviews, total_sessions_taught = EXCLUDED.total_sessions_taught, total_sessions_learned = EXCLUDED.total_sessions_learned, bayesian_rating = EXCLUDED.bayesian_rating, reliability_score = EXCLUDED.reliability_score`, [`rep-${s.id}`, s.id]);
     }
 
+    const replace = async (table: string, columns: string[], values: unknown[]) => {
+      const placeholders = columns.map((_, index) => `$${index + 1}`).join(', ');
+      const updates = columns.slice(1).map((column) => `${column} = EXCLUDED.${column}`).join(', ');
+      await client.query(`INSERT INTO ${table} (${columns.join(', ')}) VALUES (${placeholders}) ON CONFLICT (id) DO UPDATE SET ${updates}`, values);
+    };
+
     // Teaching Skills
-    db.prepare(`INSERT OR REPLACE INTO user_skills (id, user_id, skill_id, proficiency, experience_years, teaching_style, verification_status) VALUES (?, ?, ?, ?, ?, ?, ?)`).run('usk-keerthana-react', 'usr-keerthana', 'skill-react', 'Advanced', 2.5, 'Hands-on project reviews', 'PLATFORM_VERIFIED');
-    db.prepare(`INSERT OR REPLACE INTO user_skills (id, user_id, skill_id, proficiency, experience_years, teaching_style, verification_status) VALUES (?, ?, ?, ?, ?, ?, ?)`).run('usk-keerthana-node', 'usr-keerthana', 'skill-node', 'Intermediate', 1.5, 'API building workshops', 'PEER_VERIFIED');
-    db.prepare(`INSERT OR REPLACE INTO user_skills (id, user_id, skill_id, proficiency, experience_years, teaching_style, verification_status) VALUES (?, ?, ?, ?, ?, ?, ?)`).run('usk-saikiran-python', 'usr-saikiran', 'skill-python', 'Expert', 3.5, 'Deep dive architecture & debugging', 'PLATFORM_VERIFIED');
-    db.prepare(`INSERT OR REPLACE INTO user_skills (id, user_id, skill_id, proficiency, experience_years, teaching_style, verification_status) VALUES (?, ?, ?, ?, ?, ?, ?)`).run('usk-saikiran-solidity', 'usr-saikiran', 'skill-solidity', 'Advanced', 2.0, 'Smart contract security audits', 'PLATFORM_VERIFIED');
-    db.prepare(`INSERT OR REPLACE INTO user_skills (id, user_id, skill_id, proficiency, experience_years, teaching_style, verification_status) VALUES (?, ?, ?, ?, ?, ?, ?)`).run('usk-bhavya-figma', 'usr-bhavya', 'skill-figma', 'Expert', 4.0, 'Figma component mastery & prototypes', 'PLATFORM_VERIFIED');
-    db.prepare(`INSERT OR REPLACE INTO user_skills (id, user_id, skill_id, proficiency, experience_years, teaching_style, verification_status) VALUES (?, ?, ?, ?, ?, ?, ?)`).run('usk-vamsi-calculus', 'usr-vamsi', 'skill-calculus', 'Expert', 3.0, 'Step-by-step problem walkthroughs', 'PLATFORM_VERIFIED');
+    for (const values of [
+      ['usk-keerthana-react', 'usr-keerthana', 'skill-react', 'Advanced', 2.5, 'Hands-on project reviews', 'PLATFORM_VERIFIED'],
+      ['usk-keerthana-node', 'usr-keerthana', 'skill-node', 'Intermediate', 1.5, 'API building workshops', 'PEER_VERIFIED'],
+      ['usk-saikiran-python', 'usr-saikiran', 'skill-python', 'Expert', 3.5, 'Deep dive architecture & debugging', 'PLATFORM_VERIFIED'],
+      ['usk-saikiran-solidity', 'usr-saikiran', 'skill-solidity', 'Advanced', 2.0, 'Smart contract security audits', 'PLATFORM_VERIFIED'],
+      ['usk-bhavya-figma', 'usr-bhavya', 'skill-figma', 'Expert', 4.0, 'Figma component mastery & prototypes', 'PLATFORM_VERIFIED'],
+      ['usk-vamsi-calculus', 'usr-vamsi', 'skill-calculus', 'Expert', 3.0, 'Step-by-step problem walkthroughs', 'PLATFORM_VERIFIED'],
+    ]) await replace('user_skills', ['id', 'user_id', 'skill_id', 'proficiency', 'experience_years', 'teaching_style', 'verification_status'], values);
 
     // Learning Goals
-    db.prepare(`INSERT OR REPLACE INTO learning_goals (id, user_id, skill_id, target_proficiency, priority, notes) VALUES (?, ?, ?, ?, ?, ?)`).run('goal-keerthana-solidity', 'usr-keerthana', 'skill-solidity', 'Intermediate', 'HIGH', 'Want to build DeFi and credential contracts for senior project');
-    db.prepare(`INSERT OR REPLACE INTO learning_goals (id, user_id, skill_id, target_proficiency, priority, notes) VALUES (?, ?, ?, ?, ?, ?)`).run('goal-saikiran-figma', 'usr-saikiran', 'skill-figma', 'Intermediate', 'HIGH', 'Need better UI/UX skills for my open-source projects');
-    db.prepare(`INSERT OR REPLACE INTO learning_goals (id, user_id, skill_id, target_proficiency, priority, notes) VALUES (?, ?, ?, ?, ?, ?)`).run('goal-bhavya-python', 'usr-bhavya', 'skill-python', 'Intermediate', 'HIGH', 'Need Python data scripts for UX analytics');
+    for (const values of [
+      ['goal-keerthana-solidity', 'usr-keerthana', 'skill-solidity', 'Intermediate', 'HIGH', 'Want to build DeFi and credential contracts for senior project'],
+      ['goal-saikiran-figma', 'usr-saikiran', 'skill-figma', 'Intermediate', 'HIGH', 'Need better UI/UX skills for my open-source projects'],
+      ['goal-bhavya-python', 'usr-bhavya', 'skill-python', 'Intermediate', 'HIGH', 'Need Python data scripts for UX analytics'],
+    ]) await replace('learning_goals', ['id', 'user_id', 'skill_id', 'target_proficiency', 'priority', 'notes'], values);
 
     // Availability
-    db.prepare(`INSERT OR REPLACE INTO availability_slots (id, user_id, day_of_week, start_time, end_time) VALUES (?, ?, ?, ?, ?)`).run('avail-keerthana-tue', 'usr-keerthana', 'Tuesday', '18:00', '20:00');
-    db.prepare(`INSERT OR REPLACE INTO availability_slots (id, user_id, day_of_week, start_time, end_time) VALUES (?, ?, ?, ?, ?)`).run('avail-keerthana-thu', 'usr-keerthana', 'Thursday', '18:00', '20:00');
-    db.prepare(`INSERT OR REPLACE INTO availability_slots (id, user_id, day_of_week, start_time, end_time) VALUES (?, ?, ?, ?, ?)`).run('avail-saikiran-tue', 'usr-saikiran', 'Tuesday', '18:00', '21:00');
-    db.prepare(`INSERT OR REPLACE INTO availability_slots (id, user_id, day_of_week, start_time, end_time) VALUES (?, ?, ?, ?, ?)`).run('avail-saikiran-thu', 'usr-saikiran', 'Thursday', '18:00', '21:00');
-    db.prepare(`INSERT OR REPLACE INTO availability_slots (id, user_id, day_of_week, start_time, end_time) VALUES (?, ?, ?, ?, ?)`).run('avail-bhavya-tue', 'usr-bhavya', 'Tuesday', '18:00', '20:00');
-    db.prepare(`INSERT OR REPLACE INTO availability_slots (id, user_id, day_of_week, start_time, end_time) VALUES (?, ?, ?, ?, ?)`).run('avail-vamsi-mon', 'usr-vamsi', 'Monday', '16:00', '19:00');
+    for (const values of [
+      ['avail-keerthana-tue', 'usr-keerthana', 'Tuesday', '18:00', '20:00'], ['avail-keerthana-thu', 'usr-keerthana', 'Thursday', '18:00', '20:00'],
+      ['avail-saikiran-tue', 'usr-saikiran', 'Tuesday', '18:00', '21:00'], ['avail-saikiran-thu', 'usr-saikiran', 'Thursday', '18:00', '21:00'],
+      ['avail-bhavya-tue', 'usr-bhavya', 'Tuesday', '18:00', '20:00'], ['avail-vamsi-mon', 'usr-vamsi', 'Monday', '16:00', '19:00'],
+    ]) await replace('availability_slots', ['id', 'user_id', 'day_of_week', 'start_time', 'end_time'], values);
 
     // Reputations
-    db.prepare(`UPDATE reputations SET total_reviews=24, total_sessions_taught=27, bayesian_rating=4.9, reliability_score=99 WHERE user_id='usr-saikiran'`).run();
-    db.prepare(`UPDATE reputations SET total_reviews=18, total_sessions_taught=19, bayesian_rating=4.9, reliability_score=97 WHERE user_id='usr-bhavya'`).run();
-    db.prepare(`UPDATE reputations SET total_reviews=7, total_sessions_taught=8, bayesian_rating=4.8, reliability_score=98 WHERE user_id='usr-keerthana'`).run();
-    db.prepare(`UPDATE skill_credit_accounts SET lifetime_earned=27, lifetime_spent=12 WHERE user_id='usr-saikiran'`).run();
+    await client.query("UPDATE reputations SET total_reviews=24, total_sessions_taught=27, bayesian_rating=4.9, reliability_score=99 WHERE user_id='usr-saikiran'");
+    await client.query("UPDATE reputations SET total_reviews=18, total_sessions_taught=19, bayesian_rating=4.9, reliability_score=97 WHERE user_id='usr-bhavya'");
+    await client.query("UPDATE reputations SET total_reviews=7, total_sessions_taught=8, bayesian_rating=4.8, reliability_score=98 WHERE user_id='usr-keerthana'");
+    await client.query("UPDATE skill_credit_accounts SET lifetime_earned=27, lifetime_spent=12 WHERE user_id='usr-saikiran'");
 
     // Verifiable Credential for Sai Kiran
-    db.prepare(`INSERT OR REPLACE INTO credentials (id, user_id, title, badge_type, skill_id, token_id, tx_hash, criteria_met) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    await replace('credentials', ['id', 'user_id', 'title', 'badge_type', 'skill_id', 'token_id', 'tx_hash', 'criteria_met'], [
       'cred-saikiran-python-1', 'usr-saikiran', 'Python Mentor — Level 1', 'MENTOR_TIER_1', 'skill-python', 'CERT-8841',
       '0x8f28c11e72e128b9d3b4a2e5d6c8109923847162901928374615243123456789',
       JSON.stringify({ sessionsTaught: 27, bayesianRating: 4.9, minSessionsRequired: 3, minRatingRequired: 4.5 })
-    );
+    ]);
 
     // StudySphere Groups & Resources
-    db.prepare(`INSERT OR REPLACE INTO study_groups (id, name, description, subject, creator_id, meeting_schedule, max_members) VALUES (?,?,?,?,?,?,?)`).run('grp-1', 'Web3 & EVM Builders Circle', 'Weekly Solidity smart contract collaboration.', 'Computer Science', 'usr-saikiran', 'Thursdays 7:00 PM', 10);
-    db.prepare(`INSERT OR REPLACE INTO study_groups (id, name, description, subject, creator_id, meeting_schedule, max_members) VALUES (?,?,?,?,?,?,?)`).run('grp-2', 'Figma Design System Jam', 'Critique and design system token standardization sessions.', 'Design', 'usr-bhavya', 'Wednesdays 6:00 PM', 8);
+    await replace('study_groups', ['id', 'name', 'description', 'subject', 'creator_id', 'meeting_schedule', 'max_members'], ['grp-1', 'Web3 & EVM Builders Circle', 'Weekly Solidity smart contract collaboration.', 'Computer Science', 'usr-saikiran', 'Thursdays 7:00 PM', 10]);
+    await replace('study_groups', ['id', 'name', 'description', 'subject', 'creator_id', 'meeting_schedule', 'max_members'], ['grp-2', 'Figma Design System Jam', 'Critique and design system token standardization sessions.', 'Design', 'usr-bhavya', 'Wednesdays 6:00 PM', 8]);
 
-    db.prepare(`INSERT OR REPLACE INTO study_resources (id, title, description, subject, author_id, resource_type, file_url, upvotes) VALUES (?,?,?,?,?,?,?,?)`).run('res-1', 'Smart Contract Security Audit Checklist', 'Comprehensive checklist: reentrancy, integer overflow, access control.', 'Computer Science', 'usr-saikiran', 'PDF', 'https://docs.skillswap.internal/evm-security.pdf', 34);
-    db.prepare(`INSERT OR REPLACE INTO study_resources (id, title, description, subject, author_id, resource_type, file_url, upvotes) VALUES (?,?,?,?,?,?,?,?)`).run('res-2', 'React 18 Server Components Cheat Sheet', 'Visual guide to hydration boundaries and Suspense patterns.', 'Computer Science', 'usr-keerthana', 'NOTES', 'https://docs.skillswap.internal/react-cheatsheet.pdf', 28);
+    await replace('study_resources', ['id', 'title', 'description', 'subject', 'author_id', 'resource_type', 'file_url', 'upvotes'], ['res-1', 'Smart Contract Security Audit Checklist', 'Comprehensive checklist: reentrancy, integer overflow, access control.', 'Computer Science', 'usr-saikiran', 'PDF', 'https://docs.skillswap.internal/evm-security.pdf', 34]);
+    await replace('study_resources', ['id', 'title', 'description', 'subject', 'author_id', 'resource_type', 'file_url', 'upvotes'], ['res-2', 'React 18 Server Components Cheat Sheet', 'Visual guide to hydration boundaries and Suspense patterns.', 'Computer Science', 'usr-keerthana', 'NOTES', 'https://docs.skillswap.internal/react-cheatsheet.pdf', 28]);
 
-    db.prepare(`INSERT OR REPLACE INTO flashcard_decks (id, user_id, title, subject, cards_count, is_public) VALUES (?,?,?,?,?,?)`).run('deck-1', 'usr-saikiran', 'Solidity & EVM Opcodes Master Deck', 'Computer Science', 3, 1);
-    db.prepare(`INSERT OR REPLACE INTO flashcards (id, deck_id, front, back, mastery_level) VALUES (?,?,?,?,?)`).run('fc-1', 'deck-1', 'What is the Checks-Effects-Interactions pattern?', 'A security pattern: state checks first, internal state modifications second, external calls last — prevents reentrancy.', 4);
-    db.prepare(`INSERT OR REPLACE INTO flashcards (id, deck_id, front, back, mastery_level) VALUES (?,?,?,?,?)`).run('fc-2', 'deck-1', 'Gas cost: storage vs memory?', 'Storage SSTORE costs up to 20,000 gas (permanent). Memory is temporary and very cheap.', 3);
-    db.prepare(`INSERT OR REPLACE INTO flashcards (id, deck_id, front, back, mastery_level) VALUES (?,?,?,?,?)`).run('fc-3', 'deck-1', 'Why never use tx.origin for authorization?', 'tx.origin returns the original EOA — vulnerable to phishing contracts. Always use msg.sender.', 5);
+    await replace('flashcard_decks', ['id', 'user_id', 'title', 'subject', 'cards_count', 'is_public'], ['deck-1', 'usr-saikiran', 'Solidity & EVM Opcodes Master Deck', 'Computer Science', 3, true]);
+    await replace('flashcards', ['id', 'deck_id', 'front', 'back', 'mastery_level'], ['fc-1', 'deck-1', 'What is the Checks-Effects-Interactions pattern?', 'A security pattern: state checks first, internal state modifications second, external calls last — prevents reentrancy.', 4]);
+    await replace('flashcards', ['id', 'deck_id', 'front', 'back', 'mastery_level'], ['fc-2', 'deck-1', 'Gas cost: storage vs memory?', 'Storage SSTORE costs up to 20,000 gas (permanent). Memory is temporary and very cheap.', 3]);
+    await replace('flashcards', ['id', 'deck_id', 'front', 'back', 'mastery_level'], ['fc-3', 'deck-1', 'Why never use tx.origin for authorization?', 'tx.origin returns the original EOA — vulnerable to phishing contracts. Always use msg.sender.', 5]);
 
     // Fraud Alert for Suspect-1
-    db.prepare(`INSERT OR REPLACE INTO fraud_alerts (id, user_id, risk_score, risk_level, anomaly_reasons, status) VALUES (?,?,?,?,?,?)`).run(
+    await replace('fraud_alerts', ['id', 'user_id', 'risk_score', 'risk_level', 'anomaly_reasons', 'status'], [
       'alert-suspect-1', 'usr-suspect-1', 88.0, 'HIGH',
       JSON.stringify(['High reciprocal rating loop detected (100% mutual 5-star reviews)', 'Rapid credit velocity: 10 transactions in <24h', 'Unverified campus identity status']),
       'PENDING_REVIEW'
-    );
+    ]);
+    });
 
     return NextResponse.json({ success: true, message: 'Campus database successfully re-seeded with authentic Indian campus data!' });
   } catch (err: any) {

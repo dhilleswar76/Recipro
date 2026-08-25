@@ -1,18 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
 import { requireAuth } from '@/lib/auth';
 import { getSessionChatHistory, sendSessionChatMessage } from '@/lib/video-session';
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
-  const authRes = requireAuth(req);
+  const authRes = await requireAuth(req);
   if ('errorResponse' in authRes) return authRes.errorResponse;
 
   const { user } = authRes;
-  const db = getDb();
   const sessionId = params.id;
 
   try {
-    const chatData = getSessionChatHistory(db, sessionId, user.userId);
+    const chatData = await getSessionChatHistory(sessionId, user.userId);
     if (!chatData.authorized) {
       return NextResponse.json({ error: chatData.error || 'Access denied' }, { status: 403 });
     }
@@ -25,11 +23,10 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 }
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-  const authRes = requireAuth(req);
+  const authRes = await requireAuth(req);
   if ('errorResponse' in authRes) return authRes.errorResponse;
 
   const { user } = authRes;
-  const db = getDb();
   const sessionId = params.id;
 
   try {
@@ -40,7 +37,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       return NextResponse.json({ error: 'Message text is required' }, { status: 400 });
     }
 
-    const sendResult = sendSessionChatMessage(db, sessionId, user.userId, rawMessage);
+    const sendResult = await sendSessionChatMessage(sessionId, user.userId, rawMessage);
     if (!sendResult.success) {
       return NextResponse.json({ error: sendResult.error || 'Failed to send message' }, { status: 400 });
     }

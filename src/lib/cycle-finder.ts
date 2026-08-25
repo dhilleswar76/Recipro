@@ -1,4 +1,4 @@
-import { getDb } from './db';
+import { query } from './postgres';
 import crypto from 'crypto';
 
 export interface ExchangeCycleNode {
@@ -33,11 +33,10 @@ export interface ExchangeCycle {
  * Constructs a directed graph of [Student] -> [Desired Skills] & [Teaches Skills]
  * Discovers cycles of length 2, 3, or 4 where A teaches B, B teaches C, C teaches A.
  */
-export function discoverExchangeCycles(focusUserId?: string): ExchangeCycle[] {
-  const db = getDb();
+export async function discoverExchangeCycles(focusUserId?: string): Promise<ExchangeCycle[]> {
 
   // 1. Fetch all teaching capabilities
-  const teachingRows = db.prepare(`
+  const teachingRows = (await query(`
     SELECT 
       us.user_id, us.skill_id, s.name as skill_name,
       p.display_name, p.avatar, p.trust_score,
@@ -48,17 +47,17 @@ export function discoverExchangeCycles(focusUserId?: string): ExchangeCycle[] {
     JOIN profiles p ON u.id = p.user_id
     LEFT JOIN reputations r ON u.id = r.user_id
     WHERE u.status = 'ACTIVE'
-  `).all() as any[];
+  `)).rows as any[];
 
   // 2. Fetch all learning goals
-  const goalRows = db.prepare(`
+  const goalRows = (await query(`
     SELECT 
       lg.user_id, lg.skill_id, s.name as skill_name
     FROM learning_goals lg
     JOIN skills s ON lg.skill_id = s.id
     JOIN users u ON lg.user_id = u.id
     WHERE u.status = 'ACTIVE'
-  `).all() as any[];
+  `)).rows as any[];
 
   // Build lookup maps:
   // User -> Skills they can teach (skillId -> skillName)

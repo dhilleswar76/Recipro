@@ -1,16 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { query, withTransaction } from '@/lib/postgres';
 import { requireRole } from '@/lib/auth';
 import { notifyLearnersOfNewMentor } from '@/lib/skill-gap';
 
 export async function GET(req: NextRequest) {
-  const authRes = requireRole(req, ['MODERATOR', 'ADMIN']);
+  const authRes = await requireRole(req, ['MODERATOR', 'ADMIN']);
   if ('errorResponse' in authRes) return authRes.errorResponse;
 
-  const db = getDb();
-
   // Fetch all user skills with verification details
-  const pendingSkills = db.prepare(`
+  const pendingSkillsResult = await query(`
     SELECT 
       us.*,
       s.name as skill_name, s.category as skill_category,
@@ -27,9 +25,9 @@ export async function GET(req: NextRequest) {
            WHEN us.verification_status = 'ASSESSMENT_VERIFIED' THEN 2
            ELSE 3 END,
       us.created_at DESC
-  `).all();
+  `);
 
-  const recentAssessments = db.prepare(`
+  const recentAssessmentsResult = await query(`
     SELECT 
       sa.*,
       s.name as skill_name,
@@ -39,20 +37,19 @@ export async function GET(req: NextRequest) {
     JOIN profiles p ON sa.user_id = p.user_id
     ORDER BY sa.created_at DESC
     LIMIT 20
-  `).all();
+  `);
 
   return NextResponse.json({
-    skills: pendingSkills,
-    assessments: recentAssessments,
+    skills: pendingSkillsResult.rows,
+    assessments: recentAssessmentsResult.rows,
   });
 }
 
 export async function POST(req: NextRequest) {
-  const authRes = requireRole(req, ['MODERATOR', 'ADMIN']);
+  const authRes = await requireRole(req, ['MODERATOR', 'ADMIN']);
   if ('errorResponse' in authRes) return authRes.errorResponse;
 
   const { user } = authRes;
-  const db = getDb();
 
   try {
     const body = await req.json();
@@ -62,7 +59,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing userId, skillId, or action' }, { status: 400 });
     }
 
-    const skill = db.prepare('SELECT name FROM skills WHERE id = ?').get(skillId) as { name: string } | undefined;
+    const skill = (await query<{ name: string }>('SELECT name FROM skills WHERE id = $1', [skillId])).rows[0];
     const skillName = skill ? skill.name : 'Skill';
 
     let newStatus = 'SELF_DECLARED';
@@ -83,30 +80,32 @@ export async function POST(req: NextRequest) {
       notifMsg = `Administrator note: ${notes || 'Skill claim marked as self-declared.'}`;
     }
 
-    db.prepare(`
+    await withTransaction(async (client) => {
+      await client.query(`
       UPDATE user_skills
       SET 
-        verification_status = ?,
+        verification_status = $1,
         verified_at = CURRENT_TIMESTAMP,
-        verified_by = ?,
-        reassessment_required = CASE WHEN ? = 'VERIFICATION_FAILED' THEN 1 ELSE 0 END
-      WHERE user_id = ? AND skill_id = ?
-    `).run(newStatus, user.userId, newStatus, userId, skillId);
+        verified_by = $2,
+        reassessment_required = CASE WHEN $3 = 'VERIFICATION_FAILED' THEN 1 ELSE 0 END
+      WHERE user_id = $4 AND skill_id = $5
+    `, [newStatus, user.userId, newStatus, userId, skillId]);
 
     // Audit log
-    db.prepare(`
+      await client.query(`
       INSERT INTO audit_logs (id, actor_id, action, target_type, target_id, new_state)
-      VALUES (?, ?, ?, 'USER_SKILL', ?, ?)
-    `).run(`audit-${Date.now()}`, user.userId, action, `${userId}:${skillId}`, newStatus);
+      VALUES ($1, $2, $3, 'USER_SKILL', $4, $5)
+    `, [`audit-${Date.now()}`, user.userId, action, `${userId}:${skillId}`, newStatus]);
 
     // Notification
-    db.prepare(`
+      await client.query(`
       INSERT INTO notifications (id, user_id, title, message, type, link)
-      VALUES (?, ?, ?, ?, 'CREDENTIAL_ISSUED', '/profile')
-    `).run(`notif-${Date.now()}`, userId, notifTitle, notifMsg);
+      VALUES ($1, $2, $3, $4, 'CREDENTIAL_ISSUED', '/profile')
+    `, [`notif-${Date.now()}`, userId, notifTitle, notifMsg]);
+    });
 
     if (newStatus === 'PLATFORM_VERIFIED') {
-      notifyLearnersOfNewMentor(userId, skillId);
+      await notifyLearnersOfNewMentor(userId, skillId);
     }
 
     return NextResponse.json({

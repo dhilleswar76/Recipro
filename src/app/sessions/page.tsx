@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { Suspense, useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
@@ -28,7 +28,7 @@ import {
   Star,
 } from 'lucide-react';
 
-export default function SessionsListPage() {
+function SessionsListPageContent() {
   const { user } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -560,5 +560,13 @@ export default function SessionsListPage() {
       </div>
 
     </div>
+  );
+}
+
+export default function SessionsListPage() {
+  return (
+    <Suspense fallback={null}>
+      <SessionsListPageContent />
+    </Suspense>
   );
 }

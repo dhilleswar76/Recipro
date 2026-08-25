@@ -1,18 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
 import { requireAuth } from '@/lib/auth';
 import { authorizeSessionParticipant, recordAttendanceEvent } from '@/lib/video-session';
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-  const authRes = requireAuth(req);
+  const authRes = await requireAuth(req);
   if ('errorResponse' in authRes) return authRes.errorResponse;
 
   const { user } = authRes;
-  const db = getDb();
   const sessionId = params.id;
 
   try {
-    const authResult = authorizeSessionParticipant(db, sessionId, user.userId);
+    const authResult = await authorizeSessionParticipant(sessionId, user.userId);
     if (!authResult.authorized) {
       return NextResponse.json({ error: authResult.error || 'Access denied' }, { status: 403 });
     }
@@ -24,7 +22,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       return NextResponse.json({ error: 'Event type is required' }, { status: 400 });
     }
 
-    recordAttendanceEvent(db, sessionId, user.userId, eventType, body.metadata);
+    await recordAttendanceEvent(sessionId, user.userId, eventType, body.metadata);
 
     return NextResponse.json({ success: true, eventType });
   } catch (err: any) {

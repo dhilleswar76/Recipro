@@ -1,15 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { query, withTransaction } from '@/lib/postgres';
 import { requireAuth } from '@/lib/auth';
 import { UpdateProfileSchema } from '@/lib/validations';
 
 export async function PUT(req: NextRequest) {
-  const authRes = requireAuth(req);
+  const authRes = await requireAuth(req);
   if ('errorResponse' in authRes) return authRes.errorResponse;
 
   const { user } = authRes;
-  const db = getDb();
-
   try {
     const body = await req.json();
     const parsed = UpdateProfileSchema.safeParse(body);
@@ -20,16 +18,17 @@ export async function PUT(req: NextRequest) {
 
     const data = parsed.data;
 
-    const tx = db.transaction(() => {
+    await withTransaction(async (client) => {
       // 1. Update user_type if provided
       if (data.userType) {
-        db.prepare('UPDATE users SET user_type = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(data.userType, user.userId);
+        await client.query('UPDATE users SET user_type = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [data.userType, user.userId]);
       }
 
       // 2. Update profile table
-      const profile = db.prepare('SELECT * FROM profiles WHERE user_id = ?').get(user.userId) as any;
+      const profileResult = await client.query('SELECT * FROM profiles WHERE user_id = $1', [user.userId]);
+      const profile = profileResult.rows[0] as any;
       if (profile) {
-        db.prepare(`
+        await client.query(`
           UPDATE profiles
           SET 
             display_name = COALESCE(?, display_name),
@@ -49,7 +48,7 @@ export async function PUT(req: NextRequest) {
             daily_session_limit = COALESCE(?, daily_session_limit),
             updated_at = CURRENT_TIMESTAMP
           WHERE user_id = ?
-        `).run(
+        `, [
           data.displayName ?? null,
           data.bio ?? null,
           data.college ?? null,
@@ -65,12 +64,10 @@ export async function PUT(req: NextRequest) {
           data.portfolioVisibility ?? null,
           data.learningGoalVisibility ?? null,
           data.dailySessionLimit ?? null,
-          user.userId
-        );
+          user.userId,
+        ]);
       }
     });
-
-    tx();
 
     return NextResponse.json({
       success: true,

@@ -7,7 +7,7 @@ export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const authRes = requireAuth(req);
+  const authRes = await requireAuth(req);
   if ('errorResponse' in authRes) return authRes.errorResponse;
 
   const { user } = authRes;
@@ -31,7 +31,7 @@ export async function POST(
     else if (action === 'CANCEL' || action === 'REJECT') targetState = 'CANCELLED';
     else if (action === 'DISPUTE') targetState = 'DISPUTED';
 
-    const result = transitionSessionState(sessionId, targetState, user.userId, {
+    const result = await transitionSessionState(sessionId, targetState, user.userId, {
       reason,
       idempotencyKey: resolvedIdempotencyKey,
     });

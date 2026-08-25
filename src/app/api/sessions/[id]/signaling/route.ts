@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { query, withTransaction } from '@/lib/postgres';
 import { requireAuth } from '@/lib/auth';
 
 // GET /api/sessions/[id]/signaling?since=timestamp
@@ -7,20 +7,19 @@ export async function GET(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const authRes = requireAuth(req);
+  const authRes = await requireAuth(req);
   if ('errorResponse' in authRes) return authRes.errorResponse;
 
   const { user } = authRes;
   const sessionId = params.id;
-  const db = getDb();
   const { searchParams } = new URL(req.url);
   const since = searchParams.get('since');
 
   try {
     // Verify user is session participant
-    const isParticipant = db.prepare(`
-      SELECT 1 FROM sessions WHERE id = ? AND (teacher_id = ? OR learner_id = ?)
-    `).get(sessionId, user.userId, user.userId);
+    const isParticipant = (await query(`
+      SELECT 1 FROM sessions WHERE id = $1 AND (teacher_id = $2 OR learner_id = $3)
+    `, [sessionId, user.userId, user.userId])).rows[0];
 
     if (!isParticipant) {
       return NextResponse.json({ error: 'Unauthorized: Not a session participant' }, { status: 403 });
@@ -29,18 +28,18 @@ export async function GET(
     let signalsQuery = `
       SELECT id, session_id, sender_id, receiver_id, signal_type, payload_json, created_at
       FROM session_signaling_messages
-      WHERE session_id = ? AND sender_id != ?
+      WHERE session_id = $1 AND sender_id != $2
     `;
     const queryParams: any[] = [sessionId, user.userId];
 
     if (since) {
-      signalsQuery += ` AND created_at > ?`;
+      signalsQuery += ` AND created_at > $3`;
       queryParams.push(since);
     }
 
     signalsQuery += ` ORDER BY created_at ASC LIMIT 50`;
 
-    const rawSignals = db.prepare(signalsQuery).all(...queryParams) as any[];
+    const rawSignals = (await query(signalsQuery, queryParams)).rows as any[];
 
     const signals = rawSignals.map((s) => ({
       id: s.id,
@@ -53,11 +52,11 @@ export async function GET(
     }));
 
     // Also fetch active presence
-    const presence = db.prepare(`
+    const presence = (await query(`
       SELECT user_id, display_name, role, camera_on, mic_on, screen_sharing, status, last_ping
       FROM session_room_presence
-      WHERE session_id = ?
-    `).all(sessionId);
+      WHERE session_id = $1
+    `, [sessionId])).rows;
 
     return NextResponse.json({
       signals,
@@ -75,21 +74,20 @@ export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const authRes = requireAuth(req);
+  const authRes = await requireAuth(req);
   if ('errorResponse' in authRes) return authRes.errorResponse;
 
   const { user } = authRes;
   const sessionId = params.id;
-  const db = getDb();
 
   try {
-    const session = db.prepare(`
+    const session = (await query(`
       SELECT s.*, tp.display_name as teacher_name, lp.display_name as learner_name
       FROM sessions s
       LEFT JOIN profiles tp ON s.teacher_id = tp.user_id
       LEFT JOIN profiles lp ON s.learner_id = lp.user_id
-      WHERE s.id = ?
-    `).get(sessionId) as any;
+      WHERE s.id = $1
+    `, [sessionId])).rows[0] as any;
 
     if (!session) {
       return NextResponse.json({ error: 'Session not found' }, { status: 404 });
@@ -113,35 +111,35 @@ export async function POST(
     const role = isTeacher ? 'TRAINER' : 'LEARNER';
     const displayName = isTeacher ? (session.teacher_name || 'Mentor') : (session.learner_name || 'Learner');
 
-    db.transaction(() => {
+    await withTransaction(async (client) => {
       // 1. Insert signaling message
-      db.prepare(`
+      await client.query(`
         INSERT INTO session_signaling_messages (
           id, session_id, sender_id, receiver_id, signal_type, payload_json, is_consumed, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, 0, CURRENT_TIMESTAMP)
-      `).run(
+        ) VALUES ($1, $2, $3, $4, $5, $6, 0, CURRENT_TIMESTAMP)
+      `, [
         signalId,
         sessionId,
         user.userId,
         receiverId || (isTeacher ? session.learner_id : session.teacher_id),
         signalType,
         JSON.stringify(payload || {})
-      );
+      ]);
 
       // 2. Update room presence
-      db.prepare(`
+      await client.query(`
         INSERT INTO session_room_presence (
           id, session_id, user_id, display_name, role, camera_on, mic_on, screen_sharing, status, last_ping
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'CONNECTED', CURRENT_TIMESTAMP)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'CONNECTED', CURRENT_TIMESTAMP)
         ON CONFLICT(session_id, user_id) DO UPDATE SET
           display_name = excluded.display_name,
           role = excluded.role,
-          camera_on = COALESCE(?, session_room_presence.camera_on),
-          mic_on = COALESCE(?, session_room_presence.mic_on),
-          screen_sharing = COALESCE(?, session_room_presence.screen_sharing),
+          camera_on = COALESCE($9, session_room_presence.camera_on),
+          mic_on = COALESCE($10, session_room_presence.mic_on),
+          screen_sharing = COALESCE($11, session_room_presence.screen_sharing),
           status = 'CONNECTED',
           last_ping = CURRENT_TIMESTAMP
-      `).run(
+      `, [
         `pres-${sessionId}-${user.userId}`,
         sessionId,
         user.userId,
@@ -153,8 +151,8 @@ export async function POST(
         cameraOn !== undefined ? (cameraOn ? 1 : 0) : null,
         micOn !== undefined ? (micOn ? 1 : 0) : null,
         screenSharing !== undefined ? (screenSharing ? 1 : 0) : null
-      );
-    })();
+      ]);
+    });
 
     return NextResponse.json({
       success: true,

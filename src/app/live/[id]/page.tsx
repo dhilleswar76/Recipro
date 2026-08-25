@@ -228,18 +228,35 @@ function processLearningGoal() {
       });
     }
 
-    // Handle incoming opponent Audio & Video stream
+    // Ensure audio and video transceivers exist so SDP always includes sendrecv for both audio & video
+    try {
+      if (!pc.getTransceivers().some(t => t.receiver.track.kind === 'audio')) {
+        pc.addTransceiver('audio', { direction: 'sendrecv' });
+      }
+      if (!pc.getTransceivers().some(t => t.receiver.track.kind === 'video')) {
+        pc.addTransceiver('video', { direction: 'sendrecv' });
+      }
+    } catch (e) {}
+
+    // Handle incoming opponent Audio & Video stream (individual tracks or bundled streams)
     pc.ontrack = (event) => {
       console.log('Received remote media track:', event.track.kind, event.streams);
+      let incomingStream: MediaStream | null = null;
       if (event.streams && event.streams[0]) {
-        const remoteStream = event.streams[0];
-        if (remoteVideoRef.current) {
-          remoteVideoRef.current.srcObject = remoteStream;
-          remoteVideoRef.current.play().catch(e => console.log('Remote playback notice:', e));
-        }
-        setHasRemotePeerStream(true);
-        setConnectionState('CONNECTED');
+        incomingStream = event.streams[0];
+      } else if (remoteVideoRef.current && remoteVideoRef.current.srcObject instanceof MediaStream) {
+        incomingStream = remoteVideoRef.current.srcObject;
+        incomingStream.addTrack(event.track);
+      } else {
+        incomingStream = new MediaStream([event.track]);
       }
+
+      if (remoteVideoRef.current && incomingStream) {
+        remoteVideoRef.current.srcObject = incomingStream;
+        remoteVideoRef.current.play().catch(e => console.log('Remote playback notice:', e));
+      }
+      setHasRemotePeerStream(true);
+      setConnectionState('CONNECTED');
     };
 
     // Forward ICE Candidates to Opponent via Signaling
@@ -267,6 +284,7 @@ function processLearningGoal() {
   const initiateWebRTCCall = async (pcInstance?: RTCPeerConnection) => {
     const pc = pcInstance || peerConnectionRef.current || createPeerConnection();
     if (makingOfferRef.current) return;
+    if (pc.signalingState !== 'stable') return;
 
     try {
       makingOfferRef.current = true;
@@ -277,6 +295,7 @@ function processLearningGoal() {
         offerToReceiveVideo: true,
       });
 
+      if (pc.signalingState !== 'stable') return;
       await pc.setLocalDescription(offer);
       await sendSignal('OFFER', offer);
       console.log('WebRTC Offer sent to opponent.');
@@ -301,9 +320,9 @@ function processLearningGoal() {
         // If trainer/host sees learner arrived in presence and call not yet established, initiate offer
         const otherParticipantInPresence = data.presence.some((p: any) => p.user_id !== user?.id);
         const now = Date.now();
-        if (otherParticipantInPresence && !hasRemotePeerStream && (now - lastOfferAttemptRef.current > 4000)) {
+        if (otherParticipantInPresence && !hasRemotePeerStream && (now - lastOfferAttemptRef.current > 5000)) {
           const pc = peerConnectionRef.current || createPeerConnection();
-          if (isInitiatorRef.current || pc.signalingState === 'stable') {
+          if (pc.signalingState === 'stable' && isInitiatorRef.current) {
             initiateWebRTCCall(pc);
           }
         }
@@ -319,7 +338,19 @@ function processLearningGoal() {
           if (sig.signalType === 'OFFER') {
             try {
               console.log('Received OFFER from opponent, creating ANSWER...');
-              await pc.setRemoteDescription(new RTCSessionDescription(sig.payload));
+              if (pc.signalingState !== 'stable') {
+                if (!isInitiatorRef.current) {
+                  await Promise.all([
+                    pc.setLocalDescription({ type: 'rollback' } as any),
+                    pc.setRemoteDescription(new RTCSessionDescription(sig.payload))
+                  ]);
+                } else {
+                  continue;
+                }
+              } else {
+                await pc.setRemoteDescription(new RTCSessionDescription(sig.payload));
+              }
+
               await flushIceCandidates(pc);
               const answer = await pc.createAnswer();
               await pc.setLocalDescription(answer);

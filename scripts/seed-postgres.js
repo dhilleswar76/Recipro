@@ -1,5 +1,10 @@
+const path = require('node:path');
 const bcrypt = require('bcryptjs');
 const { Pool } = require('pg');
+
+try {
+  require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
+} catch (_) {}
 
 const skills = [
   ['skill-python', 'Python Programming', 'Computer Science', 'Code', 'Core Python, scripting, data pipelines, and backend APIs'],
@@ -30,8 +35,12 @@ const students = [
 async function upsert(client, text, values) { await client.query(text, values); }
 
 async function main() {
-  if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required');
-  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  const dbUrl = process.env.DATABASE_URL;
+  if (!dbUrl) throw new Error('DATABASE_URL is required');
+  const pool = new Pool({
+    connectionString: dbUrl,
+    ssl: dbUrl.includes('sslmode=require') ? { rejectUnauthorized: false } : undefined,
+  });
   const client = await pool.connect();
   try {
     await client.query('BEGIN');

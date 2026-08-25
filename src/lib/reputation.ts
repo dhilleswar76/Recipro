@@ -224,7 +224,7 @@ export async function getMentorQualityForSkill(mentorId: string, skillId?: strin
     SELECT r.score, r.punctuality_score, r.clarity_score, r.flagged_suspicious
     FROM ratings r
     JOIN sessions s ON r.session_id = s.id
-    WHERE r.ratee_id = $1 AND s.teacher_id = $2 AND r.flagged_suspicious = 0
+    WHERE r.ratee_id = $1 AND s.teacher_id = $2 AND r.flagged_suspicious = FALSE
   `;
   const queryParams: any[] = [mentorId, mentorId];
 

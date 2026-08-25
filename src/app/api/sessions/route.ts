@@ -134,7 +134,7 @@ export async function GET(req: NextRequest) {
       `;
     } else if (sort === 'NEWEST_FIRST') {
       orderBySql = 's.created_at DESC';
-      await client.query(`
+    } else if (sort === 'OLDEST_FIRST') {
       orderBySql = 's.created_at ASC';
     } else if (sort === 'RECENTLY_UPDATED') {
       orderBySql = 's.updated_at DESC';
@@ -161,7 +161,8 @@ export async function GET(req: NextRequest) {
       let parameterIndex = offset;
       return sql.replace(/\?/g, () => `$${++parameterIndex}`);
     };
-    const total = (await query(toPostgresPlaceholders(countQuery), queryParams)).rows[0].total;
+    const countRes = await query(toPostgresPlaceholders(countQuery), queryParams);
+    const total = Number(countRes.rows[0]?.total || 0);
 
     // 2. Fetch Sessions List
     const selectQuery = `

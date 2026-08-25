@@ -289,6 +289,10 @@ function ExploreComponent() {
 
   // 1-Click Subscribe to Mentor Availability
   const handleSubscribeSkill = async (skillName: string, category: string = 'Computer Science') => {
+    if (!user) {
+      router.push(`/login?redirect=/explore?q=${encodeURIComponent(skillName)}`);
+      return;
+    }
     try {
       const res = await fetch('/api/skill-requests', {
         method: 'POST',
@@ -310,9 +314,13 @@ function ExploreComponent() {
   // Submit Skill Request from Gap Resolver
   const handleSubmitSkillRequest = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user) {
+      router.push(`/login?redirect=/explore?q=${encodeURIComponent(requestSkillName || query || '')}`);
+      return;
+    }
     setRequestSubmitting(true);
     try {
-      const chosenSkill = requestSkillName || query || 'Python';
+      const chosenSkill = (requestSkillName || query || 'Requested Skill').trim();
       const res = await fetch('/api/learning-requests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -330,8 +338,8 @@ function ExploreComponent() {
       });
 
       const data = await res.json();
-      if (res.ok) {
-        setRequestSuccessMsg("We'll notify you when a suitable mentor becomes available.");
+      if (res.ok || res.status === 409) {
+        setRequestSuccessMsg(data.message || "We'll notify you when a suitable mentor becomes available.");
         setTimeout(() => {
           setSkillRequestModalOpen(false);
           setRequestSuccessMsg(null);
@@ -361,7 +369,7 @@ function ExploreComponent() {
   const hasActiveFilters = Boolean(query || selectedCategory || minProficiency || selectedDay || verifiedOnly || minRating || campusFilter !== 'ALL' || selectedMode !== 'ALL');
   const categories = ['Computer Science', 'Design', 'Languages', 'Mathematics', 'Business'];
   const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-  const isSkillGapZeroSupply = (selectedMode === 'ALL' || selectedMode === 'MODE_B') && results.modeB.length === 0 && !loading;
+  const isSkillGapZeroSupply = (selectedMode === 'ALL' || selectedMode === 'MODE_B') && results.modeB.length === 0 && !loading && (Boolean(query.trim()) || hasActiveFilters);
 
   // Reusable Mentor Card Component (with 1-Click Slot Pills)
   const renderMentorCard = (cand: any, isOutside: boolean, showSlotPills: boolean = true) => {

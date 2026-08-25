@@ -44,7 +44,20 @@ export async function GET(req: NextRequest) {
     // Check if Mode C cycle discovery is also requested
     let cycles: any[] = [];
     if (mode === 'MODE_C' || mode === 'ALL') {
-      cycles = await discoverExchangeCycles(authUser?.userId);
+      const allCycles = await discoverExchangeCycles(authUser?.userId);
+      if (q && q.trim()) {
+        const qLower = q.trim().toLowerCase();
+        cycles = allCycles.filter((c: any) => 
+          c.skillsFlow?.some((sf: any) => sf.skillName?.toLowerCase().includes(qLower)) ||
+          c.participants?.some((p: any) => 
+            p.teachesSkill?.toLowerCase().includes(qLower) || 
+            p.wantsSkill?.toLowerCase().includes(qLower) ||
+            p.displayName?.toLowerCase().includes(qLower)
+          )
+        );
+      } else {
+        cycles = allCycles;
+      }
     }
 
     return NextResponse.json({

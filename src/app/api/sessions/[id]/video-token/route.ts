@@ -1,18 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
 import { requireAuth } from '@/lib/auth';
 import { authorizeSessionParticipant, recordAttendanceEvent } from '@/lib/video-session';
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
-  const authRes = requireAuth(req);
+  const authRes = await requireAuth(req);
   if ('errorResponse' in authRes) return authRes.errorResponse;
 
   const { user } = authRes;
-  const db = getDb();
   const sessionId = params.id;
 
   try {
-    const authResult = authorizeSessionParticipant(db, sessionId, user.userId);
+    const authResult = await authorizeSessionParticipant(sessionId, user.userId);
 
     if (!authResult.authorized) {
       return NextResponse.json({
@@ -22,7 +20,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     }
 
     // Record participant JOIN event telemetry
-    recordAttendanceEvent(db, sessionId, user.userId, 'JOINED', {
+    await recordAttendanceEvent(sessionId, user.userId, 'JOINED', {
       role: authResult.role,
       userAgent: req.headers.get('user-agent') || 'Browser Client',
     });

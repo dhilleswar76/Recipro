@@ -6,7 +6,7 @@ export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const authRes = requireAuth(req);
+  const authRes = await requireAuth(req);
   if ('errorResponse' in authRes) return authRes.errorResponse;
 
   const { user } = authRes;
@@ -22,7 +22,7 @@ export async function POST(
 
     const action = body.action || 'ACCEPT_SKILL';
 
-    const result = respondToReturnProposal({
+    const result = await respondToReturnProposal({
       sessionId,
       actorUserId: user.userId,
       action: action as any,

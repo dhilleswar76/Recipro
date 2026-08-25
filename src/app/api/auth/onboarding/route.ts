@@ -1,15 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { withTransaction } from '@/lib/postgres';
 import { requireAuth } from '@/lib/auth';
 import { OnboardingSchema } from '@/lib/validations';
 
 export async function POST(req: NextRequest) {
-  const authRes = requireAuth(req);
+  const authRes = await requireAuth(req);
   if ('errorResponse' in authRes) return authRes.errorResponse;
 
   const { user } = authRes;
-  const db = getDb();
-
   try {
     const body = await req.json();
     const parsed = OnboardingSchema.safeParse(body);
@@ -23,23 +21,21 @@ export async function POST(req: NextRequest) {
 
     const { userType, college, major, year, teachingPreference, bio } = parsed.data;
 
-    const tx = db.transaction(() => {
+    await withTransaction(async (client) => {
       // 1. Update user capability (user_type)
-      db.prepare(`
+      await client.query(`
         UPDATE users 
         SET user_type = ?, updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
-      `).run(userType, user.userId);
+      `, [userType, user.userId]);
 
       // 2. Update profile details
-      db.prepare(`
+      await client.query(`
         UPDATE profiles 
         SET college = ?, major = ?, year = ?, teaching_preference = ?, bio = COALESCE(?, bio), updated_at = CURRENT_TIMESTAMP
         WHERE user_id = ?
-      `).run(college, major, year, teachingPreference, bio || null, user.userId);
+      `, [college, major, year, teachingPreference, bio || null, user.userId]);
     });
-
-    tx();
 
     return NextResponse.json({
       success: true,

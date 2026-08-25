@@ -1,17 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { query } from '@/lib/postgres';
 import { requireAuth } from '@/lib/auth';
 
 export async function GET(req: NextRequest) {
-  const authRes = requireAuth(req);
+  const authRes = await requireAuth(req);
   if ('errorResponse' in authRes) {
     return NextResponse.json({ user: null, authenticated: false }, { status: 200 });
   }
 
   const { user } = authRes;
-  const db = getDb();
-
-  const fullUser = db.prepare(`
+  const fullUserResult = await query(`
     SELECT 
       u.id, u.email, u.role, u.status, u.campus_id, COALESCE(u.user_type, 'TEACHER_LEARNER') as user_type,
       COALESCE(u.email_verified, 0) as email_verified, COALESCE(u.is_academic_email, 0) as is_academic_email,
@@ -28,33 +26,37 @@ export async function GET(req: NextRequest) {
     LEFT JOIN skill_credit_accounts acc ON u.id = acc.user_id
     LEFT JOIN reputations r ON u.id = r.user_id
     LEFT JOIN wallets w ON u.id = w.user_id
-    WHERE u.id = ?
-  `).get(user.userId) as any;
+    WHERE u.id = $1
+  `, [user.userId]);
+  const fullUser = fullUserResult.rows[0] as any;
 
   if (!fullUser) {
     return NextResponse.json({ error: 'User profile not found' }, { status: 404 });
   }
 
   // Fetch teaching skills
-  const skills = db.prepare(`
+  const skillsResult = await query(`
     SELECT us.*, s.name as skill_name, s.category as skill_category, s.icon
     FROM user_skills us
     JOIN skills s ON us.skill_id = s.id
-    WHERE us.user_id = ?
-  `).all(user.userId);
+    WHERE us.user_id = $1
+  `, [user.userId]);
+  const skills = skillsResult.rows;
 
   // Fetch learning goals
-  const goals = db.prepare(`
+  const goalsResult = await query(`
     SELECT lg.*, s.name as skill_name, s.category as skill_category
     FROM learning_goals lg
     JOIN skills s ON lg.skill_id = s.id
-    WHERE lg.user_id = ?
-  `).all(user.userId);
+    WHERE lg.user_id = $1
+  `, [user.userId]);
+  const goals = goalsResult.rows;
 
   // Fetch availability slots count
-  const slotsCount = (db.prepare(`
-    SELECT COUNT(*) as count FROM availability_slots WHERE user_id = ?
-  `).get(user.userId) as any).count;
+  const slotsResult = await query(`
+    SELECT COUNT(*) as count FROM availability_slots WHERE user_id = $1
+  `, [user.userId]);
+  const slotsCount = Number((slotsResult.rows[0] as any).count);
 
   // Calculate Profile Completion Checklist
   const checklist = [
@@ -71,9 +73,10 @@ export async function GET(req: NextRequest) {
   const completionPercentage = Math.round((completedCount / checklist.length) * 100);
 
   // Fetch unread notifications count
-  const unreadNotifs = (db.prepare(`
-    SELECT COUNT(*) as count FROM notifications WHERE user_id = ? AND is_read = 0
-  `).get(user.userId) as any).count;
+  const unreadResult = await query(`
+    SELECT COUNT(*) as count FROM notifications WHERE user_id = $1 AND is_read = 0
+  `, [user.userId]);
+  const unreadNotifs = Number((unreadResult.rows[0] as any).count);
 
   return NextResponse.json({
     user: {

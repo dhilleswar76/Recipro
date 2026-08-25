@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
 import { EmailService } from '@/lib/email-service';
 
 export async function POST(req: NextRequest) {
-  const db = getDb();
-
   try {
     let body: any = {};
     try {
@@ -31,7 +28,7 @@ export async function POST(req: NextRequest) {
       </div>
     `;
 
-    const result = await EmailService.sendEmail(db, {
+    const result = await EmailService.sendEmail({
       to: testRecipient,
       subject: testSubject,
       html: testHtml,

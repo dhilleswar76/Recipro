@@ -1,17 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
 import { requireAuth } from '@/lib/auth';
 import { createLearningRequest, getLearningRequestsForUser } from '@/lib/learning-requests';
+import { query } from '@/lib/postgres';
 
 export async function GET(req: NextRequest) {
-  const authRes = requireAuth(req);
+  const authRes = await requireAuth(req);
   if ('errorResponse' in authRes) return authRes.errorResponse;
 
   const { user } = authRes;
-  const db = getDb();
-
   try {
-    const requests = getLearningRequestsForUser(db, user.userId);
+    const requests = await getLearningRequestsForUser(user.userId);
     return NextResponse.json({ requests });
   } catch (err: any) {
     console.error('Fetch learning requests error:', err);
@@ -20,12 +18,10 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const authRes = requireAuth(req);
+  const authRes = await requireAuth(req);
   if ('errorResponse' in authRes) return authRes.errorResponse;
 
   const { user } = authRes;
-  const db = getDb();
-
   try {
     const body = await req.json();
     const skillName = (body.skillName || '').trim();
@@ -34,10 +30,11 @@ export async function POST(req: NextRequest) {
     }
 
     // Duplicate open request guard for the same skill
-    const existingOpen = db.prepare(`
+    const existingOpenResult = await query(`
       SELECT id FROM learning_requests 
-      WHERE learner_id = ? AND LOWER(skill_name) = LOWER(?) AND status IN ('OPEN', 'MENTOR_FOUND', 'NOTIFIED')
-    `).get(user.userId, skillName);
+      WHERE learner_id = $1 AND LOWER(skill_name) = LOWER($2) AND status IN ('OPEN', 'MENTOR_FOUND', 'NOTIFIED')
+    `, [user.userId, skillName]);
+    const existingOpen = existingOpenResult.rows[0];
 
     if (existingOpen) {
       return NextResponse.json({
@@ -46,7 +43,7 @@ export async function POST(req: NextRequest) {
       }, { status: 409 });
     }
 
-    const request = createLearningRequest(db, {
+    const request = await createLearningRequest({
       learnerId: user.userId,
       skillName,
       category: body.category || 'Computer Science',

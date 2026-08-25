@@ -1,7 +1,7 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from './db';
+import { query } from './postgres';
 
 const JWT_SECRET = process.env.AUTH_SECRET || 'skillswap-super-secret-jwt-key-for-local-development-min32bytes';
 const JWT_EXPIRES_IN = process.env.TOKEN_EXPIRY || '7d';
@@ -51,7 +51,7 @@ export function getAuthUser(req: NextRequest): TokenPayload | null {
   return null;
 }
 
-export function requireAuth(req: NextRequest): { user: TokenPayload } | { errorResponse: NextResponse } {
+export async function requireAuth(req: NextRequest): Promise<{ user: TokenPayload } | { errorResponse: NextResponse }> {
   const user = getAuthUser(req);
   if (!user) {
     return {
@@ -63,8 +63,8 @@ export function requireAuth(req: NextRequest): { user: TokenPayload } | { errorR
   }
 
   // Double check user status in DB to ensure account wasn't suspended
-  const db = getDb();
-  const dbUser = db.prepare('SELECT status, role FROM users WHERE id = ?').get(user.userId) as { status: string; role: string } | undefined;
+  const result = await query<{ status: string; role: string }>('SELECT status, role FROM users WHERE id = $1', [user.userId]);
+  const dbUser = result.rows[0];
   
   if (!dbUser) {
     return {
@@ -91,8 +91,8 @@ export function requireAuth(req: NextRequest): { user: TokenPayload } | { errorR
   return { user };
 }
 
-export function requireRole(req: NextRequest, allowedRoles: ('STUDENT' | 'MODERATOR' | 'ADMIN')[]): { user: TokenPayload } | { errorResponse: NextResponse } {
-  const authResult = requireAuth(req);
+export async function requireRole(req: NextRequest, allowedRoles: ('STUDENT' | 'MODERATOR' | 'ADMIN')[]): Promise<{ user: TokenPayload } | { errorResponse: NextResponse }> {
+  const authResult = await requireAuth(req);
   if ('errorResponse' in authResult) {
     return authResult;
   }
@@ -110,7 +110,7 @@ export function requireRole(req: NextRequest, allowedRoles: ('STUDENT' | 'MODERA
   return { user };
 }
 
-export function requireAdmin(req: NextRequest): { user: TokenPayload } | { errorResponse: NextResponse } {
+export async function requireAdmin(req: NextRequest): Promise<{ user: TokenPayload } | { errorResponse: NextResponse }> {
   return requireRole(req, ['ADMIN']);
 }
 

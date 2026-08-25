@@ -6,7 +6,7 @@ export async function GET(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const authRes = requireAdmin(req);
+  const authRes = await requireAdmin(req);
   if ('errorResponse' in authRes) return authRes.errorResponse;
 
   const { user } = authRes;
@@ -16,13 +16,13 @@ export async function GET(
   const toDate = searchParams.get('to') || undefined;
 
   try {
-    const report = getUserActivityReport(targetUserId, fromDate, toDate);
+    const report = await getUserActivityReport(targetUserId, fromDate, toDate);
 
     if (!report) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    logAdminAction({
+    await logAdminAction({
       adminUserId: user.userId,
       action: 'ADMIN_VIEWED_USER_REPORT',
       targetType: 'USER_REPORT',

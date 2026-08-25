@@ -1,17 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { query, withTransaction } from '@/lib/postgres';
 import { requireAuth } from '@/lib/auth';
+import { NotificationService } from '@/lib/notifications';
 import { BookSessionSchema } from '@/lib/validations';
 import { reserveEscrowCredits, recordSessionEvent } from '@/lib/state-machine';
 import { checkSlotHardConstraints } from '@/lib/scheduling';
-import { NotificationService } from '@/lib/notifications';
 
 export async function GET(req: NextRequest) {
-  const authRes = requireAuth(req);
+  const authRes = await requireAuth(req);
   if ('errorResponse' in authRes) return authRes.errorResponse;
 
   const { user } = authRes;
-  const db = getDb();
   const { searchParams } = new URL(req.url);
 
   const search = (searchParams.get('search') || searchParams.get('q') || '').trim();
@@ -83,38 +82,41 @@ export async function GET(req: NextRequest) {
     // Date Filters
     const today = new Date().toISOString().substring(0, 10);
     if (dateFilter === 'TODAY') {
-      whereClauses.push('DATE(s.scheduled_start) = DATE(?)');
+      whereClauses.push('s.scheduled_start::date = $DATE$');
       queryParams.push(today);
+      whereClauses[whereClauses.length - 1] = whereClauses[whereClauses.length - 1].replace('$DATE$', '?');
     } else if (dateFilter === 'TOMORROW') {
       const tomorrow = new Date(Date.now() + 86400000).toISOString().substring(0, 10);
-      whereClauses.push('DATE(s.scheduled_start) = DATE(?)');
+      whereClauses.push('s.scheduled_start::date = $DATE$');
       queryParams.push(tomorrow);
+      whereClauses[whereClauses.length - 1] = whereClauses[whereClauses.length - 1].replace('$DATE$', '?');
     } else if (dateFilter === 'THIS_WEEK' || dateFilter === 'NEXT_7_DAYS') {
       const next7 = new Date(Date.now() + 7 * 86400000).toISOString().substring(0, 10);
-      whereClauses.push('DATE(s.scheduled_start) >= DATE(?) AND DATE(s.scheduled_start) <= DATE(?)');
+      whereClauses.push('s.scheduled_start::date >= $DATE_FROM$ AND s.scheduled_start::date <= $DATE_TO$');
       queryParams.push(today, next7);
+      whereClauses[whereClauses.length - 1] = whereClauses[whereClauses.length - 1].replace('$DATE_FROM$', '?').replace('$DATE_TO$', '?');
     } else if (dateFilter === 'THIS_MONTH') {
       const monthPrefix = today.substring(0, 7);
-      whereClauses.push("strftime('%Y-%m', s.scheduled_start) = ?");
+      whereClauses.push("TO_CHAR(s.scheduled_start, 'YYYY-MM') = ?");
       queryParams.push(monthPrefix);
     } else if (dateFilter === 'CUSTOM') {
       if (dateFrom) {
-        whereClauses.push('DATE(s.scheduled_start) >= DATE(?)');
+        whereClauses.push('s.scheduled_start::date >= ?');
         queryParams.push(dateFrom);
       }
       if (dateTo) {
-        whereClauses.push('DATE(s.scheduled_start) <= DATE(?)');
+        whereClauses.push('s.scheduled_start::date <= ?');
         queryParams.push(dateTo);
       }
     }
 
     // Time Filters (HH:MM)
     if (timeStart) {
-      whereClauses.push("strftime('%H:%M', s.scheduled_start) >= ?");
+      whereClauses.push("TO_CHAR(s.scheduled_start, 'HH24:MI') >= ?");
       queryParams.push(timeStart);
     }
     if (timeEnd) {
-      whereClauses.push("strftime('%H:%M', s.scheduled_start) <= ?");
+      whereClauses.push("TO_CHAR(s.scheduled_start, 'HH24:MI') <= ?");
       queryParams.push(timeEnd);
     }
 
@@ -132,7 +134,7 @@ export async function GET(req: NextRequest) {
       `;
     } else if (sort === 'NEWEST_FIRST') {
       orderBySql = 's.created_at DESC';
-    } else if (sort === 'OLDEST_FIRST') {
+      await client.query(`
       orderBySql = 's.created_at ASC';
     } else if (sort === 'RECENTLY_UPDATED') {
       orderBySql = 's.updated_at DESC';
@@ -155,7 +157,11 @@ export async function GET(req: NextRequest) {
       LEFT JOIN profiles lp ON s.learner_id = lp.user_id
       ${whereSql}
     `;
-    const total = (db.prepare(countQuery).get(...queryParams) as any).total;
+    const toPostgresPlaceholders = (sql: string, offset = 0) => {
+      let parameterIndex = offset;
+      return sql.replace(/\?/g, () => `$${++parameterIndex}`);
+    };
+    const total = (await query(toPostgresPlaceholders(countQuery), queryParams)).rows[0].total;
 
     // 2. Fetch Sessions List
     const selectQuery = `
@@ -179,12 +185,12 @@ export async function GET(req: NextRequest) {
       LEFT JOIN ratings r ON s.id = r.session_id AND r.rater_id = ?
       ${whereSql}
       ORDER BY ${orderBySql}
-      LIMIT ? OFFSET ?
+      LIMIT $${queryParams.length + 2} OFFSET $${queryParams.length + 3}
     `;
-    const sessions = db.prepare(selectQuery).all(user.userId, ...queryParams, limit, offset);
+    const sessions = (await query(toPostgresPlaceholders(selectQuery, 1), [user.userId, ...queryParams, limit, offset])).rows;
 
     // 3. Compute Real Persisted Summary Counters for User
-    const userSummary = db.prepare(`
+    const userSummary = (await query(`
       SELECT 
         COUNT(*) as total_sessions,
         SUM(CASE WHEN status IN ('SCHEDULED', 'ACCEPTED', 'IN_PROGRESS') THEN 1 ELSE 0 END) as upcoming_sessions,
@@ -193,11 +199,11 @@ export async function GET(req: NextRequest) {
         SUM(CASE WHEN status IN ('COMPLETED', 'CREDIT_SETTLED') THEN 1 ELSE 0 END) as completed_sessions,
         SUM(CASE WHEN status = 'CANCELLED' THEN 1 ELSE 0 END) as cancelled_sessions,
         SUM(CASE WHEN status = 'DISPUTED' THEN 1 ELSE 0 END) as disputed_sessions,
-        SUM(CASE WHEN teacher_id = ? AND status IN ('COMPLETED', 'CREDIT_SETTLED') THEN credits_amount ELSE 0 END) as credits_earned,
-        SUM(CASE WHEN learner_id = ? AND status IN ('COMPLETED', 'CREDIT_SETTLED') THEN credits_amount ELSE 0 END) as credits_spent
+        SUM(CASE WHEN teacher_id = $1 AND status IN ('COMPLETED', 'CREDIT_SETTLED') THEN credits_amount ELSE 0 END) as credits_earned,
+        SUM(CASE WHEN learner_id = $2 AND status IN ('COMPLETED', 'CREDIT_SETTLED') THEN credits_amount ELSE 0 END) as credits_spent
       FROM sessions
-      WHERE teacher_id = ? OR learner_id = ?
-    `).get(user.userId, user.userId, user.userId, user.userId) as any;
+      WHERE teacher_id = $3 OR learner_id = $4
+    `, [user.userId, user.userId, user.userId, user.userId])).rows[0] as any;
 
     return NextResponse.json({
       sessions,
@@ -226,11 +232,10 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const authRes = requireAuth(req);
+  const authRes = await requireAuth(req);
   if ('errorResponse' in authRes) return authRes.errorResponse;
 
   const { user } = authRes;
-  const db = getDb();
 
   try {
     const body = await req.json();
@@ -247,18 +252,18 @@ export async function POST(req: NextRequest) {
     }
 
     // Verify teacher exists and teaches this skill
-    const teacherSkill = db.prepare(`
-      SELECT us.id, us.verification_status FROM user_skills us WHERE us.user_id = ? AND us.skill_id = ?
-    `).get(teacherId, skillId) as { id: string; verification_status: string } | undefined;
+    const teacherSkill = (await query<{ id: string; verification_status: string }>(`
+      SELECT us.id, us.verification_status FROM user_skills us WHERE us.user_id = $1 AND us.skill_id = $2
+    `, [teacherId, skillId])).rows[0];
 
     if (!teacherSkill) {
       return NextResponse.json({ error: 'The selected mentor does not teach this skill' }, { status: 400 });
     }
 
     // Pre-check learner credit balance
-    const account = db.prepare(`
-      SELECT balance FROM skill_credit_accounts WHERE user_id = ?
-    `).get(user.userId) as { balance: number } | undefined;
+    const account = (await query<{ balance: number }>(`
+      SELECT balance FROM skill_credit_accounts WHERE user_id = $1
+    `, [user.userId])).rows[0];
 
     if (!account || account.balance < creditsAmount) {
       return NextResponse.json({ 
@@ -272,15 +277,16 @@ export async function POST(req: NextRequest) {
     // Execute atomic booking transaction with hard scheduling constraint check
     let conflictResult: { hasConflict: boolean; reason?: string; nextAvailableSlot?: string } = { hasConflict: false };
 
-    const bookingTx = db.transaction(() => {
+    try {
+      await withTransaction(async (client) => {
       // 1. Check Hard Constraints atomically inside transaction
-      conflictResult = checkSlotHardConstraints(db, {
+      conflictResult = await checkSlotHardConstraints({
         teacherId,
         learnerId: user.userId,
         scheduledStart,
         scheduledEnd,
         bufferMinutes: 15,
-      });
+      }, client);
 
       if (conflictResult.hasConflict) {
         return; // Abort booking transaction
@@ -288,11 +294,11 @@ export async function POST(req: NextRequest) {
 
       // 2. Insert Session Record FIRST (Satisfies Foreign Key constraints for subsequent credit transactions)
       const meetingUrl = `https://meet.skillswap.internal/room/${sessionId}`;
-      db.prepare(`
+      await client.query(`
         INSERT INTO sessions (
           id, title, skill_id, teacher_id, learner_id, status, scheduled_start, scheduled_end, duration_hours, credits_amount, mode, location_or_url, idempotency_key, notes
-        ) VALUES (?, ?, ?, ?, ?, 'REQUESTED', ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
+        ) VALUES ($1, $2, $3, $4, $5, 'REQUESTED', $6, $7, $8, $9, $10, $11, $12, $13)
+      `, [
         sessionId,
         title,
         skillId,
@@ -305,30 +311,31 @@ export async function POST(req: NextRequest) {
         mode,
         meetingUrl,
         idempotencyKey,
-        notes || ''
-      );
+        notes || '',
+      ]);
 
       // 2b. Insert Session Participants (Explicit Session Roles)
-      db.prepare(`
-        INSERT OR IGNORE INTO session_participants (id, session_id, user_id, session_role, confirmed)
-        VALUES (?, ?, ?, 'TRAINER', 0), (?, ?, ?, 'LEARNER', 0)
-      `).run(
+      await client.query(`
+        INSERT INTO session_participants (id, session_id, user_id, session_role, confirmed)
+        VALUES ($1, $2, $3, 'TRAINER', 0), ($4, $5, $6, 'LEARNER', 0)
+        ON CONFLICT (session_id, user_id) DO NOTHING
+      `, [
         `sp-${sessionId}-trainer`,
         sessionId,
         teacherId,
         `sp-${sessionId}-learner`,
         sessionId,
-        user.userId
-      );
+        user.userId,
+      ]);
 
       // 3. Reserve Learner Escrow Credits (Now references existing sessionId)
-      const escrowRes = reserveEscrowCredits(user.userId, creditsAmount, sessionId, idempotencyKey);
+      const escrowRes = await reserveEscrowCredits(user.userId, creditsAmount, sessionId, idempotencyKey);
       if (!escrowRes.success) {
         throw new Error(`INSUFFICIENT_CREDITS:${escrowRes.message}`);
       }
 
       // 4. Record Initial Lifecycle Audit Event
-      recordSessionEvent(
+      await recordSessionEvent(
         sessionId,
         user.userId,
         'REQUESTED',
@@ -339,19 +346,16 @@ export async function POST(req: NextRequest) {
       );
 
       // 5. Notify Teacher
-      NotificationService.send(db, {
-        userId: teacherId,
-        type: 'SESSION_REQUESTED',
-        title: 'New Session Request',
-        message: `${user.email} requested a ${durationHours} hour skill session for ${title}`,
-        relatedEntityType: 'SESSION',
-        relatedEntityId: sessionId,
-        actionUrl: `/sessions/${sessionId}`,
+        await NotificationService.send({
+          userId: teacherId,
+          type: 'SESSION_REQUESTED',
+          title: 'New Session Request',
+          message: `${user.email} requested a ${durationHours} hour skill session for ${title}`,
+          relatedEntityType: 'SESSION',
+          relatedEntityId: sessionId,
+          actionUrl: `/sessions/${sessionId}`,
+        });
       });
-    });
-
-    try {
-      bookingTx();
     } catch (txErr: any) {
       if (txErr.message.startsWith('INSUFFICIENT_CREDITS:')) {
         return NextResponse.json({ error: txErr.message.replace('INSUFFICIENT_CREDITS:', '') }, { status: 402 });
@@ -366,7 +370,7 @@ export async function POST(req: NextRequest) {
       }, { status: 409 });
     }
 
-    const createdSession = db.prepare(`SELECT * FROM sessions WHERE id = ?`).get(sessionId);
+    const createdSession = (await query('SELECT * FROM sessions WHERE id = $1', [sessionId])).rows[0];
     return NextResponse.json({ session: createdSession }, { status: 201 });
   } catch (err: any) {
     console.error('Book Session Error:', err);

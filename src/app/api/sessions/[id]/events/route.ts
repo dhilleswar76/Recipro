@@ -1,21 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getSessionEvents } from '@/lib/state-machine';
-import { getDb } from '@/lib/db';
+import { query } from '@/lib/postgres';
 
 export async function GET(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const authRes = requireAuth(req);
+  const authRes = await requireAuth(req);
   if ('errorResponse' in authRes) return authRes.errorResponse;
 
   const { user } = authRes;
-  const db = getDb();
   const sessionId = params.id;
 
   try {
-    const session = db.prepare(`SELECT teacher_id, learner_id FROM sessions WHERE id = ?`).get(sessionId) as any;
+    const session = (await query(`SELECT teacher_id, learner_id FROM sessions WHERE id = $1`, [sessionId])).rows[0] as any;
     if (!session) {
       return NextResponse.json({ error: 'Session not found' }, { status: 404 });
     }
@@ -24,7 +23,7 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized to view events for this session' }, { status: 403 });
     }
 
-    const events = getSessionEvents(sessionId);
+    const events = await getSessionEvents(sessionId);
     return NextResponse.json({ events });
   } catch (err: any) {
     console.error('Fetch Session Events Error:', err);

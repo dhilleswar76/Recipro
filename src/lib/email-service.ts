@@ -1,5 +1,5 @@
 import nodemailer from 'nodemailer';
-import Database from 'better-sqlite3';
+import { query } from './postgres';
 
 export interface EmailOptions {
   to: string;
@@ -50,7 +50,7 @@ export class EmailService {
   /**
    * Primary dispatcher: Checks SMTP -> Resend HTTP API -> SendGrid HTTP API -> Local Dev Logger
    */
-  static async sendEmail(db: Database.Database, options: EmailOptions): Promise<EmailSendResult> {
+  static async sendEmail(options: EmailOptions): Promise<EmailSendResult> {
     const deliveryId = `del-email-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
     const fromAddress = process.env.EMAIL_FROM || 'SkillSwap Campus <notifications@skillswap.campus.edu>';
 
@@ -66,7 +66,7 @@ export class EmailService {
           text: options.text || options.subject,
         });
 
-        this.logDelivery(db, deliveryId, options, 'DELIVERED', info.messageId);
+        await this.logDelivery(deliveryId, options, 'DELIVERED', info.messageId);
         return {
           success: true,
           messageId: info.messageId,
@@ -75,7 +75,7 @@ export class EmailService {
         };
       } catch (smtpErr: any) {
         console.error('[EmailService:SMTP_ERROR]', smtpErr);
-        this.logDelivery(db, deliveryId, options, 'FAILED', undefined, smtpErr.message);
+        await this.logDelivery(deliveryId, options, 'FAILED', undefined, smtpErr.message);
         return {
           success: false,
           provider: `SMTP (${process.env.SMTP_HOST})`,
@@ -105,23 +105,23 @@ export class EmailService {
 
         if (res.ok) {
           const data = await res.json();
-          this.logDelivery(db, deliveryId, options, 'DELIVERED', data.id);
+          await this.logDelivery(deliveryId, options, 'DELIVERED', data.id);
           return { success: true, messageId: data.id, provider: 'Resend', status: 'SENT' };
         } else {
           const errText = await res.text();
-          this.logDelivery(db, deliveryId, options, 'FAILED', undefined, errText);
+          await this.logDelivery(deliveryId, options, 'FAILED', undefined, errText);
           return { success: false, provider: 'Resend', status: 'FAILED', error: errText };
         }
       } catch (resendErr: any) {
         console.error('[EmailService:RESEND_ERROR]', resendErr);
-        this.logDelivery(db, deliveryId, options, 'FAILED', undefined, resendErr.message);
+        await this.logDelivery(deliveryId, options, 'FAILED', undefined, resendErr.message);
         return { success: false, provider: 'Resend', status: 'FAILED', error: resendErr.message };
       }
     }
 
     // 3. Development / Test Fallback Provider (Safely logged in DB)
     console.log(`[EmailService:DEV_DISPATCH] To: ${options.to} | Subject: ${options.subject}`);
-    this.logDelivery(db, deliveryId, options, 'SENT', `mock-msg-${Date.now()}`);
+    await this.logDelivery(deliveryId, options, 'SENT', `mock-msg-${Date.now()}`);
     return {
       success: true,
       messageId: `dev-${Date.now()}`,
@@ -134,7 +134,6 @@ export class EmailService {
    * Helper: Dispatch Account & Email Verification Link
    */
   static async sendVerificationEmail(
-    db: Database.Database,
     params: {
       to: string;
       displayName: string;
@@ -182,7 +181,7 @@ export class EmailService {
       </div>
     `;
 
-    return this.sendEmail(db, {
+    return this.sendEmail({
       to: params.to,
       subject,
       html,
@@ -197,7 +196,6 @@ export class EmailService {
    * Helper: Dispatch Mentor Available Email to Learner with secure confirmation links
    */
   static async sendMentorAvailableEmail(
-    db: Database.Database,
     params: {
       to: string;
       learnerName: string;
@@ -255,7 +253,7 @@ export class EmailService {
       </div>
     `;
 
-    return this.sendEmail(db, {
+    return this.sendEmail({
       to: params.to,
       subject,
       html,
@@ -272,7 +270,6 @@ export class EmailService {
    * Helper: Dispatch Session Scheduled Email
    */
   static async sendSessionScheduledEmail(
-    db: Database.Database,
     params: {
       to: string;
       recipientName: string;
@@ -311,7 +308,7 @@ export class EmailService {
       </div>
     `;
 
-    return this.sendEmail(db, {
+    return this.sendEmail({
       to: params.to,
       subject,
       html,
@@ -326,20 +323,19 @@ export class EmailService {
   /**
    * Persistent delivery logging in database
    */
-  private static logDelivery(
-    db: Database.Database,
+  private static async logDelivery(
     id: string,
     options: EmailOptions,
     status: 'SENT' | 'DELIVERED' | 'FAILED',
     providerMessageId?: string,
     errorDetails?: string
-  ) {
+  ): Promise<void> {
     try {
-      db.prepare(`
+      await query(`
         INSERT INTO notification_deliveries (
           id, notification_id, user_id, request_id, type, channel, recipient, subject, content, status, error_details, created_at, sent_at, delivered_at
-        ) VALUES (?, ?, ?, ?, ?, 'EMAIL', ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ${status === 'DELIVERED' ? 'CURRENT_TIMESTAMP' : 'NULL'})
-      `).run(
+        ) VALUES ($1, $2, $3, $4, $5, 'EMAIL', $6, $7, $8, $9, $10, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ${status === 'DELIVERED' ? 'CURRENT_TIMESTAMP' : 'NULL'})
+      `, [
         id,
         options.metadata?.notificationId || null,
         options.metadata?.userId || 'system',
@@ -350,7 +346,7 @@ export class EmailService {
         options.text || options.subject,
         status,
         errorDetails || null
-      );
+      ]);
     } catch (err) {
       console.error('[EmailService:LOG_ERROR]', err);
     }

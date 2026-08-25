@@ -1,25 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { query } from '@/lib/postgres';
 import { requireRole } from '@/lib/auth';
 import { getBlockchainStatus, reconcileBlockchainTransactions } from '@/lib/web3';
 
 export async function GET(req: NextRequest) {
-  const authRes = requireRole(req, ['ADMIN', 'MODERATOR']);
+  const authRes = await requireRole(req, ['ADMIN', 'MODERATOR']);
   if ('errorResponse' in authRes) return authRes.errorResponse;
-
-  const db = getDb();
 
   // 1. Database Health
   let dbStatus = 'HEALTHY';
   let dbStats: any = {};
   try {
+    const [users, sessions, skills, creditTxs, credentials, fraudAlerts] = await Promise.all([
+      query('SELECT COUNT(*) as c FROM users'),
+      query('SELECT COUNT(*) as c FROM sessions'),
+      query('SELECT COUNT(*) as c FROM skills'),
+      query('SELECT COUNT(*) as c FROM credit_transactions'),
+      query('SELECT COUNT(*) as c FROM credentials'),
+      query('SELECT COUNT(*) as c FROM fraud_alerts'),
+    ]);
     const counts = {
-      users: (db.prepare('SELECT COUNT(*) as c FROM users').get() as any).c,
-      sessions: (db.prepare('SELECT COUNT(*) as c FROM sessions').get() as any).c,
-      skills: (db.prepare('SELECT COUNT(*) as c FROM skills').get() as any).c,
-      creditTxs: (db.prepare('SELECT COUNT(*) as c FROM credit_transactions').get() as any).c,
-      credentials: (db.prepare('SELECT COUNT(*) as c FROM credentials').get() as any).c,
-      fraudAlerts: (db.prepare('SELECT COUNT(*) as c FROM fraud_alerts').get() as any).c,
+      users: Number((users.rows[0] as any).c),
+      sessions: Number((sessions.rows[0] as any).c),
+      skills: Number((skills.rows[0] as any).c),
+      creditTxs: Number((creditTxs.rows[0] as any).c),
+      credentials: Number((credentials.rows[0] as any).c),
+      fraudAlerts: Number((fraudAlerts.rows[0] as any).c),
     };
     dbStats = counts;
   } catch {
@@ -45,10 +51,10 @@ export async function GET(req: NextRequest) {
 
   // 3. Blockchain RPC Status
   const blockchainStatus = await getBlockchainStatus();
-  const reconciliation = reconcileBlockchainTransactions();
+  const reconciliation = await reconcileBlockchainTransactions();
 
   // 4. Recent Audit Logs
-  const auditLogs = db.prepare('SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 30').all();
+  const auditResult = await query('SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 30');
 
   return NextResponse.json({
     systemStatus: 'OPERATIONAL',
@@ -56,7 +62,7 @@ export async function GET(req: NextRequest) {
     components: {
       database: {
         status: dbStatus,
-        driver: 'Better-SQLite3 (WAL Mode)',
+        driver: 'PostgreSQL',
         stats: dbStats,
       },
       mlIntelligence: {
@@ -73,6 +79,6 @@ export async function GET(req: NextRequest) {
       },
       reconciliation,
     },
-    auditLogs,
+    auditLogs: auditResult.rows,
   });
 }

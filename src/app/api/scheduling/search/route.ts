@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
       verifiedOnly,
     };
 
-    const results = searchSmartSlots(params);
+    const results = await searchSmartSlots(params);
 
     return NextResponse.json({
       success: true,

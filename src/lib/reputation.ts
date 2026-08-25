@@ -1,4 +1,4 @@
-import { getDb } from './db';
+import { query } from './postgres';
 
 /**
  * Confidence-Aware Bayesian Rating Calculator
@@ -14,38 +14,39 @@ export function calculateBayesianRating(ratings: number[], priorMean: number = 4
 /**
  * Recalculate and update reputation metrics for a specific user
  */
-export function refreshUserReputation(userId: string): {
+export async function refreshUserReputation(userId: string): Promise<{
   bayesianRating: number;
   totalReviews: number;
   reliabilityScore: number;
   teachingScore: number;
   reciprocalRatio: number;
-} {
-  const db = getDb();
+}> {
 
   // Fetch all ratings received by this user
-  const ratings = db.prepare(`
+  const ratingsResult = await query(`
     SELECT score, punctuality_score, clarity_score, flagged_suspicious
     FROM ratings
-    WHERE ratee_id = ? AND flagged_suspicious = 0
-  `).all(userId) as any[];
+    WHERE ratee_id = $1 AND flagged_suspicious = 0
+  `, [userId]);
+  const ratings = ratingsResult.rows as any[];
 
   const scores = ratings.map(r => r.score);
   const bayesianRating = calculateBayesianRating(scores);
 
   // Fetch session completion statistics
-  const stats = db.prepare(`
+  const statsResult = await query(`
     SELECT 
       COUNT(*) as total_sessions,
       SUM(CASE WHEN status = 'CREDIT_SETTLED' OR status = 'COMPLETED' THEN 1 ELSE 0 END) as completed_sessions,
       SUM(CASE WHEN status = 'CANCELLED' THEN 1 ELSE 0 END) as cancelled_sessions
     FROM sessions
-    WHERE teacher_id = ? OR learner_id = ?
-  `).get(userId, userId) as any;
+    WHERE teacher_id = $1 OR learner_id = $2
+  `, [userId, userId]);
+  const stats = statsResult.rows[0] as any;
 
-  const totalSessions = stats.total_sessions || 0;
-  const completed = stats.completed_sessions || 0;
-  const cancelled = stats.cancelled_sessions || 0;
+  const totalSessions = Number(stats.total_sessions) || 0;
+  const completed = Number(stats.completed_sessions) || 0;
+  const cancelled = Number(stats.cancelled_sessions) || 0;
 
   const completionRate = totalSessions > 0 ? (completed / totalSessions) * 100 : 100;
   const cancellationRate = totalSessions > 0 ? (cancelled / totalSessions) * 100 : 0;
@@ -65,15 +66,15 @@ export function refreshUserReputation(userId: string): {
   ));
 
   // Reciprocal ratio check
-  const givenCount = (db.prepare(`SELECT COUNT(*) as c FROM ratings WHERE rater_id = ?`).get(userId) as any).c;
+  const givenCount = Number((await query(`SELECT COUNT(*) as c FROM ratings WHERE rater_id = $1`, [userId])).rows[0].c) || 0;
   const receivedCount = ratings.length;
   const reciprocalRatio = receivedCount > 0 ? Math.min(1.0, givenCount / receivedCount) : 0;
 
   // Update reputations table
-  db.prepare(`
+  await query(`
     INSERT INTO reputations (
       id, user_id, total_reviews, bayesian_rating, reliability_score, teaching_score, reciprocal_rating_ratio, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)
     ON CONFLICT(user_id) DO UPDATE SET
       total_reviews = excluded.total_reviews,
       bayesian_rating = excluded.bayesian_rating,
@@ -81,7 +82,7 @@ export function refreshUserReputation(userId: string): {
       teaching_score = excluded.teaching_score,
       reciprocal_rating_ratio = excluded.reciprocal_rating_ratio,
       updated_at = CURRENT_TIMESTAMP
-  `).run(
+  `, [
     `rep-${userId}`,
     userId,
     receivedCount,
@@ -89,15 +90,15 @@ export function refreshUserReputation(userId: string): {
     reliabilityScore,
     teachingScore,
     reciprocalRatio
-  );
+  ]);
 
   // Sync profile trust metrics
   const overallTrust = Math.round((bayesianRating / 5.0) * 40 + reliabilityScore * 0.4 + 20);
-  db.prepare(`
+  await query(`
     UPDATE profiles
-    SET trust_score = ?, completion_rate = ?, cancellation_rate = ?, updated_at = CURRENT_TIMESTAMP
-    WHERE user_id = ?
-  `).run(overallTrust, completionRate, cancellationRate, userId);
+    SET trust_score = $1, completion_rate = $2, cancellation_rate = $3, updated_at = CURRENT_TIMESTAMP
+    WHERE user_id = $4
+  `, [overallTrust, completionRate, cancellationRate, userId]);
 
   return {
     bayesianRating,
@@ -198,22 +199,21 @@ export function calculateMentorQuality(params: {
 /**
  * Convenience query to get mentor quality for a specific user and skill from database
  */
-export function getMentorQualityForSkill(mentorId: string, skillId?: string): MentorQualityResult {
-  const db = getDb();
+export async function getMentorQualityForSkill(mentorId: string, skillId?: string): Promise<MentorQualityResult> {
 
   // 1. Get declared/verified proficiency for this skill
   let proficiency = 'Intermediate';
   if (skillId) {
-    const userSkill = db.prepare(`
-      SELECT proficiency FROM user_skills WHERE user_id = ? AND skill_id = ?
-    `).get(mentorId, skillId) as any;
+    const userSkill = (await query(`
+      SELECT proficiency FROM user_skills WHERE user_id = $1 AND skill_id = $2
+    `, [mentorId, skillId])).rows[0] as any;
     if (userSkill?.proficiency) {
       proficiency = userSkill.proficiency;
     }
   } else {
-    const primarySkill = db.prepare(`
-      SELECT proficiency FROM user_skills WHERE user_id = ? LIMIT 1
-    `).get(mentorId) as any;
+    const primarySkill = (await query(`
+      SELECT proficiency FROM user_skills WHERE user_id = $1 LIMIT 1
+    `, [mentorId])).rows[0] as any;
     if (primarySkill?.proficiency) {
       proficiency = primarySkill.proficiency;
     }
@@ -224,28 +224,28 @@ export function getMentorQualityForSkill(mentorId: string, skillId?: string): Me
     SELECT r.score, r.punctuality_score, r.clarity_score, r.flagged_suspicious
     FROM ratings r
     JOIN sessions s ON r.session_id = s.id
-    WHERE r.ratee_id = ? AND s.teacher_id = ? AND r.flagged_suspicious = 0
+    WHERE r.ratee_id = $1 AND s.teacher_id = $2 AND r.flagged_suspicious = 0
   `;
   const queryParams: any[] = [mentorId, mentorId];
 
   if (skillId) {
-    ratingsQuery += ` AND s.skill_id = ?`;
+    ratingsQuery += ` AND s.skill_id = $3`;
     queryParams.push(skillId);
   }
 
-  const learnerRatings = db.prepare(ratingsQuery).all(...queryParams) as any[];
+  const learnerRatings = (await query(ratingsQuery, queryParams)).rows as any[];
 
   // 3. Count completed sessions taught
   let sessionsQuery = `
     SELECT COUNT(*) as c FROM sessions
-    WHERE teacher_id = ? AND (status = 'COMPLETED' OR status = 'CREDIT_SETTLED')
+    WHERE teacher_id = $1 AND (status = 'COMPLETED' OR status = 'CREDIT_SETTLED')
   `;
   const sessParams: any[] = [mentorId];
   if (skillId) {
-    sessionsQuery += ` AND skill_id = ?`;
+    sessionsQuery += ` AND skill_id = $2`;
     sessParams.push(skillId);
   }
-  const lecturesTaught = (db.prepare(sessionsQuery).get(...sessParams) as any)?.c || 0;
+  const lecturesTaught = Number((await query(sessionsQuery, sessParams)).rows[0]?.c) || 0;
 
   return calculateMentorQuality({
     proficiency,

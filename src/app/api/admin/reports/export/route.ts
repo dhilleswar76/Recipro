@@ -9,7 +9,7 @@ import {
 } from '@/lib/admin-reporting';
 
 export async function GET(req: NextRequest) {
-  const authRes = requireAdmin(req);
+  const authRes = await requireAdmin(req);
   if ('errorResponse' in authRes) return authRes.errorResponse;
 
   const { user } = authRes;
@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
 
     if (type === 'daily') {
       const dateStr = searchParams.get('date') || new Date().toISOString().substring(0, 10);
-      const data = getDailyReport(dateStr);
+      const data = await getDailyReport(dateStr);
       csvContent = exportReportToCsv('daily', data);
       filename = `skillswap-daily-report-${dateStr}.csv`;
     } else if (type === 'user') {
@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
       if (!userId) {
         return NextResponse.json({ error: 'userId query parameter is required for user export' }, { status: 400 });
       }
-      const data = getUserActivityReport(userId, searchParams.get('from') || undefined, searchParams.get('to') || undefined);
+      const data = await getUserActivityReport(userId, searchParams.get('from') || undefined, searchParams.get('to') || undefined);
       if (!data) {
         return NextResponse.json({ error: 'User not found' }, { status: 404 });
       }
@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
       if (!sessionId) {
         return NextResponse.json({ error: 'sessionId query parameter is required for session export' }, { status: 400 });
       }
-      const data = getSessionDetailReport(sessionId);
+      const data = await getSessionDetailReport(sessionId);
       if (!data) {
         return NextResponse.json({ error: 'Session not found' }, { status: 404 });
       }
@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid export type. Supported: daily, user, session' }, { status: 400 });
     }
 
-    logAdminAction({
+    await logAdminAction({
       adminUserId: user.userId,
       action: 'ADMIN_EXPORTED_REPORT',
       targetType: `${type.toUpperCase()}_REPORT_EXPORT`,

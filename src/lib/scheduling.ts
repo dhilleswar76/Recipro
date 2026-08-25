@@ -1,5 +1,5 @@
-import { getDb } from './db';
-import Database from 'better-sqlite3';
+import { PoolClient } from 'pg';
+import { query } from './postgres';
 
 export interface CandidateSlot {
   startTime: string; // ISO string (UTC)
@@ -118,10 +118,8 @@ export interface SmartSlotSearchResult {
 /**
  * Hard Constraint Validator: Checks if a chosen slot is free of conflicts, respects buffer, and daily limit
  */
-export function checkSlotHardConstraints(
-  db: Database.Database,
-  params: CheckSlotParams
-): ConflictCheckResult {
+export async function checkSlotHardConstraints(params: CheckSlotParams, client?: PoolClient): Promise<ConflictCheckResult> {
+  const runQuery = client ? client.query.bind(client) : query;
   const reqStart = new Date(params.scheduledStart);
   const reqEnd = new Date(params.scheduledEnd);
   const bufferMs = (params.bufferMinutes ?? 15) * 60 * 1000;
@@ -131,17 +129,17 @@ export function checkSlotHardConstraints(
   const startOfDay = `${dateStr}T00:00:00.000Z`;
   const endOfDay = `${dateStr}T23:59:59.999Z`;
 
-  const mentorProfile = db.prepare(`
-    SELECT daily_session_limit FROM profiles WHERE user_id = ?
-  `).get(params.teacherId) as { daily_session_limit: number } | undefined;
+  const mentorProfile = (await runQuery<{ daily_session_limit: number }>(`
+    SELECT daily_session_limit FROM profiles WHERE user_id = $1
+  `, [params.teacherId])).rows[0];
   const maxSessions = mentorProfile?.daily_session_limit || 3;
 
-  const teacherDailySessions = (db.prepare(`
+  const teacherDailySessions = (await runQuery<{ count: number }>(`
     SELECT COUNT(*) as count FROM sessions 
-    WHERE teacher_id = ? 
+    WHERE teacher_id = $1
       AND status NOT IN ('CANCELLED', 'DISPUTED')
-      AND scheduled_start >= ? AND scheduled_start <= ?
-  `).get(params.teacherId, startOfDay, endOfDay) as any)?.count || 0;
+      AND scheduled_start >= $2 AND scheduled_start <= $3
+  `, [params.teacherId, startOfDay, endOfDay])).rows[0]?.count || 0;
 
   if (teacherDailySessions >= maxSessions) {
     return {
@@ -156,10 +154,10 @@ export function checkSlotHardConstraints(
   }
 
   // 2. Check Teacher Conflicting Sessions (with Buffer)
-  const teacherSessions = db.prepare(`
+  const teacherSessions = (await runQuery<{ id: string; scheduled_start: string; scheduled_end: string; status: string }>(`
     SELECT id, scheduled_start, scheduled_end, status FROM sessions
-    WHERE teacher_id = ? AND status IN ('REQUESTED', 'ACCEPTED', 'SCHEDULED', 'IN_PROGRESS', 'PENDING_CONFIRMATION')
-  `).all(params.teacherId) as Array<{ id: string; scheduled_start: string; scheduled_end: string; status: string }>;
+    WHERE teacher_id = $1 AND status IN ('REQUESTED', 'ACCEPTED', 'SCHEDULED', 'IN_PROGRESS', 'PENDING_CONFIRMATION')
+  `, [params.teacherId])).rows;
 
   for (const sess of teacherSessions) {
     const sStart = new Date(sess.scheduled_start).getTime() - bufferMs;
@@ -184,10 +182,10 @@ export function checkSlotHardConstraints(
   }
 
   // 3. Check Learner Conflicting Sessions
-  const learnerSessions = db.prepare(`
+  const learnerSessions = (await runQuery<{ id: string; scheduled_start: string; scheduled_end: string }>(`
     SELECT id, scheduled_start, scheduled_end FROM sessions
-    WHERE (learner_id = ? OR teacher_id = ?) AND status IN ('REQUESTED', 'ACCEPTED', 'SCHEDULED', 'IN_PROGRESS', 'PENDING_CONFIRMATION')
-  `).all(params.learnerId, params.learnerId) as Array<{ id: string; scheduled_start: string; scheduled_end: string }>;
+    WHERE (learner_id = $1 OR teacher_id = $1) AND status IN ('REQUESTED', 'ACCEPTED', 'SCHEDULED', 'IN_PROGRESS', 'PENDING_CONFIRMATION')
+  `, [params.learnerId])).rows;
 
   for (const sess of learnerSessions) {
     const sStart = new Date(sess.scheduled_start).getTime();
@@ -214,7 +212,7 @@ export function checkSlotHardConstraints(
 /**
  * Flexible Time-Window Solver for a single mentor
  */
-export function calculateAvailableSlots(params: {
+export async function calculateAvailableSlots(params: {
   teacherId: string;
   learnerId?: string;
   date: string; // YYYY-MM-DD
@@ -225,15 +223,14 @@ export function calculateAvailableSlots(params: {
   isFlexible?: boolean;     // default true
   exactStartTime?: string;  // e.g. "17:00"
   skillId?: string;
-}, weights: SchedulingRankingWeights = DEFAULT_SCHEDULING_WEIGHTS): {
+}, weights: SchedulingRankingWeights = DEFAULT_SCHEDULING_WEIGHTS): Promise<{
   candidateSlots: CandidateSlot[];
   dayOfWeek: string;
   mentorAvailable: boolean;
   totalValidSlots: number;
   preferredWindowDisplay: string;
   closestAlternatives: CandidateSlot[];
-} {
-  const db = getDb();
+}> {
   const dateObj = new Date(`${params.date}T00:00:00Z`);
   const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const dayName = daysOfWeek[dateObj.getUTCDay()];
@@ -244,10 +241,10 @@ export function calculateAvailableSlots(params: {
   const bufferMs = bufferMinutes * 60 * 1000;
 
   // 1. Retrieve General Availability Slots for this day of week
-  const generalSlots = db.prepare(`
+  const generalSlots = (await query<{ start_time: string; end_time: string; is_preferred: number; window_label: string }>(`
     SELECT start_time, end_time, is_preferred, window_label FROM availability_slots
-    WHERE user_id = ? AND LOWER(day_of_week) = LOWER(?)
-  `).all(params.teacherId, dayName) as Array<{ start_time: string; end_time: string; is_preferred: number; window_label: string }>;
+    WHERE user_id = $1 AND LOWER(day_of_week) = LOWER($2)
+  `, [params.teacherId, dayName])).rows;
 
   // 2. Check Skill-Specific Teaching Availability if skillId provided
   let skillSpecificDays: string[] = [];
@@ -257,11 +254,11 @@ export function calculateAvailableSlots(params: {
   let skillPrefEnd = '20:00';
 
   if (params.skillId) {
-    const userSkillRow = db.prepare(`
+    const userSkillRow = (await query(`
       SELECT teaching_days, available_start_time, available_end_time, preferred_start_time, preferred_end_time 
       FROM user_skills 
-      WHERE user_id = ? AND skill_id = ?
-    `).get(params.teacherId, params.skillId) as any;
+      WHERE user_id = $1 AND skill_id = $2
+    `, [params.teacherId, params.skillId])).rows[0] as any;
 
     if (userSkillRow) {
       try {
@@ -279,34 +276,34 @@ export function calculateAvailableSlots(params: {
   // 3. Learner Availability for reciprocity scoring
   let learnerSlots: Array<{ start_time: string; end_time: string }> = [];
   if (params.learnerId) {
-    learnerSlots = db.prepare(`
+    learnerSlots = (await query<{ start_time: string; end_time: string }>(`
       SELECT start_time, end_time FROM availability_slots
-      WHERE user_id = ? AND LOWER(day_of_week) = LOWER(?)
-    `).all(params.learnerId, dayName) as Array<{ start_time: string; end_time: string }>;
+      WHERE user_id = $1 AND LOWER(day_of_week) = LOWER($2)
+    `, [params.learnerId, dayName])).rows;
   }
 
   // 4. Fetch Mentor Confirmed Bookings on target date
   const dayStartStr = `${params.date}T00:00:00.000Z`;
   const dayEndStr = `${params.date}T23:59:59.999Z`;
 
-  const mentorBookings = db.prepare(`
+  const mentorBookings = (await query<{ scheduled_start: string; scheduled_end: string }>(`
     SELECT scheduled_start, scheduled_end FROM sessions
-    WHERE teacher_id = ? AND status IN ('REQUESTED', 'ACCEPTED', 'SCHEDULED', 'IN_PROGRESS', 'PENDING_CONFIRMATION')
-      AND scheduled_start >= ? AND scheduled_start <= ?
-  `).all(params.teacherId, dayStartStr, dayEndStr) as Array<{ scheduled_start: string; scheduled_end: string }>;
+    WHERE teacher_id = $1 AND status IN ('REQUESTED', 'ACCEPTED', 'SCHEDULED', 'IN_PROGRESS', 'PENDING_CONFIRMATION')
+      AND scheduled_start >= $2 AND scheduled_start <= $3
+  `, [params.teacherId, dayStartStr, dayEndStr])).rows;
 
   // 5. Fetch Learner Confirmed Bookings
   let learnerBookings: Array<{ scheduled_start: string; scheduled_end: string }> = [];
   if (params.learnerId) {
-    learnerBookings = db.prepare(`
+    learnerBookings = (await query<{ scheduled_start: string; scheduled_end: string }>(`
       SELECT scheduled_start, scheduled_end FROM sessions
-      WHERE (learner_id = ? OR teacher_id = ?) AND status IN ('REQUESTED', 'ACCEPTED', 'SCHEDULED', 'IN_PROGRESS', 'PENDING_CONFIRMATION')
-        AND scheduled_start >= ? AND scheduled_start <= ?
-    `).all(params.learnerId, params.learnerId, dayStartStr, dayEndStr) as Array<{ scheduled_start: string; scheduled_end: string }>;
+      WHERE (learner_id = $1 OR teacher_id = $1) AND status IN ('REQUESTED', 'ACCEPTED', 'SCHEDULED', 'IN_PROGRESS', 'PENDING_CONFIRMATION')
+        AND scheduled_start >= $2 AND scheduled_start <= $3
+    `, [params.learnerId, dayStartStr, dayEndStr])).rows;
   }
 
   // 6. Mentor Daily Limit
-  const mentorProfile = db.prepare('SELECT daily_session_limit FROM profiles WHERE user_id = ?').get(params.teacherId) as any;
+  const mentorProfile = (await query('SELECT daily_session_limit FROM profiles WHERE user_id = $1', [params.teacherId])).rows[0] as any;
   const maxDaily = mentorProfile?.daily_session_limit || 3;
   if (mentorBookings.length >= maxDaily) {
     return {
@@ -466,22 +463,21 @@ export function calculateAvailableSlots(params: {
 /**
  * High-Level IRCTC-Style Smart Slot Search across all eligible mentors
  */
-export function searchSmartSlots(
+export async function searchSmartSlots(
   params: SmartSlotSearchParams,
   weights: SchedulingRankingWeights = DEFAULT_SCHEDULING_WEIGHTS
-): SmartSlotSearchResult {
-  const db = getDb();
+): Promise<SmartSlotSearchResult> {
   const dateObj = new Date(`${params.date}T00:00:00Z`);
   const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const dayName = daysOfWeek[dateObj.getUTCDay()];
 
   const durationHours = (params.durationMinutes || 60) / 60.0;
-  const query = (params.skillQuery || '').trim();
+  const searchTerm = (params.skillQuery || '').trim();
 
   // 1. Fetch Learner info for college isolation
   let learnerCollege = '';
   if (params.learnerId) {
-    const lProf = db.prepare('SELECT college FROM profiles WHERE user_id = ?').get(params.learnerId) as any;
+    const lProf = (await query('SELECT college FROM profiles WHERE user_id = $1', [params.learnerId])).rows[0] as any;
     learnerCollege = (lProf?.college || '').toLowerCase();
   }
 
@@ -519,20 +515,20 @@ export function searchSmartSlots(
 
   const queryArgs: any[] = [];
   if (params.learnerId) {
-    mentorQuery += ' AND u.id != ?';
+    mentorQuery += ` AND u.id != $${queryArgs.length + 1}`;
     queryArgs.push(params.learnerId);
   }
 
-  if (query) {
-    mentorQuery += ' AND (LOWER(s.name) LIKE ? OR LOWER(p.display_name) LIKE ?)';
-    queryArgs.push(`%${query.toLowerCase()}%`, `%${query.toLowerCase()}%`);
+  if (searchTerm) {
+    mentorQuery += ` AND (LOWER(s.name) LIKE $${queryArgs.length + 1} OR LOWER(p.display_name) LIKE $${queryArgs.length + 2})`;
+    queryArgs.push(`%${searchTerm.toLowerCase()}%`, `%${searchTerm.toLowerCase()}%`);
   }
 
   if (params.verifiedOnly) {
     mentorQuery += " AND us.verification_status IN ('PEER_VERIFIED', 'PLATFORM_VERIFIED', 'ASSESSMENT_VERIFIED')";
   }
 
-  const eligibleMentors = db.prepare(mentorQuery).all(...queryArgs) as any[];
+  const eligibleMentors = (await query(mentorQuery, queryArgs)).rows as any[];
 
   // Case A: Zero mentors found anywhere in the network
   if (eligibleMentors.length === 0) {
@@ -545,7 +541,7 @@ export function searchSmartSlots(
       totalMentorsFound: 0,
       totalValidSlots: 0,
       isStage2Fallback: false,
-      message: `No verified mentor found for "${query || 'requested skill'}" anywhere in the SkillSwap network.`,
+      message: `No verified mentor found for "${searchTerm || 'requested skill'}" anywhere in the SkillSwap network.`,
     };
   }
 
@@ -561,7 +557,7 @@ export function searchSmartSlots(
     }
 
     // Calculate slots for this mentor
-    const slotResult = calculateAvailableSlots({
+    const slotResult = await calculateAvailableSlots({
       teacherId: m.user_id,
       learnerId: params.learnerId,
       date: params.date,
@@ -648,7 +644,7 @@ export function searchSmartSlots(
       totalMentorsFound,
       totalValidSlots: 0,
       isStage2Fallback,
-      message: `We found ${totalMentorsFound} mentor(s) for "${query || 'your search'}", but none have bookable slots during your selected time window on ${dayName}.`,
+      message: `We found ${totalMentorsFound} mentor(s) for "${searchTerm || 'your search'}", but none have bookable slots during your selected time window on ${dayName}.`,
     };
   }
 

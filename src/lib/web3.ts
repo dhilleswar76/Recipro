@@ -1,5 +1,5 @@
 import { ethers } from 'ethers';
-import { getDb } from './db';
+import { query } from './postgres';
 
 const RPC_URL = process.env.BLOCKCHAIN_RPC_URL || 'http://127.0.0.1:8545';
 const CHAIN_ID = parseInt(process.env.CHAIN_ID || '31337', 10);
@@ -62,20 +62,19 @@ export async function getBlockchainStatus(): Promise<{
 /**
  * Database vs Blockchain Reconciliation Engine
  */
-export function reconcileBlockchainTransactions(): {
+export async function reconcileBlockchainTransactions(): Promise<{
   totalChecked: number;
   reconciled: number;
   flaggedMismatches: number;
   mismatches: Array<{ id: string; txHash: string; issue: string }>;
-} {
-  const db = getDb();
-
-  const transactions = db.prepare(`
+}> {
+  const transactionsResult = await query(`
     SELECT id, reference_type, reference_id, tx_hash, status, created_at
     FROM blockchain_transactions
     ORDER BY created_at DESC
     LIMIT 50
-  `).all() as any[];
+  `);
+  const transactions = transactionsResult.rows as any[];
 
   let reconciled = 0;
   let flaggedMismatches = 0;
@@ -83,7 +82,8 @@ export function reconcileBlockchainTransactions(): {
 
   for (const tx of transactions) {
     if (tx.reference_type === 'SESSION_SETTLEMENT') {
-      const session = db.prepare(`SELECT status FROM sessions WHERE id = ?`).get(tx.reference_id) as any;
+      const sessionResult = await query(`SELECT status FROM sessions WHERE id = $1`, [tx.reference_id]);
+      const session = sessionResult.rows[0] as any;
       if (!session) {
         flaggedMismatches++;
         mismatches.push({ id: tx.id, txHash: tx.tx_hash, issue: `Referenced session ${tx.reference_id} does not exist in DB` });

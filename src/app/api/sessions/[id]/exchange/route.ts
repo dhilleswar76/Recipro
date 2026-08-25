@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { query } from '@/lib/postgres';
 import { requireAuth } from '@/lib/auth';
 import { calculateRequiredCredits } from '@/lib/state-machine';
 
@@ -7,15 +7,14 @@ export async function GET(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const authRes = requireAuth(req);
+  const authRes = await requireAuth(req);
   if ('errorResponse' in authRes) return authRes.errorResponse;
 
   const { user } = authRes;
   const sessionId = params.id;
-  const db = getDb();
 
   try {
-    const session = db.prepare(`
+    const sessionResult = await query(`
       SELECT 
         s.*,
         sk.name as skill_name, sk.category as skill_category, sk.icon as skill_icon,
@@ -25,8 +24,9 @@ export async function GET(
       JOIN skills sk ON s.skill_id = sk.id
       JOIN profiles tp ON s.teacher_id = tp.user_id
       JOIN profiles lp ON s.learner_id = lp.user_id
-      WHERE s.id = ?
-    `).get(sessionId) as any;
+      WHERE s.id = $1
+    `, [sessionId]);
+    const session = sessionResult.rows[0] as any;
 
     if (!session) {
       return NextResponse.json({ error: 'Session not found' }, { status: 404 });
@@ -37,7 +37,7 @@ export async function GET(
     const userRoleInSession: 'MENTOR' | 'LEARNER' | 'VIEWER' = isTeacher ? 'MENTOR' : isLearner ? 'LEARNER' : 'VIEWER';
 
     // Fetch existing exchange agreement
-    const agreement = db.prepare(`
+    const agreementResult = await query(`
       SELECT 
         sea.*,
         sk_taught.name as taught_skill_name,
@@ -49,34 +49,38 @@ export async function GET(
       LEFT JOIN skills sk_return ON sea.requested_return_skill_id = sk_return.id
       JOIN profiles mp ON sea.mentor_id = mp.user_id
       JOIN profiles lp ON sea.learner_id = lp.user_id
-      WHERE sea.session_id = ?
-    `).get(sessionId) as any;
+      WHERE sea.session_id = $1
+    `, [sessionId]);
+    const agreement = agreementResult.rows[0] as any;
 
     // Fetch mentor's registered teaching skills
-    const mentorSkills = db.prepare(`
+    const mentorSkillsResult = await query(`
       SELECT us.skill_id, sk.name as skill_name, us.proficiency, us.verification_status
       FROM user_skills us
       JOIN skills sk ON us.skill_id = sk.id
-      WHERE us.user_id = ?
-    `).all(session.teacher_id);
+      WHERE us.user_id = $1
+    `, [session.teacher_id]);
+    const mentorSkills = mentorSkillsResult.rows;
 
     // Fetch learner's verified teaching skills
-    const learnerSkills = db.prepare(`
+    const learnerSkillsResult = await query(`
       SELECT us.skill_id, sk.name as skill_name, us.proficiency, us.verification_status
       FROM user_skills us
       JOIN skills sk ON us.skill_id = sk.id
-      WHERE us.user_id = ?
-    `).all(session.learner_id);
+      WHERE us.user_id = $1
+    `, [session.learner_id]);
+    const learnerSkills = learnerSkillsResult.rows;
 
     // Fetch all active skills in catalog for suggestion
-    const allCatalogSkills = db.prepare(`
+    const allCatalogSkills = (await query(`
       SELECT id, name, category, icon FROM skills ORDER BY name ASC
-    `).all();
+    `)).rows;
 
     // Fetch learner's current credit balance
-    const learnerAccount = db.prepare(`
-      SELECT balance, escrow_balance FROM skill_credit_accounts WHERE user_id = ?
-    `).get(session.learner_id) as any;
+    const learnerAccountResult = await query(`
+      SELECT balance, escrow_balance FROM skill_credit_accounts WHERE user_id = $1
+    `, [session.learner_id]);
+    const learnerAccount = learnerAccountResult.rows[0] as any;
 
     const requiredCredits = agreement?.credit_amount || calculateRequiredCredits(session.duration_hours);
     const learnerAvailableBalance = learnerAccount?.balance || 0;

@@ -15,8 +15,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="dark">
-      <body className="bg-dark-bg text-slate-100 min-h-screen flex flex-col antialiased selection:bg-brand-500 selection:text-dark-bg">
+    <html lang="en" className="dark" suppressHydrationWarning>
+      <body className="bg-dark-bg text-slate-100 min-h-screen flex flex-col antialiased selection:bg-brand-500 selection:text-dark-bg" suppressHydrationWarning>
         <AuthProvider>
           <Navbar />
           <main className="flex-1">

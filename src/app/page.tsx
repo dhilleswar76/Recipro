@@ -83,6 +83,7 @@ export default function LandingPage() {
               onChange={(e) => setQuickSearch(e.target.value)}
               placeholder="Search skill (e.g. 'Python', 'React', 'Calculus')..."
               className="flex-1 bg-transparent border-none text-sm text-white placeholder-slate-400 focus:outline-none px-2"
+              suppressHydrationWarning
             />
             <button 
               type="submit"

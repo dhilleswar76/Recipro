@@ -31,23 +31,23 @@ export async function PUT(req: NextRequest) {
         await client.query(`
           UPDATE profiles
           SET 
-            display_name = COALESCE(?, display_name),
-            bio = COALESCE(?, bio),
-            college = COALESCE(?, college),
-            major = COALESCE(?, major),
-            year = COALESCE(?, year),
-            teaching_style = COALESCE(?, teaching_style),
-            languages = COALESCE(?, languages),
-            teaching_preference = COALESCE(?, teaching_preference),
-            portfolio_url = COALESCE(?, portfolio_url),
-            profile_visibility = COALESCE(?, profile_visibility),
-            skill_visibility = COALESCE(?, skill_visibility),
-            availability_visibility = COALESCE(?, availability_visibility),
-            portfolio_visibility = COALESCE(?, portfolio_visibility),
-            learning_goal_visibility = COALESCE(?, learning_goal_visibility),
-            daily_session_limit = COALESCE(?, daily_session_limit),
+            display_name = COALESCE($1, display_name),
+            bio = COALESCE($2, bio),
+            college = COALESCE($3, college),
+            major = COALESCE($4, major),
+            year = COALESCE($5, year),
+            teaching_style = COALESCE($6, teaching_style),
+            languages = COALESCE($7, languages),
+            teaching_preference = COALESCE($8, teaching_preference),
+            portfolio_url = COALESCE($9, portfolio_url),
+            profile_visibility = COALESCE($10, profile_visibility),
+            skill_visibility = COALESCE($11, skill_visibility),
+            availability_visibility = COALESCE($12, availability_visibility),
+            portfolio_visibility = COALESCE($13, portfolio_visibility),
+            learning_goal_visibility = COALESCE($14, learning_goal_visibility),
+            daily_session_limit = COALESCE($15, daily_session_limit),
             updated_at = CURRENT_TIMESTAMP
-          WHERE user_id = ?
+          WHERE user_id = $16
         `, [
           data.displayName ?? null,
           data.bio ?? null,

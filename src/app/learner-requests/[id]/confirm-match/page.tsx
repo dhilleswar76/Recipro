@@ -24,7 +24,7 @@ export default function ConfirmMatchPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { user } = useAuth();
-  const requestId = params.id as string;
+  const requestId = (params?.id as string) || '';
   const mentorIdParam = searchParams.get('mentorId');
 
   const [matchData, setMatchData] = useState<any | null>(null);

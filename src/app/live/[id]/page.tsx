@@ -42,7 +42,7 @@ export type ConnectionState = 'CONNECTING' | 'CONNECTED' | 'RECONNECTING' | 'FAI
 
 export default function LiveRoomPage() {
   const params = useParams();
-  const sessionId = params.id as string;
+  const sessionId = (params?.id as string) || '';
   const router = useRouter();
   const { user, refreshUser } = useAuth();
 

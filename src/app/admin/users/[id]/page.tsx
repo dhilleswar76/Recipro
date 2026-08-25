@@ -25,7 +25,7 @@ import {
 
 export default function AdminUserReportPage() {
   const params = useParams();
-  const userId = params.id as string;
+  const userId = (params?.id as string) || '';
   const router = useRouter();
   const { user: authUser, loading: authLoading } = useAuth();
 

@@ -47,13 +47,17 @@ export default function LiveRoomPage() {
   const [connectionState, setConnectionState] = useState<ConnectionState>('CONNECTING');
   const [roomPresence, setRoomPresence] = useState<any[]>([]);
 
-  // Video Media Streams & Refs
+  // Video Media Streams & WebRTC Refs
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const animationFrameRef = useRef<number | null>(null);
+  const lastSignalTimeRef = useRef<string | null>(null);
+  const processedSignalsRef = useRef<Set<string>>(new Set());
+  const isInitiatorRef = useRef<boolean>(false);
+  const makingOfferRef = useRef<boolean>(false);
 
   // Video & Classroom Controls
   const [micOn, setMicOn] = useState(true);
@@ -61,6 +65,7 @@ export default function LiveRoomPage() {
   const [screenShare, setScreenShare] = useState(false);
   const [chatDrawerOpen, setChatDrawerOpen] = useState(true);
   const [hasRealWebcam, setHasRealWebcam] = useState(false);
+  const [hasRemotePeerStream, setHasRemotePeerStream] = useState(false);
 
   // Scratchpad
   const [codeContent, setCodeContent] = useState(`// SkillSwap Campus Live Collaborative Scratchpad
@@ -91,6 +96,17 @@ function processLearningGoal() {
   const [completionSuccess, setCompletionSuccess] = useState(false);
   const [exchangeData, setExchangeData] = useState<any | null>(null);
 
+  // Free Google STUN Servers Configuration
+  const RTC_CONFIG: RTCConfiguration = {
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:stun2.l.google.com:19302' },
+      { urls: 'stun:stun3.l.google.com:19302' },
+      { urls: 'stun:stun4.l.google.com:19302' },
+    ],
+  };
+
   // 1. Authenticate Participant via Backend Token
   const verifyAuthorization = async () => {
     setAuthChecking(true);
@@ -103,7 +119,9 @@ function processLearningGoal() {
 
       if (res.ok && data.authorized) {
         setParticipantInfo(data);
-        setConnectionState('CONNECTED');
+        if (data.role === 'TRAINER') {
+          isInitiatorRef.current = true;
+        }
         await initializeMediaStreams(data);
       } else {
         setAuthError(data.error || 'Access Denied: You are not authorized to enter this video session.');
@@ -159,16 +177,179 @@ function processLearningGoal() {
     }
   };
 
+  // WebRTC Signal Sender Helper
+  const sendSignal = async (signalType: string, payload: any) => {
+    try {
+      await fetch(`/api/sessions/${sessionId}/signaling`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ signalType, payload }),
+      });
+    } catch (err) {
+      console.error('Error sending WebRTC signal:', err);
+    }
+  };
+
+  // Create & Configure RTCPeerConnection
+  const createPeerConnection = (stream?: MediaStream): RTCPeerConnection => {
+    if (peerConnectionRef.current) {
+      try {
+        peerConnectionRef.current.close();
+      } catch (e) {}
+    }
+
+    const pc = new RTCPeerConnection(RTC_CONFIG);
+    peerConnectionRef.current = pc;
+
+    // Attach all local tracks (Microphone & Camera) to WebRTC connection
+    const currentStream = stream || localStreamRef.current;
+    if (currentStream) {
+      currentStream.getTracks().forEach(track => {
+        try {
+          pc.addTrack(track, currentStream);
+        } catch (e) {
+          console.warn('Track already added:', e);
+        }
+      });
+    }
+
+    // Handle incoming opponent Audio & Video stream
+    pc.ontrack = (event) => {
+      console.log('Received remote media track:', event.track.kind, event.streams);
+      if (event.streams && event.streams[0]) {
+        const remoteStream = event.streams[0];
+        if (remoteVideoRef.current) {
+          remoteVideoRef.current.srcObject = remoteStream;
+          remoteVideoRef.current.play().catch(e => console.log('Remote playback notice:', e));
+        }
+        setHasRemotePeerStream(true);
+        setConnectionState('CONNECTED');
+      }
+    };
+
+    // Forward ICE Candidates to Opponent via Signaling
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        sendSignal('ICE_CANDIDATE', event.candidate.toJSON());
+      }
+    };
+
+    // Monitor Connection State
+    pc.onconnectionstatechange = () => {
+      console.log('WebRTC connection state:', pc.connectionState);
+      if (pc.connectionState === 'connected') {
+        setConnectionState('CONNECTED');
+        setHasRemotePeerStream(true);
+      } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+        setConnectionState('RECONNECTING');
+      }
+    };
+
+    return pc;
+  };
+
+  // Initiate WebRTC Call Offer (Trainer or First Caller)
+  const initiateWebRTCCall = async (pcInstance?: RTCPeerConnection) => {
+    const pc = pcInstance || peerConnectionRef.current || createPeerConnection();
+    if (makingOfferRef.current) return;
+
+    try {
+      makingOfferRef.current = true;
+      const offer = await pc.createOffer({
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: true,
+      });
+
+      if (pc.signalingState !== 'stable') return;
+      await pc.setLocalDescription(offer);
+      await sendSignal('OFFER', offer);
+      console.log('WebRTC Offer sent to opponent.');
+    } catch (err) {
+      console.error('Error creating WebRTC offer:', err);
+    } finally {
+      makingOfferRef.current = false;
+    }
+  };
+
+  // Poll WebRTC Signaling & Room Presence
+  const pollSignaling = async () => {
+    try {
+      const url = lastSignalTimeRef.current
+        ? `/api/sessions/${sessionId}/signaling?since=${encodeURIComponent(lastSignalTimeRef.current)}`
+        : `/api/sessions/${sessionId}/signaling`;
+
+      const res = await fetch(url);
+      if (!res.ok) return;
+
+      const data = await res.json();
+      if (data.serverTime) {
+        lastSignalTimeRef.current = data.serverTime;
+      }
+
+      if (data.presence) {
+        setRoomPresence(data.presence);
+
+        // If trainer/host sees learner arrived in presence and call not yet established, initiate offer
+        if (isInitiatorRef.current && data.presence.length >= 2 && !hasRemotePeerStream) {
+          const pc = peerConnectionRef.current || createPeerConnection();
+          if (pc.signalingState === 'stable') {
+            initiateWebRTCCall(pc);
+          }
+        }
+      }
+
+      if (data.signals && Array.isArray(data.signals)) {
+        for (const sig of data.signals) {
+          if (processedSignalsRef.current.has(sig.id)) continue;
+          processedSignalsRef.current.add(sig.id);
+
+          const pc = peerConnectionRef.current || createPeerConnection();
+
+          if (sig.signalType === 'OFFER') {
+            try {
+              console.log('Received OFFER from opponent, creating ANSWER...');
+              await pc.setRemoteDescription(new RTCSessionDescription(sig.payload));
+              const answer = await pc.createAnswer();
+              await pc.setLocalDescription(answer);
+              await sendSignal('ANSWER', answer);
+            } catch (err) {
+              console.error('Error processing OFFER:', err);
+            }
+          } else if (sig.signalType === 'ANSWER') {
+            try {
+              console.log('Received ANSWER from opponent...');
+              if (pc.signalingState === 'have-local-offer') {
+                await pc.setRemoteDescription(new RTCSessionDescription(sig.payload));
+              }
+            } catch (err) {
+              console.error('Error processing ANSWER:', err);
+            }
+          } else if (sig.signalType === 'ICE_CANDIDATE') {
+            try {
+              if (sig.payload && pc.remoteDescription) {
+                await pc.addIceCandidate(new RTCIceCandidate(sig.payload));
+              }
+            } catch (err) {
+              console.warn('Error adding ICE candidate:', err);
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Signaling poll error:', err);
+    }
+  };
+
   // 5. Initialize Camera & WebRTC Signaling Streams
   const initializeMediaStreams = async (authInfo: any) => {
     try {
       let stream: MediaStream;
 
-      // Try accessing real physical webcam / mic
+      // Access real physical microphone and camera with optimal audio enhancements
       try {
         stream = await navigator.mediaDevices.getUserMedia({
           video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' },
-          audio: true,
+          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
         });
         setHasRealWebcam(true);
       } catch (mediaErr) {
@@ -184,14 +365,13 @@ function processLearningGoal() {
         localVideoRef.current.play().catch(e => console.log('Local video play note:', e));
       }
 
-      // Initialize Simulated or Remote Peer Stream
-      const peerName = authInfo.role === 'TRAINER' ? 'Learner' : 'Mentor';
-      const peerRole = authInfo.role === 'TRAINER' ? 'LEARNER' : 'TRAINER';
-      const peerStream = createSimulatedVideoStream(peerName, peerRole, true);
-      
-      if (remoteVideoRef.current) {
-        remoteVideoRef.current.srcObject = peerStream;
-        remoteVideoRef.current.play().catch(e => console.log('Remote video play note:', e));
+      // Initialize WebRTC Peer Connection with the fresh media stream
+      const pc = createPeerConnection(stream);
+
+      // Trainer / Host initiates the WebRTC offer
+      if (authInfo.role === 'TRAINER') {
+        isInitiatorRef.current = true;
+        await initiateWebRTCCall(pc);
       }
 
       // Dispatch presence to backend database
@@ -206,7 +386,7 @@ function processLearningGoal() {
     }
   };
 
-  // Helper: Generates a high-quality live canvas video stream with facial avatar & dynamic motion
+  // Helper: Generates an animated avatar placeholder while peer connects
   const createSimulatedVideoStream = (name: string, role: string, isPeer: boolean = false): MediaStream => {
     const canvas = document.createElement('canvas');
     canvas.width = 640;
@@ -217,7 +397,6 @@ function processLearningGoal() {
     const draw = () => {
       frame++;
       
-      // Gradient Studio Background
       const grad = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
       if (isPeer) {
         grad.addColorStop(0, '#0f172a');
@@ -231,7 +410,6 @@ function processLearningGoal() {
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // Ambient Studio Lighting Rings
       const cx = canvas.width / 2;
       const cy = canvas.height / 2 - 10;
       const pulse = Math.sin(frame * 0.05) * 6;
@@ -249,43 +427,28 @@ function processLearningGoal() {
       ctx.strokeStyle = isPeer ? '#818cf8' : '#2dd4bf';
       ctx.stroke();
 
-      // Facial Avatar Head & Shoulders
       ctx.beginPath();
       ctx.arc(cx, cy - 10, 26, 0, Math.PI * 2);
       ctx.fillStyle = '#fde047';
       ctx.fill();
 
-      // Eyes & Expression
       ctx.fillStyle = '#1e293b';
       ctx.beginPath();
       ctx.arc(cx - 8, cy - 12, 3, 0, Math.PI * 2);
       ctx.arc(cx + 8, cy - 12, 3, 0, Math.PI * 2);
       ctx.fill();
 
-      // Smile
       ctx.beginPath();
       ctx.arc(cx, cy - 8, 9, 0.2 * Math.PI, 0.8 * Math.PI, false);
       ctx.lineWidth = 2.5;
       ctx.strokeStyle = '#1e293b';
       ctx.stroke();
 
-      // Shoulders / Torso
       ctx.beginPath();
       ctx.arc(cx, cy + 50, 42, Math.PI, 0, false);
       ctx.fillStyle = isPeer ? '#3730a3' : '#115e59';
       ctx.fill();
 
-      // Live Audio Waveform at bottom
-      const waveCount = 18;
-      const waveWidth = 4;
-      const startX = cx - (waveCount * 8) / 2;
-      for (let i = 0; i < waveCount; i++) {
-        const height = Math.abs(Math.sin(frame * 0.1 + i * 0.4)) * 14 + 3;
-        ctx.fillStyle = isPeer ? '#a5b4fc' : '#5eead4';
-        ctx.fillRect(startX + i * 8, canvas.height - 28 - height / 2, waveWidth, height);
-      }
-
-      // Watermark / Badge
       ctx.font = 'bold 13px system-ui, sans-serif';
       ctx.fillStyle = '#ffffff';
       ctx.textAlign = 'center';
@@ -304,21 +467,19 @@ function processLearningGoal() {
     fetchChat();
     fetchScratchpad();
 
+    // Fast 1000ms polling for real-time WebRTC signals, chat, and presence
     const interval = setInterval(() => {
+      pollSignaling();
       fetchChat();
       fetchScratchpad();
-      // Fetch presence
-      fetch(`/api/sessions/${sessionId}/presence`)
-        .then(res => res.ok ? res.json() : null)
-        .then(data => {
-          if (data?.presence) setRoomPresence(data.presence);
-        })
-        .catch(() => {});
-    }, 2500);
+    }, 1000);
 
     return () => {
       clearInterval(interval);
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+      if (peerConnectionRef.current) {
+        peerConnectionRef.current.close();
+      }
       if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach(track => track.stop());
       }
@@ -377,29 +538,52 @@ function processLearningGoal() {
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = screenStream;
         }
+
+        const screenVideoTrack = screenStream.getVideoTracks()[0];
+
+        // Replace WebRTC peer connection video track with screen track
+        if (peerConnectionRef.current) {
+          const senders = peerConnectionRef.current.getSenders();
+          const videoSender = senders.find(s => s.track && s.track.kind === 'video');
+          if (videoSender && screenVideoTrack) {
+            videoSender.replaceTrack(screenVideoTrack);
+          }
+        }
+
         setScreenShare(true);
         logAttendance('SCREEN_SHARE_START');
         
-        screenStream.getVideoTracks()[0].onended = () => {
-          setScreenShare(false);
-          if (localVideoRef.current && localStreamRef.current) {
-            localVideoRef.current.srcObject = localStreamRef.current;
-          }
-          logAttendance('SCREEN_SHARE_STOP');
+        screenVideoTrack.onended = () => {
+          stopScreenShare();
         };
       } else {
-        if (screenStreamRef.current) {
-          screenStreamRef.current.getTracks().forEach(t => t.stop());
-        }
-        if (localVideoRef.current && localStreamRef.current) {
-          localVideoRef.current.srcObject = localStreamRef.current;
-        }
-        setScreenShare(false);
-        logAttendance('SCREEN_SHARE_STOP');
+        stopScreenShare();
       }
     } catch (err) {
       console.warn('Screen share cancelled or not supported:', err);
     }
+  };
+
+  const stopScreenShare = () => {
+    if (screenStreamRef.current) {
+      screenStreamRef.current.getTracks().forEach(t => t.stop());
+      screenStreamRef.current = null;
+    }
+    if (localStreamRef.current) {
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = localStreamRef.current;
+      }
+      const localVideoTrack = localStreamRef.current.getVideoTracks()[0];
+      if (peerConnectionRef.current) {
+        const senders = peerConnectionRef.current.getSenders();
+        const videoSender = senders.find(s => s.track && s.track.kind === 'video');
+        if (videoSender && localVideoTrack) {
+          videoSender.replaceTrack(localVideoTrack);
+        }
+      }
+    }
+    setScreenShare(false);
+    logAttendance('SCREEN_SHARE_STOP');
   };
 
   // Save Scratchpad Content to SQLite
@@ -666,13 +850,30 @@ function processLearningGoal() {
             {/* Stream 2: Peer Mentor / Learner Stream with Active Video Element */}
             <div className="glass-panel h-56 sm:h-64 rounded-2xl border border-slate-800 relative flex items-center justify-center overflow-hidden bg-slate-950 shadow-2xl">
               
-              {/* Actual Remote Video Element */}
+              {/* Actual Remote Video Element (Unmuted so peer audio is clearly audible) */}
               <video
                 ref={remoteVideoRef}
                 autoPlay
                 playsInline
-                className="w-full h-full object-cover rounded-2xl"
+                className={`w-full h-full object-cover rounded-2xl transition-opacity duration-300 ${hasRemotePeerStream ? 'opacity-100' : 'opacity-0'}`}
               />
+
+              {/* Waiting / Connecting Placeholder if opponent hasn't connected stream yet */}
+              {!hasRemotePeerStream && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/95 text-slate-400 space-y-3 p-4 text-center">
+                  <div className="w-16 h-16 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-cyan-400 font-bold text-xl animate-pulse">
+                    {participantInfo?.role === 'TRAINER' ? 'L' : 'M'}
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs font-bold text-white">
+                      Waiting for {participantInfo?.role === 'TRAINER' ? (exchangeData?.session?.learner_name || 'Learner') : (exchangeData?.session?.teacher_name || 'Mentor')}...
+                    </p>
+                    <p className="text-[10px] text-slate-400">
+                      Live WebRTC audio &amp; video will start automatically when they join
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {/* Top Badges */}
               <div className="absolute top-3 left-3 flex items-center gap-1.5">
@@ -682,14 +883,16 @@ function processLearningGoal() {
               </div>
 
               <div className="absolute top-3 right-3 flex items-center gap-1.5">
-                <span className="bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 px-2 py-0.5 rounded text-[10px] font-semibold flex items-center gap-1 backdrop-blur-sm">
-                  <Signal className="w-2.5 h-2.5" /> 1080p Connected
+                <span className={`px-2 py-0.5 rounded text-[10px] font-semibold flex items-center gap-1 backdrop-blur-sm border ${
+                  hasRemotePeerStream ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-300' : 'bg-amber-500/20 border-amber-500/30 text-amber-300'
+                }`}>
+                  <Signal className="w-2.5 h-2.5" /> {hasRemotePeerStream ? 'HD Connected' : 'Waiting for Peer'}
                 </span>
               </div>
 
               {/* Bottom Label */}
               <div className="absolute bottom-3 left-3 bg-black/70 px-2.5 py-1 rounded-xl text-[11px] font-bold text-white backdrop-blur-sm flex items-center gap-1.5 border border-slate-800">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span className={`w-2 h-2 rounded-full ${hasRemotePeerStream ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400 animate-ping'}`} />
                 <span>{participantInfo?.role === 'TRAINER' ? (exchangeData?.session?.learner_name || 'Learner') : (exchangeData?.session?.teacher_name || 'Mentor')}</span>
               </div>
             </div>

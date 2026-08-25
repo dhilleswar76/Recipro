@@ -25,21 +25,14 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized: Not a session participant' }, { status: 403 });
     }
 
-    let signalsQuery = `
+    const signalsQuery = `
       SELECT id, session_id, sender_id, receiver_id, signal_type, payload_json, created_at
       FROM session_signaling_messages
       WHERE session_id = $1 AND sender_id != $2
+      ORDER BY created_at ASC
+      LIMIT 100
     `;
-    const queryParams: any[] = [sessionId, user.userId];
-
-    if (since) {
-      signalsQuery += ` AND created_at > $3`;
-      queryParams.push(since);
-    }
-
-    signalsQuery += ` ORDER BY created_at ASC LIMIT 50`;
-
-    const rawSignals = (await query(signalsQuery, queryParams)).rows as any[];
+    const rawSignals = (await query(signalsQuery, [sessionId, user.userId])).rows as any[];
 
     const signals = rawSignals.map((s) => ({
       id: s.id,

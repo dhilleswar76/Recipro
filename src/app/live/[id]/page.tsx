@@ -54,10 +54,11 @@ export default function LiveRoomPage() {
   const screenStreamRef = useRef<MediaStream | null>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const animationFrameRef = useRef<number | null>(null);
-  const lastSignalTimeRef = useRef<string | null>(null);
   const processedSignalsRef = useRef<Set<string>>(new Set());
+  const iceCandidateQueueRef = useRef<any[]>([]);
   const isInitiatorRef = useRef<boolean>(false);
   const makingOfferRef = useRef<boolean>(false);
+  const lastOfferAttemptRef = useRef<number>(0);
 
   // Video & Classroom Controls
   const [micOn, setMicOn] = useState(true);
@@ -190,6 +191,20 @@ function processLearningGoal() {
     }
   };
 
+  // Flush Queued ICE Candidates Once Remote Description is Set
+  const flushIceCandidates = async (pc: RTCPeerConnection) => {
+    while (iceCandidateQueueRef.current.length > 0) {
+      const cand = iceCandidateQueueRef.current.shift();
+      if (cand) {
+        try {
+          await pc.addIceCandidate(new RTCIceCandidate(cand));
+        } catch (e) {
+          console.warn('Applying queued ICE candidate note:', e);
+        }
+      }
+    }
+  };
+
   // Create & Configure RTCPeerConnection
   const createPeerConnection = (stream?: MediaStream): RTCPeerConnection => {
     if (peerConnectionRef.current) {
@@ -248,19 +263,20 @@ function processLearningGoal() {
     return pc;
   };
 
-  // Initiate WebRTC Call Offer (Trainer or First Caller)
+  // Initiate WebRTC Call Offer
   const initiateWebRTCCall = async (pcInstance?: RTCPeerConnection) => {
     const pc = pcInstance || peerConnectionRef.current || createPeerConnection();
     if (makingOfferRef.current) return;
 
     try {
       makingOfferRef.current = true;
+      lastOfferAttemptRef.current = Date.now();
+
       const offer = await pc.createOffer({
         offerToReceiveAudio: true,
         offerToReceiveVideo: true,
       });
 
-      if (pc.signalingState !== 'stable') return;
       await pc.setLocalDescription(offer);
       await sendSignal('OFFER', offer);
       console.log('WebRTC Offer sent to opponent.');
@@ -274,25 +290,20 @@ function processLearningGoal() {
   // Poll WebRTC Signaling & Room Presence
   const pollSignaling = async () => {
     try {
-      const url = lastSignalTimeRef.current
-        ? `/api/sessions/${sessionId}/signaling?since=${encodeURIComponent(lastSignalTimeRef.current)}`
-        : `/api/sessions/${sessionId}/signaling`;
-
-      const res = await fetch(url);
+      const res = await fetch(`/api/sessions/${sessionId}/signaling`);
       if (!res.ok) return;
 
       const data = await res.json();
-      if (data.serverTime) {
-        lastSignalTimeRef.current = data.serverTime;
-      }
 
       if (data.presence) {
         setRoomPresence(data.presence);
 
         // If trainer/host sees learner arrived in presence and call not yet established, initiate offer
-        if (isInitiatorRef.current && data.presence.length >= 2 && !hasRemotePeerStream) {
+        const otherParticipantInPresence = data.presence.some((p: any) => p.user_id !== user?.id);
+        const now = Date.now();
+        if (otherParticipantInPresence && !hasRemotePeerStream && (now - lastOfferAttemptRef.current > 4000)) {
           const pc = peerConnectionRef.current || createPeerConnection();
-          if (pc.signalingState === 'stable') {
+          if (isInitiatorRef.current || pc.signalingState === 'stable') {
             initiateWebRTCCall(pc);
           }
         }
@@ -309,6 +320,7 @@ function processLearningGoal() {
             try {
               console.log('Received OFFER from opponent, creating ANSWER...');
               await pc.setRemoteDescription(new RTCSessionDescription(sig.payload));
+              await flushIceCandidates(pc);
               const answer = await pc.createAnswer();
               await pc.setLocalDescription(answer);
               await sendSignal('ANSWER', answer);
@@ -320,14 +332,19 @@ function processLearningGoal() {
               console.log('Received ANSWER from opponent...');
               if (pc.signalingState === 'have-local-offer') {
                 await pc.setRemoteDescription(new RTCSessionDescription(sig.payload));
+                await flushIceCandidates(pc);
               }
             } catch (err) {
               console.error('Error processing ANSWER:', err);
             }
           } else if (sig.signalType === 'ICE_CANDIDATE') {
             try {
-              if (sig.payload && pc.remoteDescription) {
-                await pc.addIceCandidate(new RTCIceCandidate(sig.payload));
+              if (sig.payload) {
+                if (pc.remoteDescription && pc.remoteDescription.type) {
+                  await pc.addIceCandidate(new RTCIceCandidate(sig.payload));
+                } else {
+                  iceCandidateQueueRef.current.push(sig.payload);
+                }
               }
             } catch (err) {
               console.warn('Error adding ICE candidate:', err);
@@ -885,7 +902,7 @@ function processLearningGoal() {
 
               {/* Waiting / Connecting Placeholder if opponent hasn't connected stream yet */}
               {!hasRemotePeerStream && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/95 text-slate-400 space-y-3 p-4 text-center">
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/95 text-slate-400 space-y-3 p-4 text-center z-10">
                   <div className="w-16 h-16 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-cyan-400 font-bold text-xl animate-pulse">
                     {participantInfo?.role === 'TRAINER' ? 'L' : 'M'}
                   </div>
@@ -897,6 +914,15 @@ function processLearningGoal() {
                       Live WebRTC audio &amp; video will start automatically when they join
                     </p>
                   </div>
+                  <button
+                    onClick={() => {
+                      const pc = createPeerConnection();
+                      initiateWebRTCCall(pc);
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-brand-500/20 hover:bg-brand-500/30 text-brand-300 font-semibold text-[11px] border border-brand-500/40 transition-colors flex items-center gap-1.5 shadow-sm"
+                  >
+                    <RefreshCw className="w-3 h-3" /> Connect Peer Video
+                  </button>
                 </div>
               )}
 

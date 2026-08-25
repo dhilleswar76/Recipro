@@ -339,12 +339,12 @@ function processLearningGoal() {
       if (data.presence) {
         setRoomPresence(data.presence);
 
-        // If trainer/host sees learner arrived in presence and call not yet established, initiate offer
-        const otherParticipantInPresence = data.presence.some((p: any) => p.user_id !== user?.id);
+        // Auto-initiate WebRTC offer as soon as peer is detected in presence
+        const otherParticipantInPresence = data.presence.find((p: any) => p.user_id !== user?.id);
         const now = Date.now();
-        if (otherParticipantInPresence && !hasRemotePeerStream && (now - lastOfferAttemptRef.current > 5000)) {
+        if (otherParticipantInPresence && !hasRemotePeerStream && (now - lastOfferAttemptRef.current > 3000)) {
           const pc = peerConnectionRef.current || createPeerConnection();
-          if (pc.signalingState === 'stable' && isInitiatorRef.current) {
+          if (pc.signalingState === 'stable') {
             initiateWebRTCCall(pc);
           }
         }
@@ -1098,15 +1098,23 @@ function processLearningGoal() {
                         {socketConnected ? '🟢 Socket.io connected • Streaming will start automatically' : 'Connecting to Socket.io signaling...'}
                       </p>
                     </div>
-                    <button
-                      onClick={() => {
-                        const pc = createPeerConnection();
-                        initiateWebRTCCall(pc);
-                      }}
-                      className="px-3.5 py-1.5 rounded-xl bg-brand-500/20 hover:bg-brand-500/30 text-brand-300 font-semibold text-xs border border-brand-500/40 transition-colors flex items-center gap-1.5 shadow-sm"
-                    >
-                      <RefreshCw className="w-3.5 h-3.5" /> Reconnect WebRTC
-                    </button>
+                    <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+                      <button
+                        onClick={() => {
+                          const pc = createPeerConnection();
+                          initiateWebRTCCall(pc);
+                        }}
+                        className="px-3 py-1.5 rounded-xl bg-brand-500/20 hover:bg-brand-500/30 text-brand-300 font-semibold text-xs border border-brand-500/40 transition-colors flex items-center gap-1.5 shadow-sm"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" /> Reconnect WebRTC
+                      </button>
+                      <button
+                        onClick={() => setVideoEngine('STUDIO')}
+                        className="px-3 py-1.5 rounded-xl bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-200 font-semibold text-xs border border-indigo-500/40 transition-colors flex items-center gap-1.5 shadow-sm"
+                      >
+                        <Sparkles className="w-3.5 h-3.5 text-amber-400" /> Switch to Studio SFU
+                      </button>
+                    </div>
                   </div>
                 )}
 

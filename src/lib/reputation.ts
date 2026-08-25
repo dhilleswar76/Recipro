@@ -26,7 +26,7 @@ export async function refreshUserReputation(userId: string): Promise<{
   const ratingsResult = await query(`
     SELECT score, punctuality_score, clarity_score, flagged_suspicious
     FROM ratings
-    WHERE ratee_id = $1 AND flagged_suspicious = 0
+    WHERE ratee_id = $1 AND flagged_suspicious = FALSE
   `, [userId]);
   const ratings = ratingsResult.rows as any[];
 

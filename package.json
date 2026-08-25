@@ -16,7 +16,6 @@
     "db:seed": "node scripts/seed-postgres.js"
   },
   "dependencies": {
-    "@daily-co/daily-js": "^0.92.2",
     "bcryptjs": "^2.4.3",
     "clsx": "^2.1.1",
     "ethers": "^6.13.5",

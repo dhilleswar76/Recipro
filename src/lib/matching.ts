@@ -1,5 +1,5 @@
 import { query } from './postgres';
-import { getMentorQualityForSkill, MentorQualityResult } from './reputation';
+import { calculateMentorQuality, getMentorQualityForSkill, MentorQualityResult } from './reputation';
 
 export interface MatchingWeights {
   skillCompatibility: number;     // default 0.30
@@ -422,17 +422,12 @@ export async function searchAndMatchCandidates(params: SearchParams, weights: Ma
     }
 
     const totalReviews = Number(row.total_reviews) || 0;
-    const mentorQuality: MentorQualityResult = {
-      mentorId: row.user_id,
-      skillId: row.skill_id,
+    const totalSessionsTaught = Number(row.total_sessions_taught) || 0;
+    const mentorQuality: MentorQualityResult = calculateMentorQuality({
       proficiency: row.proficiency,
-      qualityScore: totalReviews > 0 ? (row.bayesian_rating || 4.5) : (row.proficiency === 'Expert' ? 4.8 : row.proficiency === 'Advanced' ? 4.5 : 4.0),
-      qualitySource: totalReviews > 0 ? 'PEER_RATINGS' : 'PROFICIENCY_FIRST_LECTURE',
-      totalReviews,
-      totalSessionsTaught: Number(row.total_sessions_taught) || 0,
-      bayesianRating: row.bayesian_rating || 4.5,
-      isFirstLecture: totalReviews === 0,
-    };
+      lecturesTaught: totalSessionsTaught,
+      learnerRatings: totalReviews > 0 ? [{ score: row.bayesian_rating || 4.5, punctuality_score: 5, clarity_score: 5 }] : [],
+    });
 
     skillMatches.push({
       userId: row.user_id,

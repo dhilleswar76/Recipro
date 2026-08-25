@@ -186,9 +186,10 @@ export async function GET(req: NextRequest) {
       LEFT JOIN ratings r ON s.id = r.session_id AND r.rater_id = ?
       ${whereSql}
       ORDER BY ${orderBySql}
-      LIMIT $${queryParams.length + 2} OFFSET $${queryParams.length + 3}
+      LIMIT ? OFFSET ?
     `;
-    const sessions = (await query(toPostgresPlaceholders(selectQuery, 1), [user.userId, ...queryParams, limit, offset])).rows;
+    const selectSql = toPostgresPlaceholders(selectQuery, 0);
+    const sessions = (await query(selectSql, [user.userId, ...queryParams, limit, offset])).rows;
 
     // 3. Compute Real Persisted Summary Counters for User
     const userSummary = (await query(`

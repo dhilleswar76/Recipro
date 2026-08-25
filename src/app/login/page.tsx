@@ -50,13 +50,13 @@ function LoginComponent() {
 
           // Admin redirect if admin
           if (userRole === 'ADMIN') {
-            const redirectUrl = searchParams.get('redirect') || '/admin';
+            const redirectUrl = searchParams?.get('redirect') || '/admin';
             router.push(redirectUrl);
             return;
           }
 
           // Normal student / mentor redirect
-          const redirectUrl = searchParams.get('redirect') || '/profile';
+          const redirectUrl = searchParams?.get('redirect') || '/profile';
           router.push(redirectUrl);
         } else {
           router.push('/profile');

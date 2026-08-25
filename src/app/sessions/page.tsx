@@ -34,18 +34,18 @@ function SessionsListPageContent() {
   const searchParams = useSearchParams();
 
   // Search & Filter States
-  const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || '');
+  const [searchTerm, setSearchTerm] = useState(searchParams?.get('search') || '');
   const [roleFilter, setRoleFilter] = useState<'ALL' | 'TEACHING' | 'LEARNING'>(
-    (searchParams.get('role') as any) || 'ALL'
+    (searchParams?.get('role') as any) || 'ALL'
   );
-  const [statusFilter, setStatusFilter] = useState<string>(searchParams.get('status') || 'ALL');
-  const [skillFilter, setSkillFilter] = useState<string>(searchParams.get('skill') || 'ALL');
-  const [modeFilter, setModeFilter] = useState<string>(searchParams.get('mode') || 'ALL');
-  const [dateFilter, setDateFilter] = useState<string>(searchParams.get('dateFilter') || 'ALL');
-  const [dateFrom, setDateFrom] = useState<string>(searchParams.get('dateFrom') || '');
-  const [dateTo, setDateTo] = useState<string>(searchParams.get('dateTo') || '');
-  const [sortBy, setSortBy] = useState<string>(searchParams.get('sort') || 'UPCOMING_FIRST');
-  const [page, setPage] = useState<number>(parseInt(searchParams.get('page') || '1', 10));
+  const [statusFilter, setStatusFilter] = useState<string>(searchParams?.get('status') || 'ALL');
+  const [skillFilter, setSkillFilter] = useState<string>(searchParams?.get('skill') || 'ALL');
+  const [modeFilter, setModeFilter] = useState<string>(searchParams?.get('mode') || 'ALL');
+  const [dateFilter, setDateFilter] = useState<string>(searchParams?.get('dateFilter') || 'ALL');
+  const [dateFrom, setDateFrom] = useState<string>(searchParams?.get('dateFrom') || '');
+  const [dateTo, setDateTo] = useState<string>(searchParams?.get('dateTo') || '');
+  const [sortBy, setSortBy] = useState<string>(searchParams?.get('sort') || 'UPCOMING_FIRST');
+  const [page, setPage] = useState<number>(parseInt(searchParams?.get('page') || '1', 10));
 
   // Data states
   const [sessions, setSessions] = useState<any[]>([]);

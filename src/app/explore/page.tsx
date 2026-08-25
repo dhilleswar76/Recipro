@@ -30,8 +30,8 @@ import { getSkillStatusDisplay } from '@/lib/skill-display';
 function ExploreComponent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const initialQ = searchParams.get('q') || '';
-  const initialMode = searchParams.get('mode') || 'ALL';
+  const initialQ = searchParams?.get('q') || '';
+  const initialMode = searchParams?.get('mode') || 'ALL';
 
   const { user, refreshUser } = useAuth();
 

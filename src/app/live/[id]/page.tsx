@@ -73,13 +73,13 @@ export default function LiveRoomPage() {
   const [meetingSeconds, setMeetingSeconds] = useState(0);
   const [hasRealWebcam, setHasRealWebcam] = useState(false);
   const [hasRemotePeerStream, setHasRemotePeerStream] = useState(false);
-  const [videoEngine, setVideoEngine] = useState<'STUDIO' | 'AGORA' | 'P2P'>('STUDIO');
+  const [videoEngine, setVideoEngine] = useState<'AGORA' | 'STUDIO' | 'P2P'>('AGORA');
 
   // Agora State & Refs
   const agoraClientRef = useRef<any>(null);
   const agoraLocalAudioRef = useRef<any>(null);
   const agoraLocalVideoRef = useRef<any>(null);
-  const [agoraAppIdInput, setAgoraAppIdInput] = useState<string>(process.env.NEXT_PUBLIC_AGORA_APP_ID || '');
+  const [agoraAppIdInput, setAgoraAppIdInput] = useState<string>(process.env.NEXT_PUBLIC_AGORA_APP_ID || 'b865582f3d53457a8d5fb0d14b4344ca');
   const [agoraJoined, setAgoraJoined] = useState<boolean>(false);
   const [agoraLoading, setAgoraLoading] = useState<boolean>(false);
   const [agoraError, setAgoraError] = useState<string | null>(null);
@@ -562,6 +562,13 @@ function processLearningGoal() {
     };
   }, [sessionId]);
 
+  // Auto-start Agora when authorized
+  useEffect(() => {
+    if (participantInfo && videoEngine === 'AGORA' && !agoraJoined && !agoraLoading) {
+      initAgoraRoom();
+    }
+  }, [participantInfo, videoEngine]);
+
   const formatDuration = (totalSec: number) => {
     const mins = Math.floor(totalSec / 60);
     const secs = totalSec % 60;
@@ -570,7 +577,7 @@ function processLearningGoal() {
 
   // Agora WebRTC Engine Logic (10,000 Free Minutes)
   const initAgoraRoom = async (appIdToUse?: string) => {
-    const key = (appIdToUse || agoraAppIdInput || process.env.NEXT_PUBLIC_AGORA_APP_ID || '').trim();
+    const key = (appIdToUse || agoraAppIdInput || process.env.NEXT_PUBLIC_AGORA_APP_ID || 'b865582f3d53457a8d5fb0d14b4344ca').trim();
     if (!key) {
       setAgoraError('Please enter a valid Agora App ID to initialize SD-RTN video.');
       return;
@@ -590,12 +597,15 @@ function processLearningGoal() {
         await client.subscribe(remoteUser, mediaType);
         if (mediaType === 'video') {
           setHasRemotePeerStream(true);
-          setTimeout(() => {
+          const playRemote = () => {
             const playerContainer = document.getElementById('agora-remote-player');
             if (playerContainer) {
               remoteUser.videoTrack?.play(playerContainer);
+            } else {
+              setTimeout(playRemote, 100);
             }
-          }, 150);
+          };
+          playRemote();
         }
         if (mediaType === 'audio') {
           remoteUser.audioTrack?.play();
@@ -627,10 +637,15 @@ function processLearningGoal() {
 
       await client.publish([audioTrack, videoTrack]);
       
-      const localContainer = document.getElementById('agora-local-player');
-      if (localContainer) {
-        videoTrack.play(localContainer);
-      }
+      const playLocal = () => {
+        const localContainer = document.getElementById('agora-local-player');
+        if (localContainer) {
+          videoTrack.play(localContainer);
+        } else {
+          setTimeout(playLocal, 100);
+        }
+      };
+      playLocal();
 
       setAgoraJoined(true);
       setConnectionState('CONNECTED');

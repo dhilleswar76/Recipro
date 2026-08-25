@@ -35,7 +35,7 @@ function ProfilePageContent() {
   const [activeTab, setActiveTab] = useState<'SKILLS' | 'GOALS' | 'REQUESTS' | 'AVAILABILITY' | 'PREFERENCES'>('SKILLS');
 
   useEffect(() => {
-    const tab = searchParams.get('tab');
+    const tab = searchParams?.get('tab');
     if (tab === 'requests') {
       setActiveTab('REQUESTS');
     }

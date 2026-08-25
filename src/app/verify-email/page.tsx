@@ -18,7 +18,7 @@ function VerifyEmailComponent() {
   const searchParams = useSearchParams();
   const { user, refreshUser } = useAuth();
 
-  const tokenParam = searchParams.get('token');
+  const tokenParam = searchParams?.get('token');
 
   const [status, setStatus] = useState<'IDLE' | 'VERIFYING' | 'SUCCESS' | 'ERROR'>('IDLE');
   const [message, setMessage] = useState<string>('');

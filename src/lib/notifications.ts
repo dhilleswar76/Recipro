@@ -319,17 +319,18 @@ export class NotificationService {
     if (!prefs) {
       await query(`
         INSERT INTO notification_preferences (user_id, in_app_enabled, email_enabled, session_updates, mentor_available, credits, security, system)
-        VALUES ($1, 1, 1, 1, 1, 1, 1, 1)
+        VALUES ($1, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE)
+        ON CONFLICT (user_id) DO NOTHING
       `, [userId]);
       prefs = {
         user_id: userId,
-        in_app_enabled: 1,
-        email_enabled: 1,
-        session_updates: 1,
-        mentor_available: 1,
-        credits: 1,
-        security: 1,
-        system: 1,
+        in_app_enabled: true,
+        email_enabled: true,
+        session_updates: true,
+        mentor_available: true,
+        credits: true,
+        security: true,
+        system: true,
       };
     }
     return prefs;
@@ -352,7 +353,7 @@ export class NotificationService {
     await query(`
       INSERT INTO notification_preferences (
         user_id, in_app_enabled, email_enabled, session_updates, mentor_available, credits, security, system, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, 1, $7, CURRENT_TIMESTAMP)
+      ) VALUES ($1, $2, $3, $4, $5, $6, TRUE, $7, CURRENT_TIMESTAMP)
       ON CONFLICT(user_id) DO UPDATE SET
         in_app_enabled = COALESCE(excluded.in_app_enabled, notification_preferences.in_app_enabled),
         email_enabled = COALESCE(excluded.email_enabled, notification_preferences.email_enabled),
@@ -363,12 +364,12 @@ export class NotificationService {
         updated_at = CURRENT_TIMESTAMP
     `, [
       userId,
-      prefs.inAppEnabled !== undefined ? (prefs.inAppEnabled ? 1 : 0) : 1,
-      prefs.emailEnabled !== undefined ? (prefs.emailEnabled ? 1 : 0) : 1,
-      prefs.sessionUpdates !== undefined ? (prefs.sessionUpdates ? 1 : 0) : 1,
-      prefs.mentorAvailable !== undefined ? (prefs.mentorAvailable ? 1 : 0) : 1,
-      prefs.credits !== undefined ? (prefs.credits ? 1 : 0) : 1,
-      prefs.system !== undefined ? (prefs.system ? 1 : 0) : 1,
+      prefs.inAppEnabled !== undefined ? Boolean(prefs.inAppEnabled) : true,
+      prefs.emailEnabled !== undefined ? Boolean(prefs.emailEnabled) : true,
+      prefs.sessionUpdates !== undefined ? Boolean(prefs.sessionUpdates) : true,
+      prefs.mentorAvailable !== undefined ? Boolean(prefs.mentorAvailable) : true,
+      prefs.credits !== undefined ? Boolean(prefs.credits) : true,
+      prefs.system !== undefined ? Boolean(prefs.system) : true,
     ]);
 
     return this.getUserPreferences(userId);

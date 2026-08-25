@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
         const skillId = `skill-${parsed.data.skillName.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
         await query(`
           INSERT INTO skills (id, name, category, icon, description)
-          VALUES (?, ?, ?, 'BookOpen', 'Student requested topic')
+          VALUES ($1, $2, $3, 'BookOpen', 'Student requested topic')
         `, [skillId, parsed.data.skillName, parsed.data.category]);
         skill = { id: skillId };
       }

@@ -319,7 +319,7 @@ export async function POST(req: NextRequest) {
       // 2b. Insert Session Participants (Explicit Session Roles)
       await client.query(`
         INSERT INTO session_participants (id, session_id, user_id, session_role, confirmed)
-        VALUES ($1, $2, $3, 'TRAINER', 0), ($4, $5, $6, 'LEARNER', 0)
+        VALUES ($1, $2, $3, 'TRAINER', false), ($4, $5, $6, 'LEARNER', false)
         ON CONFLICT (session_id, user_id) DO NOTHING
       `, [
         `sp-${sessionId}-trainer`,

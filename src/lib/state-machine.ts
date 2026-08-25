@@ -81,7 +81,7 @@ export async function proposeReturnSkill(params: { sessionId: string; actorUserI
   if (!teacher && !learner) return { success: false, message: 'Unauthorized: You are not a participant in this session' };
   const cleanName = skillName.trim();
   let skill = (await query(`SELECT id, name FROM skills WHERE LOWER(name) = LOWER($1) OR LOWER(name) LIKE $2 OR $3 LIKE ('%' || LOWER(name) || '%') ORDER BY CASE WHEN LOWER(name) = LOWER($4) THEN 0 ELSE 1 END LIMIT 1`, [cleanName, `%${cleanName.toLowerCase()}%`, cleanName.toLowerCase(), cleanName])).rows[0] as any;
-  if (!skill) { skill = { id: makeId('skill'), name: cleanName }; await query(`INSERT INTO skills (id, name, category, description, is_verified) VALUES ($1, $2, 'General', $3, 1)`, [skill.id, cleanName, `Peer requested skill: ${cleanName}`]); }
+  if (!skill) { skill = { id: makeId('skill'), name: cleanName }; await query(`INSERT INTO skills (id, name, category, description, is_verified) VALUES ($1, $2, 'General', $3, true)`, [skill.id, cleanName, `Peer requested skill: ${cleanName}`]); }
   const existing = (await query('SELECT * FROM session_exchange_agreements WHERE session_id = $1', [sessionId])).rows[0] as any;
   const agreement = await withTransaction(async (client) => {
     const agreementId = existing?.id || makeId('sea'), status = existing ? (teacher ? 'PROPOSED' : 'CHANGED') : 'PROPOSED', count = existing ? Number(existing.proposal_count) + 1 : 1;
